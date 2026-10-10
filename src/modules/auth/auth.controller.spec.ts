@@ -1,3 +1,4 @@
+import { GUARDS_METADATA } from '@nestjs/common/constants';
 import { AuthController } from './auth.controller';
 
 describe('AuthController – @Throttle metadata', () => {
@@ -32,5 +33,15 @@ describe('AuthController – @Throttle metadata', () => {
       method,
     );
     expect(ttl).toBe(EXPECTED_TTL);
+  });
+});
+
+describe('AuthController – login guards', () => {
+  // A guard on login would run before ValidationPipe and see the raw body.
+  it('login has no guards, so the body is validated before credentials are checked', () => {
+    const methodName = 'login' as const;
+    const method = AuthController.prototype[methodName];
+    const guards: unknown = Reflect.getMetadata(GUARDS_METADATA, method);
+    expect(guards).toBeUndefined();
   });
 });

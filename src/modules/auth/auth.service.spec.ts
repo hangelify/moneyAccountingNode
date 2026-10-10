@@ -1,4 +1,6 @@
 import { JwtService } from '@nestjs/jwt';
+import { UnauthorizedException } from '@nestjs/common';
+import * as bcrypt from 'bcrypt';
 import { EntityManager, EntityRepository } from '@mikro-orm/core';
 import { AuthService } from './auth.service';
 import { CategoryDefaultsService } from '../category/category-defaults.service';
@@ -7,16 +9,25 @@ import { RefreshToken } from '../../entities/refresh-token.entity';
 import { Session } from '../../entities/session.entity';
 import { Log } from '../../entities/log.entity';
 
+// Wrap the real bcrypt so calls can be counted (its exports are not spy-able).
+jest.mock('bcrypt', () => {
+  const actual = jest.requireActual<typeof import('bcrypt')>('bcrypt');
+  const compare = (data: string, hash: string): Promise<boolean> =>
+    actual.compare(data, hash);
+  return { ...actual, compare: jest.fn(compare) };
+});
+
 /* eslint-disable @typescript-eslint/no-unsafe-return */
 
 interface Deps {
   seedForHousehold: jest.Mock;
+  findUser: jest.Mock;
   createSession: jest.Mock;
   createRefreshToken: jest.Mock;
   createLog: jest.Mock;
 }
 
-function makeService(opts?: Partial<Deps>): {
+function makeService(opts?: Partial<Pick<Deps, 'seedForHousehold'>>): {
   service: AuthService;
   deps: Deps;
 } {
@@ -40,8 +51,9 @@ function makeService(opts?: Partial<Deps>): {
     .fn()
     .mockImplementation((data) => ({ id: 'session-id', ...data }));
   const createLog = jest.fn().mockImplementation((data) => data);
+  const findUser = jest.fn().mockResolvedValue(null);
   const userRepo = {
-    findOne: jest.fn().mockResolvedValue(null),
+    findOne: findUser,
   } as unknown as EntityRepository<User>;
   const refreshTokenRepo = {
     create: createRefreshToken,
@@ -85,7 +97,13 @@ function makeService(opts?: Partial<Deps>): {
   );
   return {
     service,
-    deps: { seedForHousehold, createSession, createRefreshToken, createLog },
+    deps: {
+      seedForHousehold,
+      findUser,
+      createSession,
+      createRefreshToken,
+      createLog,
+    },
   };
 }
 
@@ -149,6 +167,73 @@ describe('AuthService ip_address sanitization', () => {
     await service.register(registerDto, '2001:db8::1', 'jest');
 
     for (const ip of persistedIps(deps)) expect(ip).toBe('2001:db8::1');
+  });
+});
+
+describe('AuthService.login password checks', () => {
+  const password = 'Qwerty123';
+
+  async function existingUser(): Promise<User> {
+    const user = new User();
+    user.id = 'user-1';
+    user.email = 'known@test';
+    user.password = await bcrypt.hash(password, 4);
+    return user;
+  }
+
+  afterEach(() => jest.restoreAllMocks());
+
+  it('runs bcrypt.compare exactly once for an existing user', async () => {
+    const { service, deps } = makeService();
+    deps.findUser.mockResolvedValue(await existingUser());
+    const compare = jest.mocked(bcrypt.compare);
+    compare.mockClear();
+
+    await service.login({ email: 'known@test', password });
+
+    expect(compare).toHaveBeenCalledTimes(1);
+  });
+
+  it('runs bcrypt.compare exactly once for an unknown email', async () => {
+    const { service } = makeService();
+    const compare = jest.mocked(bcrypt.compare);
+    compare.mockClear();
+
+    await expect(
+      service.login({ email: 'nobody@test', password }),
+    ).rejects.toThrow(UnauthorizedException);
+    expect(compare).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects an unknown email and a wrong password identically', async () => {
+    const { service, deps } = makeService();
+    const unknown = service.login({ email: 'nobody@test', password });
+    await expect(unknown).rejects.toThrow(
+      new UnauthorizedException('Invalid credentials'),
+    );
+
+    deps.findUser.mockResolvedValue(await existingUser());
+    const wrong = service.login({ email: 'known@test', password: 'nope-123' });
+    await expect(wrong).rejects.toThrow(
+      new UnauthorizedException('Invalid credentials'),
+    );
+  });
+});
+
+describe('AuthService.validateUser input types', () => {
+  it.each([
+    ['an operator object as email', { $like: 'a%' }, 'Qwerty123'],
+    ['an operator object as password', 'known@test', { $ne: null }],
+  ])('returns null without querying users for %s', async (_l, email, pwd) => {
+    const { service, deps } = makeService();
+
+    const result = await service.validateUser(
+      email as unknown as string,
+      pwd as unknown as string,
+    );
+
+    expect(result).toBeNull();
+    expect(deps.findUser).not.toHaveBeenCalled();
   });
 });
 /* eslint-enable @typescript-eslint/no-unsafe-return */

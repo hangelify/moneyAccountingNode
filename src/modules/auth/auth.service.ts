@@ -8,7 +8,8 @@ import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@mikro-orm/nestjs';
 import { EntityRepository, EntityManager } from '@mikro-orm/core';
 import { createHash, randomUUID } from 'crypto';
-import { User } from '../../entities/user.entity';
+import * as bcrypt from 'bcrypt';
+import { PASSWORD_HASH_ROUNDS, User } from '../../entities/user.entity';
 import { RefreshToken } from '../../entities/refresh-token.entity';
 import { Session } from '../../entities/session.entity';
 import { Log, LogLevel, LogSource } from '../../entities/log.entity';
@@ -22,6 +23,10 @@ import { JwtPayload } from './types/jwt-payload.interface';
 import { requireEnv, requireIntEnv } from './auth.env';
 import { CategoryDefaultsService } from '../category/category-defaults.service';
 import { sanitizeIp } from '../../common/utils/ip.util';
+
+// Compared against when the email is unknown, so that path costs one bcrypt
+// round like a real password check and does not reveal which emails exist.
+const DUMMY_PASSWORD_HASH = bcrypt.hashSync(randomUUID(), PASSWORD_HASH_ROUNDS);
 
 interface IssuedTokens {
   tokens: TokenResponseDto;
@@ -50,6 +55,12 @@ export class AuthService {
   ) {}
 
   async validateUser(email: string, password: string): Promise<User | null> {
+    // Callers may pass a raw request body; a non-string here would turn into
+    // a MikroORM operator query ({ $like: ... }).
+    if (typeof email !== 'string' || typeof password !== 'string') {
+      return null;
+    }
+
     const user = await this.userRepository.findOne(
       { email },
       {
@@ -67,6 +78,7 @@ export class AuthService {
     );
 
     if (!user) {
+      await bcrypt.compare(password, DUMMY_PASSWORD_HASH);
       await this.logAuthAttempt(email, false, 'User not found');
       return null;
     }

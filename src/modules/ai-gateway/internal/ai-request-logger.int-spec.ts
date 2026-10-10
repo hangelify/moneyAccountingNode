@@ -182,4 +182,143 @@ describe('AiRequestLogger', () => {
       .findOneOrFail(AiRequestAttempt, { id: attemptId });
     expect(att.total_cost_usd).toBeNull();
   });
+
+  it('opens an attempt as PENDING with no outcome yet', async () => {
+    const { parentId } = await logger.begin({
+      taskName: 't',
+      requiredCapabilities: ['text'],
+      prompt: { messages: [] },
+    });
+    const { attemptId } = await logger.beginAttempt({
+      parentId,
+      providerName: 'openai',
+      model: 'gpt-4o',
+      attemptNumber: 1,
+    });
+    const att = await em
+      .fork()
+      .findOneOrFail(AiRequestAttempt, { id: attemptId });
+    expect(att.status).toBe(AiAttemptStatus.PENDING);
+  });
+
+  it('records uploaded image keys on the parent row', async () => {
+    const { parentId } = await logger.begin({
+      taskName: 't',
+      requiredCapabilities: ['vision'],
+      prompt: { messages: [] },
+    });
+    await logger.recordImages(parentId, ['ai/images/a.png']);
+    const row = await em.fork().findOneOrFail(AiRequest, { id: parentId });
+    expect(row.image_s3_keys).toEqual(['ai/images/a.png']);
+  });
+
+  describe('failStalePending', () => {
+    async function backdate(table: string, id: string, minutes: number) {
+      await em
+        .fork()
+        .getConnection()
+        .execute(
+          `UPDATE ${table} SET created_at = NOW() - make_interval(mins => ?) WHERE id = ?`,
+          [minutes, id],
+        );
+    }
+
+    it('fails rows left PENDING before the cutoff and totals what was recorded', async () => {
+      const { parentId } = await logger.begin({
+        taskName: 't',
+        requiredCapabilities: ['text'],
+        prompt: { messages: [] },
+      });
+      const done = await logger.beginAttempt({
+        parentId,
+        providerName: 'openai',
+        model: 'gpt-4o',
+        attemptNumber: 1,
+      });
+      await logger.finishAttempt({
+        attemptId: done.attemptId,
+        status: AiAttemptStatus.FAILED,
+        errorCode: AiAttemptErrorCode.SCHEMA_INVALID,
+        inputTokens: 1_000_000,
+        outputTokens: 0,
+        latencyMs: 40,
+      });
+      const hung = await logger.beginAttempt({
+        parentId,
+        providerName: 'openai',
+        model: 'gpt-4o',
+        attemptNumber: 2,
+      });
+      await backdate('ai_requests', parentId, 60);
+      await backdate('ai_request_attempts', done.attemptId, 60);
+      await backdate('ai_request_attempts', hung.attemptId, 60);
+
+      await logger.failStalePending(new Date(Date.now() - 30 * 60_000));
+
+      const fork = em.fork();
+      const parent = await fork.findOneOrFail(AiRequest, { id: parentId });
+      expect(parent.status).toBe(AiRequestStatus.FAILED);
+      expect(parent.error_message).toMatch(/PENDING/);
+      expect(Number(parent.total_cost_usd)).toBeCloseTo(2.5, 6);
+      expect(parent.total_latency_ms).toBe(40);
+      const att = await fork.findOneOrFail(AiRequestAttempt, {
+        id: hung.attemptId,
+      });
+      expect(att.status).toBe(AiAttemptStatus.FAILED);
+      expect(att.error_code).toBe(AiAttemptErrorCode.UNKNOWN);
+    });
+
+    it('closes a stale parent as SUCCESS when one of its attempts succeeded', async () => {
+      const { parentId } = await logger.begin({
+        taskName: 't',
+        requiredCapabilities: ['text'],
+        prompt: { messages: [] },
+      });
+      const { attemptId } = await logger.beginAttempt({
+        parentId,
+        providerName: 'openai',
+        model: 'gpt-4o',
+        attemptNumber: 1,
+      });
+      await logger.finishAttempt({
+        attemptId,
+        status: AiAttemptStatus.SUCCESS,
+        parsedJson: { ok: true },
+        inputTokens: 1_000_000,
+        outputTokens: 0,
+        latencyMs: 40,
+      });
+      await backdate('ai_requests', parentId, 60);
+
+      await logger.failStalePending(new Date(Date.now() - 30 * 60_000));
+
+      const parent = await em.fork().findOneOrFail(AiRequest, { id: parentId });
+      expect(parent.status).toBe(AiRequestStatus.SUCCESS);
+      expect(parent.chosen_attempt_id).toBe(attemptId);
+      expect(parent.final_output).toEqual({ ok: true });
+      expect(Number(parent.total_cost_usd)).toBeCloseTo(2.5, 6);
+    });
+
+    it('leaves rows newer than the cutoff alone', async () => {
+      const { parentId } = await logger.begin({
+        taskName: 't',
+        requiredCapabilities: ['text'],
+        prompt: { messages: [] },
+      });
+      const { attemptId } = await logger.beginAttempt({
+        parentId,
+        providerName: 'openai',
+        model: 'gpt-4o',
+        attemptNumber: 1,
+      });
+
+      await logger.failStalePending(new Date(Date.now() - 30 * 60_000));
+
+      const fork = em.fork();
+      const parent = await fork.findOneOrFail(AiRequest, { id: parentId });
+      expect(parent.status).toBe(AiRequestStatus.PENDING);
+      const att = await fork.findOneOrFail(AiRequestAttempt, { id: attemptId });
+      expect(att.status).toBe(AiAttemptStatus.PENDING);
+    });
+  });
 });

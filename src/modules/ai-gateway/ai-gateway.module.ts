@@ -15,6 +15,7 @@ import { AiRequestAttempt } from '../../entities/ai-request-attempt.entity';
 import { StorageModule } from '../storage/storage.module';
 import { AiGatewayService } from './ai-gateway.service';
 import { AiRequestLogger } from './internal/ai-request-logger';
+import { AiAuditSweeper } from './internal/ai-audit-sweeper';
 import { LLM_PROVIDERS, LlmProvider } from './types/llm-provider';
 import { AiTask } from './types/ai-task';
 import { AI_CALL_CONFIG, loadAiCallConfig } from './internal/ai-call-config';
@@ -89,6 +90,7 @@ export class AiGatewayModule {
         inject: providerClasses,
       },
       AiRequestLogger,
+      AiAuditSweeper,
       AiGatewayService,
       AiGatewayBootstrapper,
     ];

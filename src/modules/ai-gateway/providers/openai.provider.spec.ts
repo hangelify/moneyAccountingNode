@@ -1,5 +1,6 @@
 import OpenAI from 'openai';
 import { OpenAiProvider } from './openai.provider';
+import { InvalidResponseError } from '../internal/error-classifier';
 import {
   itBoundsSdkCalls,
   testAiCallConfig,
@@ -70,6 +71,28 @@ describe('OpenAiProvider', () => {
     expect(imageBlock.image_url.url).toBe(
       `data:image/png;base64,${Buffer.from('img').toString('base64')}`,
     );
+  });
+
+  it('throws InvalidResponseError carrying the paid usage and raw body on non-JSON content', async () => {
+    process.env.OPENAI_API_KEY = 'x';
+    process.env.OPENAI_MODEL = 'gpt-4o';
+    mockCreate.mockResolvedValue({
+      choices: [{ message: { content: 'not json {' } }],
+      usage: { prompt_tokens: 5, completion_tokens: 7 },
+      model: 'gpt-4o',
+    });
+    const p = new OpenAiProvider(testAiCallConfig());
+    const err: unknown = await p
+      .complete({
+        messages: [{ role: 'user', text: 'x' }],
+        jsonSchema: { type: 'object' },
+      })
+      .catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(InvalidResponseError);
+    expect(err).toMatchObject({
+      raw: 'not json {',
+      usage: { inputTokens: 5, outputTokens: 7 },
+    });
   });
 
   it('classifies 429/5xx as transient, 4xx otherwise as non-transient', () => {

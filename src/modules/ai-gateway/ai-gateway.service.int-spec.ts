@@ -1,5 +1,6 @@
 import { MikroORM, EntityManager } from '@mikro-orm/core';
 import { PostgreSqlDriver } from '@mikro-orm/postgresql';
+import { Logger } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { MikroOrmModule } from '@mikro-orm/nestjs';
 import { z } from 'zod';
@@ -25,6 +26,7 @@ import {
 import { STORAGE_SERVICE, StorageService } from '../storage/storage.service';
 import { AI_CALL_CONFIG, AiCallConfig } from './internal/ai-call-config';
 import { DeadlineExceededError } from './internal/retry';
+import { InvalidResponseError } from './internal/error-classifier';
 import { testAiCallConfig } from './providers/__fixtures__/call-bounds.shared';
 import {
   AI_USAGE_LIMITS,
@@ -162,6 +164,7 @@ describe('AiGatewayService', () => {
     [Buffer, 'image/png' | 'image/jpeg' | 'image/webp']
   >;
   let mockStorage: StorageService;
+  let logger: AiRequestLogger;
 
   async function boot(
     providers: LlmProvider[],
@@ -174,6 +177,7 @@ describe('AiGatewayService', () => {
     });
     orm = mod.get(MikroORM);
     em = orm.em;
+    logger = mod.get(AiRequestLogger);
     return mod.get(AiGatewayService);
   }
 
@@ -579,6 +583,199 @@ describe('AiGatewayService', () => {
 
     const attempts = await findOwnedAttempts();
     expect(attempts).toHaveLength(0);
+  });
+
+  describe('audit safety', () => {
+    let logError: jest.SpyInstance;
+
+    beforeEach(() => {
+      logError = jest
+        .spyOn(Logger.prototype, 'error')
+        .mockImplementation(() => undefined);
+    });
+
+    afterEach(() => {
+      logError.mockRestore();
+    });
+
+    it('returns the paid result and calls no other provider when recording the success fails', async () => {
+      const p1 = new FakeLlmProvider(
+        'openai',
+        new Set<Capability>(['text', 'json']),
+        [okResponse({ ok: true })],
+      );
+      const p2Step = jest.fn(okResponse({ ok: false }));
+      const p2 = new FakeLlmProvider(
+        'deepseek',
+        new Set<Capability>(['text', 'json']),
+        [p2Step],
+      );
+      const svc = await boot([p1, p2]);
+      await cleanupOwnedRows();
+      jest
+        .spyOn(logger, 'finishAttempt')
+        .mockRejectedValueOnce(new Error('db down'));
+
+      const out = await svc.run(new PingTask(), { n: 1 });
+
+      expect(out.data).toEqual({ ok: true });
+      expect(p2Step).not.toHaveBeenCalled();
+      // The usage is only in memory now: the log is what lets cost be reconciled.
+      expect(logError).toHaveBeenCalledWith(
+        expect.stringMatching(/"inputTokens":10.*db down/),
+        expect.anything(),
+      );
+    });
+
+    it('still calls the provider when opening the attempt row fails', async () => {
+      const fake = new FakeLlmProvider(
+        'openai',
+        new Set<Capability>(['text', 'json']),
+        [okResponse({ ok: true })],
+      );
+      const svc = await boot([fake]);
+      await cleanupOwnedRows();
+      jest
+        .spyOn(logger, 'beginAttempt')
+        .mockRejectedValueOnce(new Error('db down'));
+
+      const out = await svc.run(new PingTask(), { n: 1 });
+
+      expect(out.data).toEqual({ ok: true });
+      expect(await findOwnedAttempts()).toHaveLength(0);
+      const [parent] = await findOwnedParents();
+      expect(parent.status).toBe(AiRequestStatus.SUCCESS);
+    });
+
+    it('returns the data when closing the parent row fails', async () => {
+      const fake = new FakeLlmProvider(
+        'openai',
+        new Set<Capability>(['text', 'json']),
+        [okResponse({ ok: true })],
+      );
+      const svc = await boot([fake]);
+      await cleanupOwnedRows();
+      jest.spyOn(logger, 'finish').mockRejectedValueOnce(new Error('db down'));
+
+      const out = await svc.run(new PingTask(), { n: 1 });
+
+      expect(out.data).toEqual({ ok: true });
+      const parents = await findOwnedParents();
+      expect(out.requestId).toBe(parents[0].id);
+      expect(logError).toHaveBeenCalledWith(
+        expect.stringContaining('db down'),
+        expect.anything(),
+      );
+    });
+
+    it('still fails over when recording a failed attempt fails', async () => {
+      const p1 = new FakeLlmProvider(
+        'openai',
+        new Set<Capability>(['text', 'json']),
+        [errResponse(new Error('permanent'))],
+      );
+      const p2 = new FakeLlmProvider(
+        'deepseek',
+        new Set<Capability>(['text', 'json']),
+        [okResponse({ ok: true })],
+      );
+      const svc = await boot([p1, p2]);
+      await cleanupOwnedRows();
+      jest
+        .spyOn(logger, 'finishAttempt')
+        .mockRejectedValueOnce(new Error('db down'));
+
+      await expect(svc.run(new PingTask(), { n: 1 })).resolves.toMatchObject({
+        data: { ok: true },
+      });
+    });
+
+    it('reports provider exhaustion, not the audit error, when closing a failed request fails', async () => {
+      const fake = new FakeLlmProvider(
+        'openai',
+        new Set<Capability>(['text', 'json']),
+        [errResponse(new Error('permanent'))],
+      );
+      const svc = await boot([fake]);
+      await cleanupOwnedRows();
+      jest.spyOn(logger, 'finish').mockRejectedValueOnce(new Error('db down'));
+
+      await expect(svc.run(new PingTask(), { n: 1 })).rejects.toBeInstanceOf(
+        AiGatewayExhaustedError,
+      );
+    });
+
+    it('keeps the attempt PENDING while the provider call runs', async () => {
+      let statusDuringCall: AiAttemptStatus | undefined;
+      const fake = new FakeLlmProvider(
+        'openai',
+        new Set<Capability>(['text', 'json']),
+        [
+          async () => {
+            const [attempt] = await findOwnedAttempts();
+            statusDuringCall = attempt.status;
+            return okResponse({ ok: true })();
+          },
+        ],
+      );
+      const svc = await boot([fake]);
+      await cleanupOwnedRows();
+
+      await svc.run(new PingTask(), { n: 1 });
+
+      expect(statusDuringCall).toBe(AiAttemptStatus.PENDING);
+      const [attempt] = await findOwnedAttempts();
+      expect(attempt.status).toBe(AiAttemptStatus.SUCCESS);
+    });
+
+    it('records tokens and the raw body of an unparseable provider response', async () => {
+      const fake = new FakeLlmProvider(
+        'openai',
+        new Set<Capability>(['text', 'json']),
+        [
+          errResponse(
+            new InvalidResponseError('non-JSON', 'not json {', {
+              inputTokens: 11,
+              outputTokens: 13,
+            }),
+          ),
+        ],
+      );
+      const svc = await boot([fake]);
+      await cleanupOwnedRows();
+
+      await expect(svc.run(new PingTask(), { n: 1 })).rejects.toBeInstanceOf(
+        AiGatewayExhaustedError,
+      );
+
+      const [attempt] = await findOwnedAttempts();
+      expect(attempt.error_code).toBe(AiAttemptErrorCode.INVALID_RESPONSE);
+      expect(attempt.raw_response_text).toBe('not json {');
+      expect(attempt.input_tokens).toBe(11);
+      expect(attempt.output_tokens).toBe(13);
+    });
+
+    it('records a failed image upload in the audit', async () => {
+      const step = jest.fn(okResponse({ ok: true }));
+      const fake = new FakeLlmProvider(
+        'openai',
+        new Set<Capability>(['text', 'vision', 'json']),
+        [step],
+      );
+      const svc = await boot([fake]);
+      await cleanupOwnedRows();
+      putSpy.mockRejectedValueOnce(new Error('s3 down'));
+
+      await expect(
+        svc.run(new VisionPingTask(), { data: Buffer.from([1]) }),
+      ).rejects.toThrow('s3 down');
+
+      expect(step).not.toHaveBeenCalled();
+      const parents = await findOwnedParents();
+      expect(parents).toHaveLength(1);
+      expect(parents[0].status).toBe(AiRequestStatus.FAILED);
+      expect(parents[0].error_message).toMatch(/s3 down/);
+    });
   });
 
   describe('daily budget', () => {

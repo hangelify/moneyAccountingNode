@@ -497,6 +497,7 @@
           "name": "ai_attempt_status_enum",
           "schema": "public",
           "items": [
+            "PENDING",
             "SUCCESS",
             "FAILED"
           ]
@@ -854,6 +855,7 @@
           "name": "ai_attempt_status_enum",
           "schema": "public",
           "items": [
+            "PENDING",
             "SUCCESS",
             "FAILED"
           ]
@@ -1306,6 +1308,7 @@
           "name": "ai_attempt_status_enum",
           "schema": "public",
           "items": [
+            "PENDING",
             "SUCCESS",
             "FAILED"
           ]
@@ -1678,6 +1681,7 @@
           "name": "ai_attempt_status_enum",
           "schema": "public",
           "items": [
+            "PENDING",
             "SUCCESS",
             "FAILED"
           ]
@@ -2168,6 +2172,7 @@
           "name": "ai_attempt_status_enum",
           "schema": "public",
           "items": [
+            "PENDING",
             "SUCCESS",
             "FAILED"
           ]
@@ -2509,6 +2514,7 @@
           "name": "ai_attempt_status_enum",
           "schema": "public",
           "items": [
+            "PENDING",
             "SUCCESS",
             "FAILED"
           ]
@@ -2849,6 +2855,7 @@
           "name": "ai_attempt_status_enum",
           "schema": "public",
           "items": [
+            "PENDING",
             "SUCCESS",
             "FAILED"
           ]
@@ -3173,6 +3180,7 @@
           "name": "ai_attempt_status_enum",
           "schema": "public",
           "items": [
+            "PENDING",
             "SUCCESS",
             "FAILED"
           ]
@@ -3694,6 +3702,7 @@
           "name": "ai_attempt_status_enum",
           "schema": "public",
           "items": [
+            "PENDING",
             "SUCCESS",
             "FAILED"
           ]
@@ -3969,6 +3978,7 @@
           "name": "ai_attempt_status_enum",
           "schema": "public",
           "items": [
+            "PENDING",
             "SUCCESS",
             "FAILED"
           ]
@@ -4512,6 +4522,7 @@
           "name": "ai_attempt_status_enum",
           "schema": "public",
           "items": [
+            "PENDING",
             "SUCCESS",
             "FAILED"
           ]
@@ -4929,6 +4940,7 @@
           "name": "ai_attempt_status_enum",
           "schema": "public",
           "items": [
+            "PENDING",
             "SUCCESS",
             "FAILED"
           ]
@@ -5417,6 +5429,7 @@
           "name": "ai_attempt_status_enum",
           "schema": "public",
           "items": [
+            "PENDING",
             "SUCCESS",
             "FAILED"
           ]
@@ -5532,6 +5545,7 @@
           "default": null,
           "comment": null,
           "enumItems": [
+            "PENDING",
             "SUCCESS",
             "FAILED"
           ],
@@ -5940,6 +5954,7 @@
           "name": "ai_attempt_status_enum",
           "schema": "public",
           "items": [
+            "PENDING",
             "SUCCESS",
             "FAILED"
           ]
@@ -6137,6 +6152,7 @@
       "name": "ai_attempt_status_enum",
       "schema": "public",
       "items": [
+        "PENDING",
         "SUCCESS",
         "FAILED"
       ]

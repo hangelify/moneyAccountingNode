@@ -1,13 +1,8 @@
-import { createHash } from 'node:crypto';
-import { Test, TestingModule } from '@nestjs/testing';
-import { INestApplication, ValidationPipe } from '@nestjs/common';
-import { getStorageToken } from '@nestjs/throttler';
-import type { ThrottlerStorageRedisService } from '@nest-lab/throttler-storage-redis';
+import type { NestExpressApplication } from '@nestjs/platform-express';
 import { EntityManager } from '@mikro-orm/core';
 import * as bcrypt from 'bcrypt';
 import request from 'supertest';
-import { App } from 'supertest/types';
-import { AppModule } from './../src/app.module';
+import { createTestApp, resetThrottling } from './utils/app';
 
 // Wrap the real bcrypt so calls can be counted (its exports are not spy-able).
 jest.mock('bcrypt', () => {
@@ -18,22 +13,9 @@ jest.mock('bcrypt', () => {
 });
 
 describe('Auth login hardening (e2e)', () => {
-  let app: INestApplication<App>;
+  let app: NestExpressApplication;
   const password = 'Qwerty123';
-  const email = `login-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.com`;
-
-  // Throttler counters live in Redis and survive between runs; drop the ones
-  // this suite hits so it starts from a clean 0/10.
-  async function resetThrottle(handler: string) {
-    const { redis } = app.get<ThrottlerStorageRedisService>(getStorageToken());
-    const keys = ['127.0.0.1', '::ffff:127.0.0.1', '::1'].flatMap((tracker) => {
-      const key = createHash('sha256')
-        .update(`AuthController-${handler}-default-${tracker}`)
-        .digest('hex');
-      return [`{${key}:default}:hits`, `{${key}:default}:blocked`];
-    });
-    await redis.del(...keys);
-  }
+  const email = 'login@example.com';
 
   // Repositories delegate to EntityManager.findOne, so this sees both paths.
   const spyUserLookups = () => {
@@ -50,39 +32,16 @@ describe('Auth login hardening (e2e)', () => {
     request(app.getHttpServer()).post(`/auth/login${query}`).send(body);
 
   beforeAll(async () => {
-    process.env.JWT_SECRET =
-      process.env.JWT_SECRET ||
-      'test-jwt-secret-key-minimum-32-characters-long';
-    process.env.JWT_REFRESH_SECRET =
-      process.env.JWT_REFRESH_SECRET ||
-      'test-refresh-secret-key-minimum-32-characters-long';
-    process.env.JWT_EXPIRES_IN_MS = process.env.JWT_EXPIRES_IN_MS || '900000';
-    process.env.JWT_REFRESH_EXPIRES_IN_MS =
-      process.env.JWT_REFRESH_EXPIRES_IN_MS || '604800000';
-
-    const moduleFixture: TestingModule = await Test.createTestingModule({
-      imports: [AppModule],
-    }).compile();
-
-    app = moduleFixture.createNestApplication();
-    app.useGlobalPipes(
-      new ValidationPipe({
-        whitelist: true,
-        transform: true,
-        forbidNonWhitelisted: true,
-      }),
-    );
-    await app.init();
-
-    await resetThrottle('register');
+    app = await createTestApp();
     await request(app.getHttpServer())
       .post('/auth/register')
       .send({ email, password, first_name: 'Login' })
       .expect(201);
   });
 
-  beforeEach(async () => {
-    await resetThrottle('login');
+  // Login is limited to 10 per minute; each test starts from zero.
+  beforeEach(() => {
+    resetThrottling(app);
   });
 
   afterEach(() => {
@@ -90,7 +49,7 @@ describe('Auth login hardening (e2e)', () => {
   });
 
   afterAll(async () => {
-    if (app) await app.close();
+    await app.close();
   });
 
   it('logs in with valid credentials', async () => {

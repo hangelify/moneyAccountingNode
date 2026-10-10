@@ -243,7 +243,7 @@ Every call routed through the AI gateway is persisted for auditing and cost trac
 | AI providers | Anthropic Claude, OpenAI, DeepSeek (pluggable gateway) |
 | Object storage | AWS S3 SDK v3 / MinIO |
 | API docs | `@nestjs/swagger` (Swagger UI) |
-| Testing | Jest 30, Testcontainers (e2e), Supertest |
+| Testing | Jest 30, Supertest (e2e against a throw-away PostgreSQL database) |
 | Linting | ESLint 9 + Prettier, enforced via Husky pre-commit |
 | Containerization | Docker multi-stage build, Docker Compose |
 
@@ -488,7 +488,7 @@ The client IP is `req.ip`. It is derived from `X-Forwarded-For` only for proxies
 ## Testing
 
 ```bash
-# Unit + integration tests (no live infrastructure required)
+# Unit tests (no database, Redis or .env required)
 npm test
 
 # Run tests in watch mode
@@ -497,10 +497,13 @@ npm run test:watch
 # Coverage report
 npm run test:cov
 
-# e2e tests (requires live PostgreSQL)
+# e2e (test/*.e2e-spec.ts) + integration (src/**/*.int-spec.ts) tests
+# (requires a live PostgreSQL server, nothing else)
 docker compose up -d postgres
 npm run test:e2e
 ```
+
+`npm run test:e2e` needs no `.env`: `test/setup/test-env.ts` sets every variable the app reads. It only takes the Postgres server from `DB_HOST` / `DB_PORT` / `DB_USER` / `DB_PASSWORD` (default `localhost:5432`, `postgres`/`postgres`). On each run the suite drops and recreates its own database, `accounting_e2e` (override with `E2E_DB_NAME`; the name must end with `_e2e` or `_test`), applies the migrations, and empties all tables before every spec file. Spec files run one at a time. The dev database is never touched. Rate-limit counters are kept in memory per test app, so Redis is not needed. Build test apps with `createTestApp()` from `test/utils/app.ts`: it applies the same `configureApp()` as `main.ts`.
 
 `npm test` sets `NODE_OPTIONS=--experimental-vm-modules` automatically so the AWS SDK v3's dynamic imports work cleanly inside Jest.
 
@@ -538,8 +541,8 @@ If no configured provider satisfies a required AI task, the application refuses 
 | `npm run lint:check` | Run ESLint without fixing |
 | `npm run format` | Format all source files with Prettier |
 | `npm run type-check` | TypeScript type check without emitting |
-| `npm test` | Run all unit/integration tests |
-| `npm run test:e2e` | Run end-to-end tests |
+| `npm test` | Run unit tests |
+| `npm run test:e2e` | Run e2e and integration tests (needs PostgreSQL) |
 | `npm run test:cov` | Run tests with coverage report |
 | `npm run migration:up` | Apply pending migrations |
 | `npm run migration:down` | Roll back latest migration |

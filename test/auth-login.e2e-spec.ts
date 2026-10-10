@@ -3,7 +3,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { getStorageToken } from '@nestjs/throttler';
 import type { ThrottlerStorageRedisService } from '@nest-lab/throttler-storage-redis';
-import { EntityRepository } from '@mikro-orm/core';
+import { EntityManager } from '@mikro-orm/core';
 import * as bcrypt from 'bcrypt';
 import request from 'supertest';
 import { App } from 'supertest/types';
@@ -34,6 +34,17 @@ describe('Auth login hardening (e2e)', () => {
     });
     await redis.del(...keys);
   }
+
+  // Repositories delegate to EntityManager.findOne, so this sees both paths.
+  const spyUserLookups = () => {
+    const findOne = jest.spyOn(EntityManager.prototype, 'findOne');
+    return () => findOne.mock.calls.map(([, where]) => where);
+  };
+  const hasNonStringEmail = (where: unknown) =>
+    where !== null &&
+    typeof where === 'object' &&
+    'email' in where &&
+    typeof where.email !== 'string';
 
   const login = (body: object, query = '') =>
     request(app.getHttpServer()).post(`/auth/login${query}`).send(body);
@@ -94,7 +105,7 @@ describe('Auth login hardening (e2e)', () => {
   ])(
     'rejects an operator object as email with 400 for %s, without querying users by it',
     async (_label, pwd) => {
-      const findOne = jest.spyOn(EntityRepository.prototype, 'findOne');
+      const lookups = spyUserLookups();
 
       const res = await login({
         email: { $like: `${email.slice(0, 10)}%` },
@@ -102,23 +113,20 @@ describe('Auth login hardening (e2e)', () => {
       });
 
       expect(res.status).toBe(400);
-      const nonStringEmailLookups = findOne.mock.calls.filter(
-        ([where]) =>
-          where !== null &&
-          typeof where === 'object' &&
-          'email' in where &&
-          typeof (where as { email: unknown }).email !== 'string',
-      );
-      expect(nonStringEmailLookups).toHaveLength(0);
+      expect(lookups().filter(hasNonStringEmail)).toHaveLength(0);
     },
   );
 
   it('ignores credentials passed in the query string', async () => {
+    const compare = jest.mocked(bcrypt.compare);
+    compare.mockClear();
+
     const res = await login(
       {},
       `?email=${encodeURIComponent(email)}&password=${password}`,
     );
     expect(res.status).toBe(400);
+    expect(compare).not.toHaveBeenCalled();
   });
 
   it('returns the same response for an unknown email and a wrong password', async () => {
@@ -133,13 +141,24 @@ describe('Auth login hardening (e2e)', () => {
     expect(wrongPassword.body).toEqual(unknown.body);
   });
 
-  it('runs bcrypt.compare exactly once per successful login', async () => {
-    const compare = jest.mocked(bcrypt.compare);
-    compare.mockClear();
+  it.each([
+    ['a successful login', () => email, password, 200],
+    [
+      'an unknown email',
+      () => `nobody-${Date.now()}@example.com`,
+      password,
+      401,
+    ],
+  ])(
+    'runs bcrypt.compare exactly once for %s',
+    async (_label, loginEmail, pwd, status) => {
+      const compare = jest.mocked(bcrypt.compare);
+      compare.mockClear();
 
-    const res = await login({ email, password });
+      const res = await login({ email: loginEmail(), password: pwd });
 
-    expect(res.status).toBe(200);
-    expect(compare).toHaveBeenCalledTimes(1);
-  });
+      expect(res.status).toBe(status);
+      expect(compare).toHaveBeenCalledTimes(1);
+    },
+  );
 });

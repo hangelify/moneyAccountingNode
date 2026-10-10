@@ -64,6 +64,9 @@ jobs:
           DB_PASSWORD: postgres
           DB_NAME: accounting
 
+      - name: Check build entry point
+        run: test -f dist/main.js
+
       - name: Apply migrations
         run: npm run migration:fresh
         env:
@@ -93,3 +96,45 @@ jobs:
           REDIS_HOST: localhost
           REDIS_PORT: 6379
 
+      # Runs the compiled app exactly as start:prod / docker-entrypoint.sh do.
+      # S3 and the AI provider are only configured, not contacted, at startup
+      # and on GET /; the AI gateway refuses to boot without a vision-capable
+      # provider, hence the dummy key.
+      - name: Smoke test production build
+        run: |
+          node dist/main.js > app.log 2>&1 &
+          APP_PID=$!
+          trap 'kill $APP_PID 2>/dev/null || true' EXIT
+          for i in $(seq 1 30); do
+            if curl -sf --max-time 5 http://localhost:3000/ > /dev/null; then
+              echo "App responded after ${i}s"
+              exit 0
+            fi
+            if ! kill -0 $APP_PID 2>/dev/null; then
+              echo "App exited before responding"
+              break
+            fi
+            sleep 1
+          done
+          cat app.log
+          exit 1
+        env:
+          DB_HOST: localhost
+          DB_PORT: 5432
+          DB_USER: postgres
+          DB_PASSWORD: postgres
+          DB_NAME: accounting
+          REDIS_HOST: localhost
+          REDIS_PORT: 6379
+          PORT: 3000
+          FRONTEND_URL: http://localhost:5173
+          JWT_SECRET: ci-smoke-jwt-secret-at-least-32-characters-long
+          JWT_REFRESH_SECRET: ci-smoke-refresh-secret-at-least-32-characters
+          JWT_EXPIRES_IN_MS: 900000
+          JWT_REFRESH_EXPIRES_IN_MS: 604800000
+          S3_REGION: us-east-1
+          S3_BUCKET: ci-smoke
+          S3_ACCESS_KEY: ci-smoke
+          S3_SECRET_KEY: ci-smoke
+          ANTHROPIC_API_KEY: ci-smoke-dummy-key
+          ANTHROPIC_MODEL: claude-sonnet-4-6

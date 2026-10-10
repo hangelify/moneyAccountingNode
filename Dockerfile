@@ -6,7 +6,6 @@ WORKDIR /app
 COPY package*.json ./
 COPY tsconfig*.json ./
 COPY nest-cli.json ./
-COPY mikro-orm.config.ts ./
 
 # Install dependencies
 RUN npm ci
@@ -30,14 +29,16 @@ RUN apk add --no-cache curl
 COPY package*.json ./
 COPY tsconfig*.json ./
 COPY nest-cli.json ./
-COPY mikro-orm.config.ts ./
 
 # Install dependencies (including dev for migrations)
 RUN npm ci
 
 # Copy built application from builder
 COPY --from=builder /app/dist ./dist
-COPY --from=builder /app/src/migrations ./src/migrations
+# The MikroORM CLI (migration:up in docker-entrypoint.sh) runs under ts-node,
+# so it loads src/mikro-orm.config.ts and discovers entities via entitiesTs
+# (src/**/*.entity.ts); migrations are .ts too. Ship the whole src tree.
+COPY --from=builder /app/src ./src
 
 # Copy entrypoint script
 COPY docker-entrypoint.sh ./

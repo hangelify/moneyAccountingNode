@@ -4,6 +4,7 @@ import { Category } from '../../entities/category.entity';
 import { PlaningHorizon } from '../../entities/planing-horizon.entity';
 import { SubCategory } from '../../entities/sub-category.entity';
 import { Household } from '../../entities/household.entity';
+import { HouseholdMember } from '../../entities/household-member.entity';
 import { CategoryController } from './category.controller';
 import { CategoryService } from './category.service';
 import { CategoryDefaultsService } from './category-defaults.service';
@@ -15,6 +16,7 @@ import { CategoryDefaultsService } from './category-defaults.service';
       PlaningHorizon,
       SubCategory,
       Household,
+      HouseholdMember,
     ]),
   ],
   controllers: [CategoryController],

@@ -108,7 +108,6 @@ describe('draft from AI output (PostgreSQL)', () => {
           category_reasoning: 'n/a',
         },
       ],
-      raw_extracted_text: '...',
     };
     const knownSub = {
       id: randomUUID(),
@@ -153,7 +152,6 @@ describe('draft from AI output (PostgreSQL)', () => {
       bill_date: '07.05.2026',
       currency: 'eur',
       total_amount: 1e20,
-      raw_extracted_text: '',
       items: [
         {
           name: 'y'.repeat(300),

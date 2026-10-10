@@ -25,6 +25,15 @@ describe('BillParserTask', () => {
     }
   });
 
+  it('does not ask the model for the full OCR text', async () => {
+    const req = await t.buildRequest({
+      image: Buffer.from('x'),
+      mediaType: 'image/png',
+    });
+    const system = req.messages.find((m) => m.role === 'system');
+    expect(system?.text).not.toContain('raw_extracted_text');
+  });
+
   it('rejects bad input at parse time', () => {
     expect(() =>
       t.inputSchema.parse({ image: 'not a buffer', mediaType: 'image/png' }),

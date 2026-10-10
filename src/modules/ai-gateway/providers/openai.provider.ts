@@ -12,7 +12,11 @@ import { withRetry } from '../internal/retry';
 import { AI_CALL_CONFIG } from '../internal/ai-call-config';
 import type { AiCallConfig } from '../internal/ai-call-config';
 import { isTransient, retryAfterMs } from '../internal/transient';
-import { InvalidResponseError } from '../internal/error-classifier';
+import {
+  InvalidResponseError,
+  RefusalError,
+  TruncatedResponseError,
+} from '../internal/error-classifier';
 
 @Injectable()
 export class OpenAiProvider implements LlmProvider {
@@ -57,13 +61,16 @@ export class OpenAiProvider implements LlmProvider {
       return { role: 'user' as const, content: blocks };
     });
 
-    const body: Record<string, unknown> = {
-      model,
-      messages,
-      temperature: req.temperature ?? 0,
-    };
+    // Reasoning models (o-series, gpt-5) reject `max_tokens`, so the limit
+    // goes as `max_completion_tokens`. They also reject a non-default
+    // temperature: it is sent only when set, so a task meant for such a model
+    // must leave it unset.
+    const body: Record<string, unknown> = { model, messages };
+    if (req.temperature !== undefined) {
+      body.temperature = req.temperature;
+    }
     if (req.maxOutputTokens !== undefined) {
-      body.max_tokens = req.maxOutputTokens;
+      body.max_completion_tokens = req.maxOutputTokens;
     }
 
     if (req.jsonSchema) {
@@ -97,16 +104,43 @@ export class OpenAiProvider implements LlmProvider {
     );
 
     const resp = response as {
-      choices?: Array<{ message?: { content?: string | null } }>;
+      choices?: Array<{
+        message?: { content?: string | null; refusal?: string | null };
+        finish_reason?: string | null;
+      }>;
       usage?: { prompt_tokens?: number; completion_tokens?: number };
       model?: string;
     };
 
-    const text = resp.choices?.[0]?.message?.content ?? '';
+    const choice = resp.choices?.[0];
+    const text = choice?.message?.content ?? '';
+    const refusal = choice?.message?.refusal;
+    const stopReason = choice?.finish_reason ?? undefined;
     const usage = {
       inputTokens: resp.usage?.prompt_tokens ?? 0,
       outputTokens: resp.usage?.completion_tokens ?? 0,
     };
+    if (refusal) {
+      throw new RefusalError(
+        `OpenAI model refused to answer: ${refusal}`,
+        refusal,
+        usage,
+      );
+    }
+    if (stopReason === 'content_filter') {
+      throw new RefusalError(
+        'OpenAI refused the answer: stopped by the content filter',
+        text,
+        usage,
+      );
+    }
+    if (stopReason === 'length') {
+      throw new TruncatedResponseError(
+        'OpenAI stopped at the output token limit (finish_reason=length)',
+        text,
+        usage,
+      );
+    }
     let json: unknown;
     if (req.jsonSchema) {
       try {
@@ -120,7 +154,7 @@ export class OpenAiProvider implements LlmProvider {
       }
     }
 
-    return { text, json, model: resp.model ?? model, usage };
+    return { text, json, model: resp.model ?? model, usage, stopReason };
   }
 
   isTransient(err: unknown): boolean {

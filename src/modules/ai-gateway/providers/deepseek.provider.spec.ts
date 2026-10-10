@@ -1,7 +1,11 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call */
 import OpenAI from 'openai';
 import { DeepSeekProvider } from './deepseek.provider';
-import { InvalidResponseError } from '../internal/error-classifier';
+import {
+  InvalidResponseError,
+  RefusalError,
+  TruncatedResponseError,
+} from '../internal/error-classifier';
 import {
   itBoundsSdkCalls,
   testAiCallConfig,
@@ -119,6 +123,66 @@ describe('DeepSeekProvider', () => {
     expect(err).toMatchObject({
       raw: 'not json {',
       usage: { inputTokens: 3, outputTokens: 4 },
+    });
+  });
+
+  describe('response handling', () => {
+    beforeEach(() => {
+      process.env.DEEPSEEK_API_KEY = 'x';
+      process.env.DEEPSEEK_MODEL = 'deepseek-chat';
+    });
+
+    const jsonReq = {
+      messages: [{ role: 'user' as const, text: 'x' }],
+      jsonSchema: { type: 'object' },
+    };
+
+    it('passes maxOutputTokens and temperature into the request body', async () => {
+      mockCreate.mockResolvedValue({
+        choices: [{ message: { content: '{}' }, finish_reason: 'stop' }],
+      });
+      const p = new DeepSeekProvider(testAiCallConfig());
+      const res = await p.complete({
+        ...jsonReq,
+        maxOutputTokens: 1234,
+        temperature: 0.3,
+      });
+      const arg = mockCreate.mock.calls[0][0];
+      expect(arg.max_tokens).toBe(1234);
+      expect(arg.temperature).toBe(0.3);
+      expect(res.stopReason).toBe('stop');
+    });
+
+    it('throws TruncatedResponseError with the raw body on finish_reason length', async () => {
+      mockCreate.mockResolvedValue({
+        choices: [
+          { message: { content: '{"items":[' }, finish_reason: 'length' },
+        ],
+        usage: { prompt_tokens: 3, completion_tokens: 4096 },
+      });
+      const p = new DeepSeekProvider(testAiCallConfig());
+      const err: unknown = await p.complete(jsonReq).catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(TruncatedResponseError);
+      expect(err).toMatchObject({
+        raw: '{"items":[',
+        usage: { inputTokens: 3, outputTokens: 4096 },
+      });
+    });
+
+    it('throws RefusalError when the content filter stops the answer', async () => {
+      mockCreate.mockResolvedValue({
+        choices: [
+          { message: { content: '' }, finish_reason: 'content_filter' },
+        ],
+        usage: { prompt_tokens: 3, completion_tokens: 0 },
+      });
+      const p = new DeepSeekProvider(testAiCallConfig());
+      const err: unknown = await p.complete(jsonReq).catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(RefusalError);
+      expect(err).toMatchObject({
+        message: expect.stringContaining('refused'),
+        usage: { inputTokens: 3, outputTokens: 0 },
+      });
     });
   });
 

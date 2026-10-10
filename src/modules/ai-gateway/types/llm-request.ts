@@ -21,4 +21,6 @@ export interface LlmResponse {
   json?: unknown;
   model: string;
   usage?: { inputTokens: number; outputTokens: number };
+  /** Provider's own stop/finish reason, e.g. 'end_turn', 'stop', 'length'. */
+  stopReason?: string;
 }

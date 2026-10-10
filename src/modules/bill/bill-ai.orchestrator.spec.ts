@@ -22,7 +22,6 @@ describe('BillAiOrchestrator', () => {
           category_confidence: 0.9,
         },
       ],
-      raw_extracted_text: '...',
     };
     const subcategories = [
       {
@@ -70,7 +69,6 @@ describe('BillAiOrchestrator', () => {
       currency: null,
       total_amount: null,
       items: [],
-      raw_extracted_text: '',
     };
     const out = { data: parsed, requestId: 'req-2' };
     const runMock = jest.fn().mockResolvedValueOnce(out);

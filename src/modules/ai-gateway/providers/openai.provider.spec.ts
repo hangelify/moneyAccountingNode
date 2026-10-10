@@ -1,6 +1,10 @@
 import OpenAI from 'openai';
 import { OpenAiProvider } from './openai.provider';
-import { InvalidResponseError } from '../internal/error-classifier';
+import {
+  InvalidResponseError,
+  RefusalError,
+  TruncatedResponseError,
+} from '../internal/error-classifier';
 import {
   itBoundsSdkCalls,
   testAiCallConfig,
@@ -92,6 +96,84 @@ describe('OpenAiProvider', () => {
     expect(err).toMatchObject({
       raw: 'not json {',
       usage: { inputTokens: 5, outputTokens: 7 },
+    });
+  });
+
+  describe('response handling', () => {
+    beforeEach(() => {
+      process.env.OPENAI_API_KEY = 'x';
+      process.env.OPENAI_MODEL = 'gpt-4o';
+    });
+
+    const jsonReq = {
+      messages: [{ role: 'user' as const, text: 'x' }],
+      jsonSchema: { type: 'object' },
+    };
+
+    it('sends maxOutputTokens as max_completion_tokens with the temperature', async () => {
+      mockCreate.mockResolvedValue({
+        choices: [{ message: { content: '{}' }, finish_reason: 'stop' }],
+      });
+      const p = new OpenAiProvider(testAiCallConfig());
+      const res = await p.complete({
+        ...jsonReq,
+        maxOutputTokens: 1234,
+        temperature: 0.3,
+      });
+      const arg = mockCreate.mock.calls[0][0];
+      expect(arg.max_completion_tokens).toBe(1234);
+      expect(arg).not.toHaveProperty('max_tokens');
+      expect(arg.temperature).toBe(0.3);
+      expect(res.stopReason).toBe('stop');
+    });
+
+    it('omits temperature and the token limit when the request sets none', async () => {
+      // Reasoning models (o-series, gpt-5) reject a non-default temperature.
+      mockCreate.mockResolvedValue({
+        choices: [{ message: { content: '{}' }, finish_reason: 'stop' }],
+      });
+      const p = new OpenAiProvider(testAiCallConfig());
+      await p.complete(jsonReq);
+      const arg = mockCreate.mock.calls[0][0];
+      expect(arg).not.toHaveProperty('temperature');
+      expect(arg).not.toHaveProperty('max_completion_tokens');
+      expect(arg).not.toHaveProperty('max_tokens');
+    });
+
+    it('throws TruncatedResponseError with the raw body on finish_reason length', async () => {
+      mockCreate.mockResolvedValue({
+        choices: [
+          { message: { content: '{"items":[' }, finish_reason: 'length' },
+        ],
+        usage: { prompt_tokens: 5, completion_tokens: 4096 },
+      });
+      const p = new OpenAiProvider(testAiCallConfig());
+      const err: unknown = await p.complete(jsonReq).catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(TruncatedResponseError);
+      expect(err).toMatchObject({
+        raw: '{"items":[',
+        usage: { inputTokens: 5, outputTokens: 4096 },
+      });
+    });
+
+    it('throws RefusalError carrying the refusal text', async () => {
+      mockCreate.mockResolvedValue({
+        choices: [
+          {
+            message: { content: null, refusal: 'I cannot help with that.' },
+            finish_reason: 'stop',
+          },
+        ],
+        usage: { prompt_tokens: 5, completion_tokens: 6 },
+      });
+      const p = new OpenAiProvider(testAiCallConfig());
+      const err: unknown = await p.complete(jsonReq).catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(RefusalError);
+      expect(err).toMatchObject({
+        message: expect.stringContaining('I cannot help with that.'),
+        raw: 'I cannot help with that.',
+        usage: { inputTokens: 5, outputTokens: 6 },
+      });
     });
   });
 

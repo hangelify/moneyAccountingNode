@@ -26,7 +26,10 @@ import {
 import { STORAGE_SERVICE, StorageService } from '../storage/storage.service';
 import { AI_CALL_CONFIG, AiCallConfig } from './internal/ai-call-config';
 import { DeadlineExceededError } from './internal/retry';
-import { InvalidResponseError } from './internal/error-classifier';
+import {
+  InvalidResponseError,
+  TruncatedResponseError,
+} from './internal/error-classifier';
 import { testAiCallConfig } from './providers/__fixtures__/call-bounds.shared';
 import {
   AI_USAGE_LIMITS,
@@ -67,6 +70,19 @@ class PingTask extends AiTask<PingIn, PingOut> {
         { role: 'user', text: `n=${input.n}` },
       ],
     });
+  }
+}
+
+class TunedPingTask extends PingTask {
+  override readonly maxOutputTokens = 321;
+  override readonly temperature = 0.2;
+
+  constructor(private readonly requestOverrides: Partial<TaskRequest> = {}) {
+    super();
+  }
+
+  override async buildRequest(input: PingIn): Promise<TaskRequest> {
+    return { ...(await super.buildRequest(input)), ...this.requestOverrides };
   }
 }
 
@@ -259,6 +275,68 @@ describe('AiGatewayService', () => {
     expect(attempts[0].status).toBe(AiAttemptStatus.SUCCESS);
     expect(attempts[0].provider_name).toBe('openai');
     expect(parents[0].chosen_attempt_id).toBe(attempts[0].id);
+  });
+
+  it("passes the task's maxOutputTokens and temperature to the provider", async () => {
+    const fake = new FakeLlmProvider(
+      'openai',
+      new Set<Capability>(['text', 'json']),
+      [okResponse({ ok: true })],
+    );
+    const svc = await boot([fake]);
+    await cleanupOwnedRows();
+
+    await svc.run(new TunedPingTask(), { n: 1 });
+
+    expect(fake.requests[0]).toMatchObject({
+      maxOutputTokens: 321,
+      temperature: 0.2,
+    });
+  });
+
+  it('lets the built request override the task defaults', async () => {
+    const fake = new FakeLlmProvider(
+      'openai',
+      new Set<Capability>(['text', 'json']),
+      [okResponse({ ok: true })],
+    );
+    const svc = await boot([fake]);
+    await cleanupOwnedRows();
+
+    await svc.run(new TunedPingTask({ maxOutputTokens: 99, temperature: 0 }), {
+      n: 1,
+    });
+
+    expect(fake.requests[0]).toMatchObject({
+      maxOutputTokens: 99,
+      temperature: 0,
+    });
+  });
+
+  it('records a truncated answer as TRUNCATED with its raw body', async () => {
+    const fake = new FakeLlmProvider(
+      'openai',
+      new Set<Capability>(['text', 'json']),
+      [
+        errResponse(
+          new TruncatedResponseError('cut off', '{"ok":', {
+            inputTokens: 11,
+            outputTokens: 321,
+          }),
+        ),
+      ],
+    );
+    const svc = await boot([fake]);
+    await cleanupOwnedRows();
+
+    await expect(svc.run(new PingTask(), { n: 1 })).rejects.toBeInstanceOf(
+      AiGatewayExhaustedError,
+    );
+
+    const [attempt] = await findOwnedAttempts();
+    expect(attempt.error_code).toBe(AiAttemptErrorCode.TRUNCATED);
+    expect(attempt.raw_response_text).toBe('{"ok":');
+    expect(attempt.output_tokens).toBe(321);
   });
 
   it('fails over when the first provider returns schema-invalid JSON', async () => {

@@ -1,6 +1,11 @@
 import Anthropic from '@anthropic-ai/sdk';
 import OpenAI from 'openai';
-import { classifyError, InvalidResponseError } from './error-classifier';
+import {
+  classifyError,
+  InvalidResponseError,
+  RefusalError,
+  TruncatedResponseError,
+} from './error-classifier';
 import { AiAttemptErrorCode } from '../../../entities/ai-request-attempt.entity';
 import {
   DeadlineExceededError,
@@ -57,6 +62,19 @@ describe('classifyError', () => {
     expect(classifyError(new InvalidResponseError('bad json', '{')).code).toBe(
       AiAttemptErrorCode.INVALID_RESPONSE,
     );
+  });
+
+  it('classifies TruncatedResponseError as TRUNCATED', () => {
+    expect(
+      classifyError(new TruncatedResponseError('cut off', '{"a":')).code,
+    ).toBe(AiAttemptErrorCode.TRUNCATED);
+  });
+
+  it('classifies RefusalError as INVALID_RESPONSE with its message', () => {
+    expect(classifyError(new RefusalError('model refused: no'))).toEqual({
+      code: AiAttemptErrorCode.INVALID_RESPONSE,
+      message: 'model refused: no',
+    });
   });
 
   it('falls back to UNKNOWN for unrecognized errors', () => {

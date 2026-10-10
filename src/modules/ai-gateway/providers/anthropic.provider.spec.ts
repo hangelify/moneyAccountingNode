@@ -103,6 +103,20 @@ describe('AnthropicProvider', () => {
       expect(res.stopReason).toBe('tool_use');
     });
 
+    it.each([
+      ['missing', undefined],
+      ['partial', { input_tokens: 5 }],
+    ])('leaves usage undefined when it is %s', async (_label, usage) => {
+      mockCreate.mockResolvedValue({
+        content: [{ type: 'tool_use', name: 'output', input: {} }],
+        stop_reason: 'tool_use',
+        usage,
+      });
+      const p = new AnthropicProvider(testAiCallConfig());
+      const res = await p.complete(jsonReq);
+      expect(res.usage).toBeUndefined();
+    });
+
     it('throws TruncatedResponseError with the raw body when max_tokens is hit', async () => {
       mockCreate.mockResolvedValue({
         content: [{ type: 'tool_use', name: 'output', input: { items: [] } }],

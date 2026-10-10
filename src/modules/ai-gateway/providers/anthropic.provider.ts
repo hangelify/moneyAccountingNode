@@ -8,6 +8,7 @@ import {
 } from '../types/llm-provider';
 import { LlmRequest, LlmResponse } from '../types/llm-request';
 import { readOptionalKey, readModelWhenConfigured } from './provider.env';
+import { toUsage } from './usage';
 import { withRetry } from '../internal/retry';
 import { AI_CALL_CONFIG } from '../internal/ai-call-config';
 import type { AiCallConfig } from '../internal/ai-call-config';
@@ -131,10 +132,7 @@ export class AnthropicProvider implements LlmProvider {
     // audit shows what the model returned.
     if (toolUsed) text = JSON.stringify(json) ?? '';
 
-    const usage = {
-      inputTokens: resp.usage?.input_tokens ?? 0,
-      outputTokens: resp.usage?.output_tokens ?? 0,
-    };
+    const usage = toUsage(resp.usage?.input_tokens, resp.usage?.output_tokens);
     const stopReason = resp.stop_reason ?? undefined;
     if (
       stopReason === 'max_tokens' ||

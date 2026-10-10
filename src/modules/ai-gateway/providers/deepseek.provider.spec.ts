@@ -137,6 +137,19 @@ describe('DeepSeekProvider', () => {
       jsonSchema: { type: 'object' },
     };
 
+    it.each([
+      ['missing', undefined],
+      ['partial', { prompt_tokens: 3 }],
+    ])('leaves usage undefined when it is %s', async (_label, usage) => {
+      mockCreate.mockResolvedValue({
+        choices: [{ message: { content: '{}' }, finish_reason: 'stop' }],
+        usage,
+      });
+      const p = new DeepSeekProvider(testAiCallConfig());
+      const res = await p.complete(jsonReq);
+      expect(res.usage).toBeUndefined();
+    });
+
     it('passes maxOutputTokens and temperature into the request body', async () => {
       mockCreate.mockResolvedValue({
         choices: [{ message: { content: '{}' }, finish_reason: 'stop' }],

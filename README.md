@@ -476,7 +476,7 @@ Exceeding a limit returns `429 Too Many Requests` with `Retry-After`. Once the p
 
 AI endpoints have further guards on top of the per-user limits:
 
-- **Daily budget.** Before each AI call the user's spend over the last 24 hours is summed from `ai_requests.total_cost_usd`. Once it reaches `AI_DAILY_BUDGET_USD` the call is refused with `429` (no `Retry-After`). Calls still in flight have no cost yet, so concurrent calls can overshoot the budget by their own cost. Calls without a recorded cost (model missing from the pricing table, or aborted before the provider reported token usage) count as $0.
+- **Daily budget.** Before each AI call the user's spend over the last 24 hours is summed from `ai_requests.total_cost_usd`. Once it reaches `AI_DAILY_BUDGET_USD` the call is refused with `429` (no `Retry-After`). Calls still in flight have no cost yet, so concurrent calls can overshoot the budget by their own cost. Calls without a recorded cost (model missing from the pricing table, or no token usage reported by the provider) count as $0. Dated model IDs are priced by their base model (`claude-sonnet-4-5-20250929` → `claude-sonnet-4-5`), and on startup the module warns about every configured default model or task override that has no price in `src/modules/ai-gateway/pricing.ts`.
 - **Concurrency.** At most `AI_MAX_CONCURRENCY` AI calls run at once; a call beyond that gets `503 Service Unavailable` with `Retry-After`. The counter lives in process memory, so with N API instances up to N × `AI_MAX_CONCURRENCY` calls may run.
 
 The per-user limits are counted after authentication (`UserThrottlerGuard`), so a client cannot dodge them by changing IP.

@@ -44,11 +44,11 @@ describe('HouseholdMemberGuard', () => {
     );
   });
 
-  it('throws BadRequestException without querying the DB when hid is not a UUID', async () => {
+  it('throws ForbiddenException, as for a non-member, without querying the DB when hid is not a UUID', async () => {
     const { guard, householdRepo, memberRepo } = makeGuard();
     await expect(
       guard.canActivate(makeCtx('user-1', 'not-a-uuid')),
-    ).rejects.toBeInstanceOf(BadRequestException);
+    ).rejects.toBeInstanceOf(ForbiddenException);
     expect(householdRepo.findOne).not.toHaveBeenCalled();
     expect(memberRepo.findOne).not.toHaveBeenCalled();
   });

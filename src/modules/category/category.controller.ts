@@ -5,6 +5,7 @@ import {
   Put,
   Delete,
   Param,
+  ParseUUIDPipe,
   Body,
   HttpCode,
   HttpStatus,
@@ -105,7 +106,7 @@ export class CategoryController {
   @ApiGetCategoryResponses()
   async getCategory(
     @CurrentHousehold() ctx: HouseholdContext,
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
   ): Promise<CategoryResponseDto> {
     return this.categoryService.getCategory(id, ctx.householdId);
   }
@@ -121,7 +122,7 @@ export class CategoryController {
   @ApiUpdateCategoryResponses()
   async updateCategory(
     @CurrentHousehold() ctx: HouseholdContext,
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body() updateCategoryDto: UpdateCategoryDto,
   ): Promise<CategoryResponseDto> {
     return this.categoryService.updateCategory(
@@ -142,7 +143,7 @@ export class CategoryController {
   @ApiDeleteCategoryResponses()
   async deleteCategory(
     @CurrentHousehold() ctx: HouseholdContext,
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
   ): Promise<void> {
     return this.categoryService.deleteCategory(id, ctx.householdId);
   }

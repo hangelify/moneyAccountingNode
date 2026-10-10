@@ -5,6 +5,7 @@ import {
   Put,
   Delete,
   Param,
+  ParseUUIDPipe,
   Body,
   HttpCode,
   HttpStatus,
@@ -62,7 +63,7 @@ export class HouseholdController {
   @ApiOperation({ summary: 'Get household details and member list' })
   @ApiParam({ name: 'hid', description: 'Household ID' })
   async getHousehold(
-    @Param('hid') hid: string,
+    @Param('hid', ParseUUIDPipe) hid: string,
   ): Promise<HouseholdDetailResponseDto> {
     return this.householdService.getHousehold(hid);
   }
@@ -74,7 +75,7 @@ export class HouseholdController {
   @ApiParam({ name: 'hid', description: 'Household ID' })
   async renameHousehold(
     @CurrentHousehold() ctx: HouseholdContext,
-    @Param('hid') hid: string,
+    @Param('hid', ParseUUIDPipe) hid: string,
     @Body() dto: UpdateHouseholdDto,
   ): Promise<HouseholdResponseDto> {
     this.householdService.assertOwner(ctx);
@@ -88,7 +89,7 @@ export class HouseholdController {
   @ApiParam({ name: 'hid', description: 'Household ID' })
   async deleteHousehold(
     @CurrentHousehold() ctx: HouseholdContext,
-    @Param('hid') hid: string,
+    @Param('hid', ParseUUIDPipe) hid: string,
   ): Promise<void> {
     this.householdService.assertOwner(ctx);
     return this.householdService.softDeleteHousehold(hid);
@@ -105,7 +106,7 @@ export class HouseholdController {
   async createInvite(
     @CurrentUser() user: AuthenticatedUser,
     @CurrentHousehold() ctx: HouseholdContext,
-    @Param('hid') hid: string,
+    @Param('hid', ParseUUIDPipe) hid: string,
     @Body() dto: CreateInviteDto,
   ): Promise<InviteResponseDto> {
     this.householdService.assertOwner(ctx);
@@ -139,8 +140,8 @@ export class HouseholdController {
   @ApiParam({ name: 'uid', description: 'User ID to remove' })
   async removeMember(
     @CurrentUser() user: AuthenticatedUser,
-    @Param('hid') hid: string,
-    @Param('uid') uid: string,
+    @Param('hid', ParseUUIDPipe) hid: string,
+    @Param('uid', ParseUUIDPipe) uid: string,
   ): Promise<void> {
     return this.householdService.removeMember(hid, user.id, uid);
   }

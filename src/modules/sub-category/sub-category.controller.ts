@@ -5,6 +5,7 @@ import {
   Put,
   Delete,
   Param,
+  ParseUUIDPipe,
   Body,
   HttpCode,
   HttpStatus,
@@ -88,7 +89,7 @@ export class SubCategoryController {
   @ApiGetSubCategoryResponses()
   async getSubCategory(
     @CurrentHousehold() ctx: HouseholdContext,
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
   ): Promise<SubCategoryResponseDto> {
     return this.subCategoryService.getSubCategory(id, ctx.householdId);
   }
@@ -104,7 +105,7 @@ export class SubCategoryController {
   @ApiUpdateSubCategoryResponses()
   async updateSubCategory(
     @CurrentHousehold() ctx: HouseholdContext,
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body() updateSubCategoryDto: UpdateSubCategoryDto,
   ): Promise<SubCategoryResponseDto> {
     return this.subCategoryService.updateSubCategory(
@@ -125,7 +126,7 @@ export class SubCategoryController {
   @ApiDeleteSubCategoryResponses()
   async deleteSubCategory(
     @CurrentHousehold() ctx: HouseholdContext,
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
   ): Promise<void> {
     return this.subCategoryService.softDeleteSubCategory(id, ctx.householdId);
   }

@@ -5,6 +5,7 @@ import {
   Put,
   Delete,
   Param,
+  ParseUUIDPipe,
   Body,
   HttpCode,
   HttpStatus,
@@ -69,7 +70,7 @@ export class MarketController {
   @ApiGetMarketResponses()
   async getMarket(
     @CurrentHousehold() ctx: HouseholdContext,
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
   ): Promise<MarketResponseDto> {
     return this.marketService.getMarket(id, ctx.householdId);
   }
@@ -85,7 +86,7 @@ export class MarketController {
   @ApiUpdateMarketResponses()
   async updateMarket(
     @CurrentHousehold() ctx: HouseholdContext,
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateMarketDto,
   ): Promise<MarketResponseDto> {
     return this.marketService.updateMarket(id, ctx.householdId, dto);
@@ -102,7 +103,7 @@ export class MarketController {
   @ApiDeleteMarketResponses()
   async deleteMarket(
     @CurrentHousehold() ctx: HouseholdContext,
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
   ): Promise<void> {
     return this.marketService.softDeleteMarket(id, ctx.householdId);
   }

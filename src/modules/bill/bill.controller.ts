@@ -15,8 +15,6 @@ import {
   UploadedFile,
   UseFilters,
   ParseFilePipe,
-  MaxFileSizeValidator,
-  FileTypeValidator,
   Logger,
   UnprocessableEntityException,
 } from '@nestjs/common';
@@ -64,8 +62,7 @@ import { ConfirmBillDto } from './dto/confirm-bill.dto';
 import { AiGatewayExhaustedFilter } from './filters/ai-gateway-exhausted.filter';
 import { AiUsageLimitFilter } from './filters/ai-usage-limit.filter';
 import { UserThrottlerGuard } from '../ai-gateway/guards/user-throttler.guard';
-
-const MAX_IMAGE_SIZE_BYTES = 10 * 1024 * 1024;
+import { MAX_UPLOAD_BYTES, prepareReceiptImage } from './receipt-image';
 
 @ApiTags('bills')
 @Controller('households/:hid/bills')
@@ -84,7 +81,13 @@ export class BillController {
   @HttpCode(HttpStatus.OK)
   // Runs after the class-level JwtAuthGuard, so it can count per user.
   @UseGuards(UserThrottlerGuard)
-  @UseInterceptors(FileInterceptor('image'))
+  // Multer stops buffering at the size limit and answers 413, so an
+  // oversized upload never sits in memory whole.
+  @UseInterceptors(
+    FileInterceptor('image', {
+      limits: { fileSize: MAX_UPLOAD_BYTES, files: 1, fields: 0 },
+    }),
+  )
   @UseFilters(AiGatewayExhaustedFilter, AiUsageLimitFilter)
   @ApiOperation({
     summary:
@@ -102,19 +105,14 @@ export class BillController {
   async parsePhoto(
     @CurrentUser() user: AuthenticatedUser,
     @CurrentHousehold() ctx: HouseholdContext,
-    @UploadedFile(
-      new ParseFilePipe({
-        validators: [
-          new MaxFileSizeValidator({ maxSize: MAX_IMAGE_SIZE_BYTES }),
-          new FileTypeValidator({ fileType: /^image\/(png|jpeg|webp)$/ }),
-        ],
-      }),
-    )
-    file: Express.Multer.File,
+    @UploadedFile(new ParseFilePipe()) file: Express.Multer.File,
   ): Promise<ParsedBillResponseDto> {
+    // The client's Content-Type is never trusted: the type is detected from
+    // the bytes and the image re-encoded as a metadata-free JPEG.
+    const image = await prepareReceiptImage(file.buffer);
     const { parsed, requestId } = await this.billPhoto.parseAndCategorize(
-      file.buffer,
-      file.mimetype as 'image/png' | 'image/jpeg' | 'image/webp',
+      image.buffer,
+      image.mediaType,
       ctx.householdId,
       user.id,
     );

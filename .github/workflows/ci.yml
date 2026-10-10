@@ -85,16 +85,20 @@ jobs:
           DB_PASSWORD: postgres
           DB_NAME: accounting
 
+      # Unit tests need no database, Redis or .env.
       - name: Run tests
         run: npm run test
+
+      # e2e + integration (*.e2e-spec.ts, *.int-spec.ts): the suite recreates
+      # its own database (accounting_e2e) from the migrations on this server
+      # and sets every other env var it needs itself.
+      - name: Run e2e and integration tests
+        run: npm run test:e2e
         env:
           DB_HOST: localhost
           DB_PORT: 5432
           DB_USER: postgres
           DB_PASSWORD: postgres
-          DB_NAME: accounting
-          REDIS_HOST: localhost
-          REDIS_PORT: 6379
 
       # Runs the compiled app exactly as start:prod / docker-entrypoint.sh do.
       # S3 and the AI provider are only configured, not contacted, at startup

@@ -28,11 +28,14 @@ import { requireEnv, requireIntEnv } from './auth.env';
     PassportModule,
     UserModule,
     CategoryModule,
-    JwtModule.register({
-      secret: requireEnv('JWT_SECRET'),
-      signOptions: {
-        expiresIn: Math.floor(requireIntEnv('JWT_EXPIRES_IN_MS') / 1000),
-      },
+    // Env is read at bootstrap, not when this file is imported.
+    JwtModule.registerAsync({
+      useFactory: () => ({
+        secret: requireEnv('JWT_SECRET'),
+        signOptions: {
+          expiresIn: Math.floor(requireIntEnv('JWT_EXPIRES_IN_MS') / 1000),
+        },
+      }),
     }),
   ],
   controllers: [AuthController],

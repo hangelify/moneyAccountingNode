@@ -20,6 +20,8 @@ import { BillModule } from './modules/bill/bill.module';
 import { MarketModule } from './modules/market/market.module';
 import { HouseholdModule } from './modules/household/household.module';
 
+export const APP_THROTTLERS = [{ name: 'default', ttl: 60_000, limit: 100 }];
+
 @Module({
   imports: [
     MikroOrmModule.forRootAsync({ useFactory: createMikroOrmConfig }),
@@ -37,7 +39,7 @@ import { HouseholdModule } from './modules/household/household.module';
     HouseholdModule,
     ThrottlerModule.forRootAsync({
       useFactory: () => ({
-        throttlers: [{ name: 'default', ttl: 60_000, limit: 100 }],
+        throttlers: APP_THROTTLERS,
         storage: new ThrottlerStorageRedisService({
           host: process.env.REDIS_HOST ?? 'localhost',
           port: parseInt(process.env.REDIS_PORT ?? '6379', 10),

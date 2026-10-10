@@ -1,10 +1,17 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import OpenAI from 'openai';
 import { Capability } from '../types/capability';
-import { LlmProvider, ProviderName } from '../types/llm-provider';
+import {
+  LlmCallOptions,
+  LlmProvider,
+  ProviderName,
+} from '../types/llm-provider';
 import { LlmRequest, LlmResponse } from '../types/llm-request';
 import { readOptionalKey, readModelWhenConfigured } from './provider.env';
 import { withRetry } from '../internal/retry';
+import { AI_CALL_CONFIG } from '../internal/ai-call-config';
+import type { AiCallConfig } from '../internal/ai-call-config';
+import { isTransient, retryAfterMs } from '../internal/transient';
 import { InvalidResponseError } from '../internal/error-classifier';
 
 @Injectable()
@@ -15,7 +22,7 @@ export class DeepSeekProvider implements LlmProvider {
   readonly defaultModel: string;
   private readonly client?: OpenAI;
 
-  constructor() {
+  constructor(@Inject(AI_CALL_CONFIG) private readonly config: AiCallConfig) {
     const key = readOptionalKey('DEEPSEEK_API_KEY');
     this.isConfigured = !!key;
     this.defaultModel =
@@ -24,11 +31,12 @@ export class DeepSeekProvider implements LlmProvider {
       this.client = new OpenAI({
         apiKey: key,
         baseURL: 'https://api.deepseek.com',
+        maxRetries: 0,
       });
     }
   }
 
-  async complete(req: LlmRequest): Promise<LlmResponse> {
+  async complete(req: LlmRequest, opts?: LlmCallOptions): Promise<LlmResponse> {
     if (!this.client) throw new Error('DeepSeekProvider is not configured');
     const model = req.modelOverride ?? this.defaultModel;
 
@@ -81,17 +89,22 @@ export class DeepSeekProvider implements LlmProvider {
       body.response_format = { type: 'json_object' };
     }
 
+    const { config } = this;
     const response = await withRetry(
-      () => this.client!.chat.completions.create(body as never),
-      (err) => this.isTransient(err),
+      (signal) =>
+        this.client!.chat.completions.create(body as never, {
+          signal,
+          timeout: config.callTimeoutMs,
+        }),
+      isTransient,
       {
-        attempts:
-          parseInt(process.env.AI_TRANSIENT_RETRY_ATTEMPTS ?? '2', 10) + 1,
-        backoffMs: parseInt(
-          process.env.AI_TRANSIENT_RETRY_BACKOFF_MS ?? '500',
-          10,
-        ),
-        timeoutMs: parseInt(process.env.AI_CALL_TIMEOUT_MS ?? '60000', 10),
+        attempts: config.retryAttempts + 1,
+        backoffMs: config.retryBackoffMs,
+        maxBackoffMs: config.maxBackoffMs,
+        timeoutMs: config.callTimeoutMs,
+        signal: opts?.signal,
+        retryAfterMs,
+        maxRetryAfterMs: config.maxRetryAfterMs,
       },
     );
 
@@ -123,17 +136,6 @@ export class DeepSeekProvider implements LlmProvider {
   }
 
   isTransient(err: unknown): boolean {
-    const anyErr = err as {
-      status?: number;
-      statusCode?: number;
-      code?: string;
-    };
-    const s = anyErr?.status ?? anyErr?.statusCode;
-    if (s === 429) return true;
-    if (typeof s === 'number' && s >= 500) return true;
-    const code = anyErr?.code;
-    return (
-      code === 'ETIMEDOUT' || code === 'ECONNRESET' || code === 'ECONNABORTED'
-    );
+    return isTransient(err);
   }
 }

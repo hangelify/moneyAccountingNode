@@ -1,5 +1,9 @@
 import { AiAttemptErrorCode } from '../../../entities/ai-request-attempt.entity';
-import { RetryExhaustedError, TimeoutError } from './retry';
+import {
+  DeadlineExceededError,
+  RetryExhaustedError,
+  TimeoutError,
+} from './retry';
 
 export class InvalidResponseError extends Error {
   constructor(
@@ -34,7 +38,7 @@ function messageOf(err: unknown): string {
 }
 
 export function classifyError(err: unknown): ClassifiedError {
-  if (err instanceof TimeoutError) {
+  if (err instanceof TimeoutError || err instanceof DeadlineExceededError) {
     return { code: AiAttemptErrorCode.TIMEOUT, message: err.message };
   }
   if (err instanceof InvalidResponseError) {

@@ -18,6 +18,9 @@ import { LlmResponse } from './types/llm-request';
 import { FakeLlmProvider } from './providers/__fixtures__/fake.provider';
 import { AiGatewayExhaustedError, NoCapableProviderError } from './errors';
 import { STORAGE_SERVICE, StorageService } from '../storage/storage.service';
+import { AI_CALL_CONFIG, AiCallConfig } from './internal/ai-call-config';
+import { DeadlineExceededError } from './internal/retry';
+import { testAiCallConfig } from './providers/__fixtures__/call-bounds.shared';
 
 jest.setTimeout(30_000);
 
@@ -105,6 +108,7 @@ function errResponse(err: unknown): () => Promise<LlmResponse> {
 async function buildModule(
   providers: LlmProvider[],
   mockStorage: StorageService,
+  config: AiCallConfig,
 ) {
   return Test.createTestingModule({
     imports: [
@@ -125,6 +129,7 @@ async function buildModule(
       AiGatewayService,
       { provide: LLM_PROVIDERS, useValue: providers },
       { provide: STORAGE_SERVICE, useValue: mockStorage },
+      { provide: AI_CALL_CONFIG, useValue: config },
     ],
   }).compile();
 }
@@ -145,8 +150,11 @@ describe('AiGatewayService', () => {
   >;
   let mockStorage: StorageService;
 
-  async function boot(providers: LlmProvider[]) {
-    const mod = await buildModule(providers, mockStorage);
+  async function boot(
+    providers: LlmProvider[],
+    config: AiCallConfig = testAiCallConfig(),
+  ) {
+    const mod = await buildModule(providers, mockStorage, config);
     orm = mod.get(MikroORM);
     em = orm.em;
     return mod.get(AiGatewayService);
@@ -325,6 +333,131 @@ describe('AiGatewayService', () => {
     expect(attempts.every((a) => a.status === AiAttemptStatus.FAILED)).toBe(
       true,
     );
+  });
+
+  describe('task deadline', () => {
+    /** Hangs until the deadline aborts it, recording what it saw. */
+    function hangUntilAborted(seen: AbortSignal[]) {
+      return (opts?: { signal?: AbortSignal }) =>
+        new Promise<LlmResponse>((_resolve, reject) => {
+          const signal = opts!.signal!;
+          seen.push(signal);
+          signal.addEventListener('abort', () =>
+            reject(signal.reason as Error),
+          );
+        });
+    }
+
+    it('aborts the in-flight call and skips the remaining providers', async () => {
+      const seen: AbortSignal[] = [];
+      const p1 = new FakeLlmProvider(
+        'openai',
+        new Set<Capability>(['text', 'json']),
+        [hangUntilAborted(seen)],
+      );
+      const p2Step = jest.fn(okResponse({ ok: true }));
+      const p2 = new FakeLlmProvider(
+        'deepseek',
+        new Set<Capability>(['text', 'json']),
+        [p2Step],
+      );
+      const svc = await boot(
+        [p1, p2],
+        testAiCallConfig({ taskDeadlineMs: 150, minAttemptBudgetMs: 50 }),
+      );
+      await cleanupOwnedRows();
+
+      const err = await svc
+        .run(new PingTask(), { n: 1 })
+        .catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(AiGatewayExhaustedError);
+      expect((err as AiGatewayExhaustedError).lastError).toBeInstanceOf(
+        DeadlineExceededError,
+      );
+      expect(seen).toHaveLength(1);
+      expect(seen[0].aborted).toBe(true);
+      expect(p2Step).not.toHaveBeenCalled();
+
+      const attempts = await findOwnedAttempts();
+      expect(attempts).toHaveLength(1);
+      expect(attempts[0].error_code).toBe(AiAttemptErrorCode.TIMEOUT);
+      const parents = await findOwnedParents();
+      expect(parents[0].status).toBe(AiRequestStatus.FAILED);
+    });
+
+    it('bounds a provider that ignores the abort signal', async () => {
+      const p1 = new FakeLlmProvider(
+        'openai',
+        new Set<Capability>(['text', 'json']),
+        [() => new Promise<LlmResponse>(() => undefined)],
+      );
+      const svc = await boot(
+        [p1],
+        testAiCallConfig({ taskDeadlineMs: 100, minAttemptBudgetMs: 10 }),
+      );
+      await cleanupOwnedRows();
+
+      const err = await svc
+        .run(new PingTask(), { n: 1 })
+        .catch((e: unknown) => e);
+      expect((err as AiGatewayExhaustedError).lastError).toBeInstanceOf(
+        DeadlineExceededError,
+      );
+    });
+
+    it('does not start the next provider when too little budget is left', async () => {
+      const p1 = new FakeLlmProvider(
+        'openai',
+        new Set<Capability>(['text', 'json']),
+        [
+          () =>
+            new Promise<LlmResponse>((_resolve, reject) =>
+              setTimeout(() => reject(new Error('permanent')), 150),
+            ),
+        ],
+      );
+      const p2Step = jest.fn(okResponse({ ok: true }));
+      const p2 = new FakeLlmProvider(
+        'deepseek',
+        new Set<Capability>(['text', 'json']),
+        [p2Step],
+      );
+      const svc = await boot(
+        [p1, p2],
+        testAiCallConfig({ taskDeadlineMs: 300, minAttemptBudgetMs: 200 }),
+      );
+      await cleanupOwnedRows();
+
+      const err = await svc
+        .run(new PingTask(), { n: 1 })
+        .catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(AiGatewayExhaustedError);
+      expect(p2Step).not.toHaveBeenCalled();
+      const attempts = await findOwnedAttempts();
+      expect(attempts).toHaveLength(1);
+    });
+
+    it('still fails over while enough budget is left', async () => {
+      const p1 = new FakeLlmProvider(
+        'openai',
+        new Set<Capability>(['text', 'json']),
+        [errResponse(new Error('permanent'))],
+      );
+      const p2 = new FakeLlmProvider(
+        'deepseek',
+        new Set<Capability>(['text', 'json']),
+        [okResponse({ ok: true })],
+      );
+      const svc = await boot(
+        [p1, p2],
+        testAiCallConfig({ taskDeadlineMs: 5_000, minAttemptBudgetMs: 100 }),
+      );
+      await cleanupOwnedRows();
+
+      await expect(svc.run(new PingTask(), { n: 1 })).resolves.toEqual({
+        ok: true,
+      });
+    });
   });
 
   it('uploads user-message images and records S3 keys on the parent row', async () => {

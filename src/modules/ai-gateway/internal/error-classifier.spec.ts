@@ -1,10 +1,20 @@
 import { classifyError, InvalidResponseError } from './error-classifier';
 import { AiAttemptErrorCode } from '../../../entities/ai-request-attempt.entity';
-import { RetryExhaustedError, TimeoutError } from './retry';
+import {
+  DeadlineExceededError,
+  RetryExhaustedError,
+  TimeoutError,
+} from './retry';
 
 describe('classifyError', () => {
   it('classifies TimeoutError as TIMEOUT', () => {
     expect(classifyError(new TimeoutError(100)).code).toBe(
+      AiAttemptErrorCode.TIMEOUT,
+    );
+  });
+
+  it('classifies DeadlineExceededError as TIMEOUT', () => {
+    expect(classifyError(new DeadlineExceededError(100)).code).toBe(
       AiAttemptErrorCode.TIMEOUT,
     );
   });

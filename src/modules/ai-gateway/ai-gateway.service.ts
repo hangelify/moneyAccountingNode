@@ -15,6 +15,14 @@ import { AiGatewayExhaustedError, NoCapableProviderError } from './errors';
 import { classifyError } from './internal/error-classifier';
 import { STORAGE_SERVICE } from '../storage/storage.service';
 import type { StorageService } from '../storage/storage.service';
+import { AI_CALL_CONFIG } from './internal/ai-call-config';
+import type { AiCallConfig } from './internal/ai-call-config';
+import { DeadlineExceededError, raceAbort } from './internal/retry';
+
+interface Deadline {
+  signal: AbortSignal;
+  remainingMs(): number;
+}
 
 @Injectable()
 export class AiGatewayService {
@@ -25,16 +33,45 @@ export class AiGatewayService {
     @Inject(LLM_PROVIDERS) providers: LlmProvider[],
     @Inject(STORAGE_SERVICE) private readonly storage: StorageService,
     private readonly logger: AiRequestLogger,
+    @Inject(AI_CALL_CONFIG) private readonly config: AiCallConfig,
   ) {
     this.resolver = new ProviderResolver(
       providers.filter((p) => p.isConfigured),
     );
   }
 
+  /**
+   * Runs the task within `AI_TASK_DEADLINE_MS`. When the deadline fires the
+   * in-flight provider call is aborted and no further provider is tried, so
+   * the caller gets an error instead of a late result nobody waits for.
+   */
   async run<In, Out>(
     task: AiTask<In, Out>,
     input: In,
     opts?: { userId?: string },
+  ): Promise<Out> {
+    const ms = this.config.taskDeadlineMs;
+    const endsAt = Date.now() + ms;
+    const ctrl = new AbortController();
+    const timer = setTimeout(
+      () => ctrl.abort(new DeadlineExceededError(ms)),
+      ms,
+    );
+    try {
+      return await this.runWithin(task, input, opts, {
+        signal: ctrl.signal,
+        remainingMs: () => endsAt - Date.now(),
+      });
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  private async runWithin<In, Out>(
+    task: AiTask<In, Out>,
+    input: In,
+    opts: { userId?: string } | undefined,
+    deadline: Deadline,
   ): Promise<Out> {
     // 1. Input validation
     task.inputSchema.parse(input);
@@ -83,8 +120,14 @@ export class AiGatewayService {
 
     // 7. Loop providers with per-attempt logging and failover
     let lastError: unknown;
+    let outOfTime = false;
     for (let i = 0; i < candidates.length; i++) {
       const provider = candidates[i];
+      if (deadline.remainingMs() < this.config.minAttemptBudgetMs) {
+        outOfTime = true;
+        lastError ??= new DeadlineExceededError(this.config.taskDeadlineMs);
+        break;
+      }
       const model =
         task.modelOverrides?.[provider.name] ?? provider.defaultModel;
       const { attemptId } = await this.logger.beginAttempt({
@@ -101,7 +144,11 @@ export class AiGatewayService {
       };
 
       try {
-        const res = await provider.complete(req);
+        // Race as well, so a provider that ignores the signal is still bounded.
+        const res = await raceAbort(
+          provider.complete(req, { signal: deadline.signal }),
+          deadline.signal,
+        );
         const parsed = task.outputSchema.safeParse(res.json);
         const latencyMs = Date.now() - t0;
 
@@ -150,13 +197,18 @@ export class AiGatewayService {
       }
     }
 
+    outOfTime ||= deadline.signal.aborted;
     await this.logger.finish({
       parentId,
       status: AiRequestStatus.FAILED,
-      errorMessage: 'All candidate providers failed',
+      errorMessage: outOfTime
+        ? `Task deadline of ${this.config.taskDeadlineMs}ms exceeded`
+        : 'All candidate providers failed',
     });
     this.log.warn(
-      `AI gateway exhausted all ${candidates.length} candidate provider(s) for task '${task.name}' (parentId=${parentId})`,
+      outOfTime
+        ? `AI task '${task.name}' ran out of its ${this.config.taskDeadlineMs}ms deadline (parentId=${parentId})`
+        : `AI gateway exhausted all ${candidates.length} candidate provider(s) for task '${task.name}' (parentId=${parentId})`,
     );
     throw new AiGatewayExhaustedError(parentId, lastError);
   }

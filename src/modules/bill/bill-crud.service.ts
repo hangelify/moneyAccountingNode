@@ -17,7 +17,18 @@ import { ListBillsQueryDto } from './dto/list-bills-query.dto';
 import { CreateBillDto } from './dto/create-bill.dto';
 import { UpdateBillDto } from './dto/update-bill.dto';
 import { ConfirmBillDto } from './dto/confirm-bill.dto';
-import type { ParsedBillResponseDto } from './dto/parsed-bill-response.dto';
+import type {
+  ParsedBillResponseDto,
+  ParsedBillItemResponseDto,
+} from './dto/parsed-bill-response.dto';
+import {
+  ITEM_UNITS,
+  MAX_AMOUNT,
+  MAX_ITEM_NAME_LENGTH,
+  MAX_PRICE_PER_UNIT,
+  MAX_QUANTITY,
+  MAX_WEIGHT_KG,
+} from './tasks/schemas/parsed-bill.schema';
 import { BillResponseDto, BillMarketRefDto } from './dto/bill-response.dto';
 import {
   BillDetailResponseDto,
@@ -27,6 +38,51 @@ import {
   BillListResponseDto,
   PaginationMetaDto,
 } from './dto/bill-list-response.dto';
+
+// A draft is saved from the AI output after the call is paid for, so values
+// its columns cannot hold become empty instead of failing the INSERT.
+const CURRENCIES = new Set<string>(Object.values(Currency));
+const UNITS = new Set<string>(ITEM_UNITS);
+
+function inRange(v: number | null | undefined, max: number) {
+  return typeof v === 'number' && Number.isFinite(v) && Math.abs(v) <= max
+    ? v
+    : undefined;
+}
+
+function toCurrency(v: string | null): Currency | undefined {
+  const code = v?.trim().toUpperCase();
+  return code && CURRENCIES.has(code) ? (code as Currency) : undefined;
+}
+
+/** A real `YYYY-MM-DD` date, or today. */
+function toDraftDate(v: string | null): Date {
+  if (v && /^\d{4}-\d{2}-\d{2}$/.test(v) && v >= '0001-01-01') {
+    const d = new Date(v);
+    // Rejects roll-overs such as 2026-02-30 -> 2026-03-02.
+    if (!Number.isNaN(d.getTime()) && d.toISOString().startsWith(v)) return d;
+  }
+  return new Date();
+}
+
+function toDraftItem(it: ParsedBillItemResponseDto) {
+  const quantity = inRange(it.quantity, MAX_QUANTITY);
+  const confidence = inRange(it.category_confidence, 1);
+  return {
+    ...it,
+    name: it.name.slice(0, MAX_ITEM_NAME_LENGTH),
+    quantity:
+      quantity !== undefined && Number.isInteger(quantity) && quantity >= 0
+        ? quantity
+        : null,
+    unit: it.unit && UNITS.has(it.unit) ? it.unit : null,
+    weight_kg: inRange(it.weight_kg, MAX_WEIGHT_KG) ?? null,
+    price_per_kg: inRange(it.price_per_kg, MAX_PRICE_PER_UNIT) ?? null,
+    final_price: inRange(it.final_price, MAX_AMOUNT) ?? 0,
+    category_confidence:
+      confidence !== undefined && confidence >= 0 ? confidence : undefined,
+  };
+}
 
 @Injectable()
 export class BillCrudService {
@@ -280,11 +336,9 @@ export class BillCrudService {
     bill.created_by = this.em.getReference(User, userId);
     bill.status = BillStatus.DRAFT;
     bill.market_name_raw = dto.market_name ?? undefined;
-    bill.bill_date = dto.bill_date ? new Date(dto.bill_date) : new Date();
-    bill.amount = dto.total_amount ?? 0;
-    bill.currency = dto.currency
-      ? (dto.currency as unknown as Currency)
-      : undefined;
+    bill.bill_date = toDraftDate(dto.bill_date);
+    bill.amount = inRange(dto.total_amount, MAX_AMOUNT) ?? 0;
+    bill.currency = toCurrency(dto.currency);
     this.em.persist(bill);
 
     type Entry = {
@@ -302,7 +356,8 @@ export class BillCrudService {
     const categorized = new Map<string, Entry>();
     const uncategorized: Entry[] = [];
 
-    for (const item of dto.items) {
+    for (const raw of dto.items) {
+      const item = toDraftItem(raw);
       if (item.sub_category) {
         const id = item.sub_category.id;
         const existing = categorized.get(id);

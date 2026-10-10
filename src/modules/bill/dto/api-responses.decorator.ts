@@ -6,6 +6,7 @@ import {
   ApiBadGatewayResponse,
   ApiTooManyRequestsResponse,
   ApiServiceUnavailableResponse,
+  ApiUnprocessableEntityResponse,
   ApiResponse,
 } from '@nestjs/swagger';
 import { ParsedBillResponseDto } from './parsed-bill-response.dto';
@@ -21,6 +22,10 @@ export function ApiParsePhotoResponses(): MethodDecorator & ClassDecorator {
       description: 'Invalid file (missing, wrong MIME, or exceeds 10 MB).',
     }),
     ApiUnauthorizedResponse({ description: 'Missing or invalid JWT.' }),
+    ApiUnprocessableEntityResponse({
+      description:
+        'The bill was recognized but saving the draft failed. Body: { statusCode, message, request_id, parsed } — parsed has the shape of the 200 response with an empty draft_id, so the bill can be created manually.',
+    }),
     ApiBadGatewayResponse({
       description:
         'All AI providers failed. Response body includes requestId for audit lookup.',

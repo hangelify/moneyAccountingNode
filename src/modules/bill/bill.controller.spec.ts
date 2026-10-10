@@ -1,4 +1,5 @@
 import { Test } from '@nestjs/testing';
+import { Logger, UnprocessableEntityException } from '@nestjs/common';
 import {
   EXCEPTION_FILTERS_METADATA,
   GUARDS_METADATA,
@@ -68,7 +69,7 @@ describe('BillController', () => {
       raw_extracted_text: '',
     };
     const draftId = 'draft-uuid-001';
-    parseAndCategorize.mockResolvedValue(dto);
+    parseAndCategorize.mockResolvedValue({ parsed: dto, requestId: 'req-1' });
     billCrudMock.createDraftFromParsed.mockResolvedValue(draftId);
     const fakeFile = {
       buffer: Buffer.from([1, 2, 3]),
@@ -91,6 +92,43 @@ describe('BillController', () => {
       dto,
     );
     expect(res).toEqual({ ...dto, draft_id: draftId });
+  });
+
+  it('answers 422 with the request id and parsed bill when the draft cannot be saved', async () => {
+    const dto = {
+      draft_id: '',
+      market_name: 'Lidl',
+      bill_date: null,
+      currency: null,
+      total_amount: 1,
+      items: [],
+      raw_extracted_text: '',
+    };
+    parseAndCategorize.mockResolvedValue({ parsed: dto, requestId: 'req-9' });
+    billCrudMock.createDraftFromParsed.mockRejectedValue(
+      new Error('numeric field overflow'),
+    );
+    const logSpy = jest
+      .spyOn(Logger.prototype, 'error')
+      .mockImplementation(() => undefined);
+
+    const err: unknown = await controller
+      .parsePhoto(
+        { id: 'user-xyz' } as never,
+        { householdId: 'hh-1', role: 'owner' } as never,
+        { buffer: Buffer.from([1]), mimetype: 'image/png' } as never,
+      )
+      .catch((e: unknown) => e);
+
+    expect(err).toBeInstanceOf(UnprocessableEntityException);
+    expect((err as UnprocessableEntityException).getResponse()).toEqual({
+      statusCode: 422,
+      message: expect.any(String) as string,
+      request_id: 'req-9',
+      parsed: dto,
+    });
+    expect(logSpy).toHaveBeenCalled();
+    logSpy.mockRestore();
   });
 
   describe('parsePhoto limits', () => {

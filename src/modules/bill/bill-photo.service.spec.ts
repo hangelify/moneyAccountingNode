@@ -19,8 +19,12 @@ describe('BillPhotoService', () => {
     parseOnlyResult?: unknown;
   }): BillAiOrchestrator {
     return {
-      parseAndCategorize: jest.fn().mockResolvedValue(opts.bill),
-      parseOnly: jest.fn().mockResolvedValue(opts.parseOnlyResult),
+      parseAndCategorize: jest
+        .fn()
+        .mockResolvedValue({ data: opts.bill, requestId: 'req-cat' }),
+      parseOnly: jest
+        .fn()
+        .mockResolvedValue({ data: opts.parseOnlyResult, requestId: 'req-p' }),
     } as never;
   }
 
@@ -65,7 +69,7 @@ describe('BillPhotoService', () => {
       makeOrchestrator({ bill }),
       makeRepo(makeSubs()),
     );
-    const res = await svc.parseAndCategorize(
+    const { parsed: res } = await svc.parseAndCategorize(
       Buffer.from('x'),
       'image/png',
       HOUSEHOLD_ID,
@@ -110,7 +114,7 @@ describe('BillPhotoService', () => {
       makeOrchestrator({ bill }),
       makeRepo(makeSubs()),
     );
-    const res = await svc.parseAndCategorize(
+    const { parsed: res } = await svc.parseAndCategorize(
       Buffer.from('x'),
       'image/png',
       HOUSEHOLD_ID,
@@ -144,7 +148,7 @@ describe('BillPhotoService', () => {
       makeOrchestrator({ bill }),
       makeRepo(makeSubs()),
     );
-    const res = await svc.parseAndCategorize(
+    const { parsed: res } = await svc.parseAndCategorize(
       Buffer.from('x'),
       'image/png',
       HOUSEHOLD_ID,
@@ -152,6 +156,69 @@ describe('BillPhotoService', () => {
     );
     expect(res.items[0].sub_category).toBeNull();
   });
+
+  it('reports a confidence the schema dropped as 0', async () => {
+    const bill = {
+      market_name: null,
+      bill_date: null,
+      currency: null,
+      total_amount: null,
+      items: [
+        {
+          name: 'X',
+          quantity: 1,
+          unit: 'piece',
+          weight_kg: null,
+          price_per_kg: null,
+          final_price: 1,
+          sub_category_id: 'sub-a',
+          category_confidence: null,
+          category_reasoning: null,
+        },
+      ],
+      raw_extracted_text: '',
+    };
+    const svc = new BillPhotoService(
+      makeOrchestrator({ bill }),
+      makeRepo(makeSubs()),
+    );
+    const { parsed: res } = await svc.parseAndCategorize(
+      Buffer.from('x'),
+      'image/png',
+      HOUSEHOLD_ID,
+      USER_ID,
+    );
+    expect(res.items[0].category_confidence).toBe(0);
+    expect(res.items[0].category_reasoning).toBeUndefined();
+  });
+
+  it.each([
+    ['categorizing', makeSubs(), 'req-cat'],
+    ['parse-only', [], 'req-p'],
+  ])(
+    'returns the AI request id (%s)',
+    async (_mode, subs, expectedRequestId) => {
+      const empty = {
+        market_name: null,
+        bill_date: null,
+        currency: null,
+        total_amount: null,
+        items: [],
+        raw_extracted_text: '',
+      };
+      const svc = new BillPhotoService(
+        makeOrchestrator({ bill: empty, parseOnlyResult: empty }),
+        makeRepo(subs),
+      );
+      const { requestId } = await svc.parseAndCategorize(
+        Buffer.from('x'),
+        'image/png',
+        HOUSEHOLD_ID,
+        USER_ID,
+      );
+      expect(requestId).toBe(expectedRequestId);
+    },
+  );
 
   it('short-circuits: when user has zero subcategories, skips categorizer call and returns null sub_category for every item', async () => {
     const parseOnlyResult = {
@@ -183,7 +250,7 @@ describe('BillPhotoService', () => {
     const repo = makeRepo([]);
 
     const svc = new BillPhotoService(orchestrator, repo);
-    const res = await svc.parseAndCategorize(
+    const { parsed: res } = await svc.parseAndCategorize(
       Buffer.from('x'),
       'image/png',
       HOUSEHOLD_ID,

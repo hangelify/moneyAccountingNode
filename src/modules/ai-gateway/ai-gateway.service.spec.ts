@@ -244,9 +244,9 @@ describe('AiGatewayService', () => {
     await cleanupOwnedRows();
 
     const out = await svc.run(new PingTask(), { n: 1 });
-    expect(out).toEqual({ ok: true });
 
     const parents = await findOwnedParents();
+    expect(out).toEqual({ data: { ok: true }, requestId: parents[0].id });
     expect(parents).toHaveLength(1);
     expect(parents[0].status).toBe(AiRequestStatus.SUCCESS);
     expect(parents[0].task_name).toBe('test.ping');
@@ -272,7 +272,7 @@ describe('AiGatewayService', () => {
     await cleanupOwnedRows();
 
     const out = await svc.run(new PingTask(), { n: 2 });
-    expect(out).toEqual({ ok: false });
+    expect(out.data).toEqual({ ok: false });
 
     const parents = await findOwnedParents();
     expect(parents).toHaveLength(1);
@@ -303,7 +303,7 @@ describe('AiGatewayService', () => {
     await cleanupOwnedRows();
 
     const out = await svc.run(new PingTask(), { n: 3 });
-    expect(out).toEqual({ ok: true });
+    expect(out.data).toEqual({ ok: true });
 
     const parents = await findOwnedParents();
     expect(parents).toHaveLength(1);
@@ -466,8 +466,8 @@ describe('AiGatewayService', () => {
       );
       await cleanupOwnedRows();
 
-      await expect(svc.run(new PingTask(), { n: 1 })).resolves.toEqual({
-        ok: true,
+      await expect(svc.run(new PingTask(), { n: 1 })).resolves.toMatchObject({
+        data: { ok: true },
       });
     });
 
@@ -488,8 +488,8 @@ describe('AiGatewayService', () => {
       );
       await cleanupOwnedRows();
 
-      await expect(svc.run(new PingTask(), { n: 1 })).resolves.toEqual({
-        ok: true,
+      await expect(svc.run(new PingTask(), { n: 1 })).resolves.toMatchObject({
+        data: { ok: true },
       });
     });
   });
@@ -505,7 +505,7 @@ describe('AiGatewayService', () => {
     await cleanupOwnedRows();
 
     const out = await svc.run(new VisionPingTask(), { data: buf });
-    expect(out).toEqual({ ok: true });
+    expect(out.data).toEqual({ ok: true });
 
     expect(putSpy).toHaveBeenCalledTimes(1);
     expect(putSpy).toHaveBeenCalledWith(buf, 'image/png');
@@ -661,7 +661,7 @@ describe('AiGatewayService', () => {
 
       await expect(
         svc.run(new PingTask(), { n: 1 }, { userId }),
-      ).resolves.toEqual({ ok: true });
+      ).resolves.toMatchObject({ data: { ok: true } });
     });
   });
 
@@ -697,9 +697,9 @@ describe('AiGatewayService', () => {
       expect((err as AiCapacityExceededError).retryAfterSec).toBeGreaterThan(0);
 
       first.resolve(okJson);
-      await expect(running).resolves.toEqual({ ok: true });
-      await expect(svc.run(new PingTask(), { n: 3 })).resolves.toEqual({
-        ok: true,
+      await expect(running).resolves.toMatchObject({ data: { ok: true } });
+      await expect(svc.run(new PingTask(), { n: 3 })).resolves.toMatchObject({
+        data: { ok: true },
       });
     });
 
@@ -715,8 +715,8 @@ describe('AiGatewayService', () => {
       await expect(svc.run(new PingTask(), { n: 1 })).rejects.toBeInstanceOf(
         AiGatewayExhaustedError,
       );
-      await expect(svc.run(new PingTask(), { n: 2 })).resolves.toEqual({
-        ok: true,
+      await expect(svc.run(new PingTask(), { n: 2 })).resolves.toMatchObject({
+        data: { ok: true },
       });
     });
 
@@ -732,8 +732,8 @@ describe('AiGatewayService', () => {
       await expect(
         svc.run(new PingTask(), { n: 'x' } as unknown as PingIn),
       ).rejects.toThrow();
-      await expect(svc.run(new PingTask(), { n: 2 })).resolves.toEqual({
-        ok: true,
+      await expect(svc.run(new PingTask(), { n: 2 })).resolves.toMatchObject({
+        data: { ok: true },
       });
     });
   });

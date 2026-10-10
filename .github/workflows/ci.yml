@@ -7,6 +7,33 @@ on:
     branches: [ main, dev ]
 
 jobs:
+  # sharp ships native libvips binaries per libc: make sure the Alpine (musl)
+  # image gets working ones and can normalize a receipt photo.
+  docker-image:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Build image
+        run: docker build -t accounting:ci .
+
+      - name: Process an image inside the container
+        run: |
+          docker run --rm --entrypoint node accounting:ci -e "
+            const sharp = require('sharp');
+            const { prepareReceiptImage } = require('./dist/modules/bill/receipt-image.js');
+            (async () => {
+              const png = await sharp({ create: { width: 3000, height: 1500, channels: 3, background: '#888' } })
+                .withExif({ IFD0: { Make: 'ci' } }).png().toBuffer();
+              const out = await prepareReceiptImage(png);
+              const meta = await sharp(out.buffer).metadata();
+              console.log(out.mediaType, meta.format, meta.width, meta.height);
+              if (meta.format !== 'jpeg' || meta.width !== 2000 || meta.exif) process.exit(1);
+            })().catch((err) => { console.error(err); process.exit(1); });
+          "
+
   lint-and-test:
     runs-on: ubuntu-latest
 

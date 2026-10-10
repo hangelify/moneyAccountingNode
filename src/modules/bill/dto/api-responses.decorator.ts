@@ -7,6 +7,8 @@ import {
   ApiTooManyRequestsResponse,
   ApiServiceUnavailableResponse,
   ApiUnprocessableEntityResponse,
+  ApiPayloadTooLargeResponse,
+  ApiUnsupportedMediaTypeResponse,
   ApiResponse,
 } from '@nestjs/swagger';
 import { ParsedBillResponseDto } from './parsed-bill-response.dto';
@@ -19,12 +21,21 @@ export function ApiParsePhotoResponses(): MethodDecorator & ClassDecorator {
   return applyDecorators(
     ApiOkResponse({ type: ParsedBillResponseDto }),
     ApiBadRequestResponse({
-      description: 'Invalid file (missing, wrong MIME, or exceeds 10 MB).',
+      description:
+        'Missing image, or a multipart body with more than one file or with extra fields.',
     }),
     ApiUnauthorizedResponse({ description: 'Missing or invalid JWT.' }),
+    ApiPayloadTooLargeResponse({
+      description:
+        'The file exceeds 10 MB, or the image has more than 100 megapixels.',
+    }),
+    ApiUnsupportedMediaTypeResponse({
+      description:
+        'The file content is not a JPEG, PNG or WebP image (HEIC included); the client-sent Content-Type is ignored.',
+    }),
     ApiUnprocessableEntityResponse({
       description:
-        'The bill was recognized but saving the draft failed. Body: { statusCode, message, request_id, parsed } — parsed has the shape of the 200 response with an empty draft_id, so the bill can be created manually.',
+        'The image could not be decoded; or the bill was recognized but saving the draft failed (Body: { statusCode, message, request_id, parsed } — parsed has the shape of the 200 response with an empty draft_id, so the bill can be created manually).',
     }),
     ApiBadGatewayResponse({
       description:

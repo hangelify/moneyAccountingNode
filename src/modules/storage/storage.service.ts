@@ -72,8 +72,13 @@ export class S3StorageService implements StorageService {
     buffer: Buffer,
     mediaType: ImageMediaType,
   ): Promise<{ key: string }> {
+    const ext = Object.hasOwn(EXTENSION_MAP, mediaType)
+      ? EXTENSION_MAP[mediaType]
+      : undefined;
+    if (!ext) {
+      throw new Error(`Unsupported image media type: ${String(mediaType)}`);
+    }
     const hash = createHash('sha256').update(buffer).digest('hex');
-    const ext = EXTENSION_MAP[mediaType];
     const key = `ai/images/${hash}.${ext}`;
     if (await this.exists(key)) {
       return { key };

@@ -1,10 +1,15 @@
 import { Test } from '@nestjs/testing';
-import { Logger, UnprocessableEntityException } from '@nestjs/common';
+import {
+  Logger,
+  UnprocessableEntityException,
+  UnsupportedMediaTypeException,
+} from '@nestjs/common';
 import {
   EXCEPTION_FILTERS_METADATA,
   GUARDS_METADATA,
 } from '@nestjs/common/constants';
 import { APP_FILTER } from '@nestjs/core';
+import sharp from 'sharp';
 import { BillController } from './bill.controller';
 import { BillPhotoService } from './bill-photo.service';
 import { BillCrudService } from './bill-crud.service';
@@ -15,6 +20,14 @@ import { HouseholdMemberGuard } from '../household/guards/household-member.guard
 import { AiGatewayExhaustedFilter } from './filters/ai-gateway-exhausted.filter';
 import { AiUsageLimitFilter } from './filters/ai-usage-limit.filter';
 import { UserThrottlerGuard } from '../ai-gateway/guards/user-throttler.guard';
+
+function makeImage(format: 'png' | 'jpeg'): Promise<Buffer> {
+  return sharp({
+    create: { width: 40, height: 30, channels: 3, background: '#fff' },
+  })
+    .toFormat(format)
+    .toBuffer();
+}
 
 describe('BillController', () => {
   let controller: BillController;
@@ -59,7 +72,7 @@ describe('BillController', () => {
     billDashboardMock.getDashboard = jest.fn();
   });
 
-  it('forwards multer file buffer + mime + user id to BillPhotoService and returns its response', async () => {
+  it('forwards the normalized JPEG + user id to BillPhotoService and returns its response', async () => {
     const dto = {
       market_name: null,
       bill_date: null,
@@ -71,7 +84,7 @@ describe('BillController', () => {
     parseAndCategorize.mockResolvedValue({ parsed: dto, requestId: 'req-1' });
     billCrudMock.createDraftFromParsed.mockResolvedValue(draftId);
     const fakeFile = {
-      buffer: Buffer.from([1, 2, 3]),
+      buffer: await makeImage('png'),
       mimetype: 'image/png',
     } as Express.Multer.File;
     const res = await controller.parsePhoto(
@@ -80,11 +93,13 @@ describe('BillController', () => {
       fakeFile,
     );
     expect(parseAndCategorize).toHaveBeenCalledWith(
-      fakeFile.buffer,
-      'image/png',
+      expect.any(Buffer),
+      'image/jpeg',
       'hh-1',
       'user-xyz',
     );
+    const [[sent]] = parseAndCategorize.mock.calls as [[Buffer]];
+    expect((await sharp(sent).metadata()).format).toBe('jpeg');
     expect(billCrudMock.createDraftFromParsed).toHaveBeenCalledWith(
       'hh-1',
       'user-xyz',
@@ -114,7 +129,7 @@ describe('BillController', () => {
       .parsePhoto(
         { id: 'user-xyz' } as never,
         { householdId: 'hh-1', role: 'owner' } as never,
-        { buffer: Buffer.from([1]), mimetype: 'image/png' } as never,
+        { buffer: await makeImage('png'), mimetype: 'image/png' } as never,
       )
       .catch((e: unknown) => e);
 
@@ -127,6 +142,40 @@ describe('BillController', () => {
     });
     expect(logSpy).toHaveBeenCalled();
     logSpy.mockRestore();
+  });
+
+  it('ignores the client-sent "image/jpg" type of a real JPEG', async () => {
+    parseAndCategorize.mockResolvedValue({
+      parsed: { items: [] },
+      requestId: 'req-2',
+    });
+    billCrudMock.createDraftFromParsed.mockResolvedValue('draft-2');
+
+    await controller.parsePhoto(
+      { id: 'user-xyz' } as never,
+      { householdId: 'hh-1', role: 'owner' } as never,
+      { buffer: await makeImage('jpeg'), mimetype: 'image/jpg' } as never,
+    );
+
+    expect(parseAndCategorize).toHaveBeenCalledWith(
+      expect.any(Buffer),
+      'image/jpeg',
+      'hh-1',
+      'user-xyz',
+    );
+  });
+
+  it('answers 415 for a non-image and never calls the AI', async () => {
+    const err: unknown = await controller
+      .parsePhoto(
+        { id: 'user-xyz' } as never,
+        { householdId: 'hh-1', role: 'owner' } as never,
+        { buffer: Buffer.from('plain text'), mimetype: 'image/jpeg' } as never,
+      )
+      .catch((e: unknown) => e);
+
+    expect(err).toBeInstanceOf(UnsupportedMediaTypeException);
+    expect(parseAndCategorize).not.toHaveBeenCalled();
   });
 
   describe('parsePhoto limits', () => {

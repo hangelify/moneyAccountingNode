@@ -83,6 +83,18 @@ describe('S3StorageService', () => {
       expect(key.endsWith('.jpg')).toBe(true);
     });
 
+    it('refuses an unknown media type instead of writing a ".undefined" key', async () => {
+      const send = jest.fn().mockResolvedValue({});
+      wireSendMock(send);
+
+      const svc = new S3StorageService(makeEnv());
+      await expect(
+        svc.put(Buffer.from('x'), 'image/jpg' as never),
+      ).rejects.toThrow(/image\/jpg/);
+
+      expect(send).not.toHaveBeenCalled();
+    });
+
     it('dedupes: skips PUT when the object already exists', async () => {
       const buf = Buffer.from('already-there');
       const send = jest.fn().mockResolvedValue({});

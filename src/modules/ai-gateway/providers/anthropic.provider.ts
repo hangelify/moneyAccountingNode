@@ -12,6 +12,10 @@ import { withRetry } from '../internal/retry';
 import { AI_CALL_CONFIG } from '../internal/ai-call-config';
 import type { AiCallConfig } from '../internal/ai-call-config';
 import { isTransient, retryAfterMs } from '../internal/transient';
+import {
+  RefusalError,
+  TruncatedResponseError,
+} from '../internal/error-classifier';
 
 @Injectable()
 export class AnthropicProvider implements LlmProvider {
@@ -112,22 +116,46 @@ export class AnthropicProvider implements LlmProvider {
       }>;
       usage?: { input_tokens?: number; output_tokens?: number };
       model?: string;
+      stop_reason?: string | null;
     };
+    let toolUsed = false;
     for (const block of resp.content ?? []) {
       if (block.type === 'text' && typeof block.text === 'string')
         text += block.text;
-      if (block.type === 'tool_use' && block.name === 'output')
+      if (block.type === 'tool_use' && block.name === 'output') {
         json = block.input;
+        toolUsed = true;
+      }
+    }
+    // A tool answer has no text block; keep its input as the raw body so the
+    // audit shows what the model returned.
+    if (toolUsed) text = JSON.stringify(json) ?? '';
+
+    const usage = {
+      inputTokens: resp.usage?.input_tokens ?? 0,
+      outputTokens: resp.usage?.output_tokens ?? 0,
+    };
+    const stopReason = resp.stop_reason ?? undefined;
+    if (
+      stopReason === 'max_tokens' ||
+      stopReason === 'model_context_window_exceeded'
+    ) {
+      throw new TruncatedResponseError(
+        `Anthropic stopped at the output token limit (stop_reason=${stopReason})`,
+        text,
+        usage,
+      );
+    }
+    if (stopReason === 'refusal') {
+      throw new RefusalError('Anthropic model refused to answer', text, usage);
     }
 
     return {
       text,
       json,
       model: resp.model ?? model,
-      usage: {
-        inputTokens: resp.usage?.input_tokens ?? 0,
-        outputTokens: resp.usage?.output_tokens ?? 0,
-      },
+      usage,
+      stopReason,
     };
   }
 

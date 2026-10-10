@@ -2,6 +2,10 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { AnthropicProvider } from './anthropic.provider';
 import {
+  RefusalError,
+  TruncatedResponseError,
+} from '../internal/error-classifier';
+import {
   itBoundsSdkCalls,
   testAiCallConfig,
 } from './__fixtures__/call-bounds.shared';
@@ -63,6 +67,72 @@ describe('AnthropicProvider', () => {
     expect(userBlocks.some((b: any) => b.type === 'image')).toBe(true);
     const imageBlock = userBlocks.find((b: any) => b.type === 'image');
     expect(imageBlock.source.data).toBe(Buffer.from('img').toString('base64'));
+  });
+
+  describe('response handling', () => {
+    beforeEach(() => {
+      process.env.ANTHROPIC_API_KEY = 'x';
+      process.env.ANTHROPIC_MODEL = 'claude-sonnet-4-6';
+    });
+
+    const jsonReq = {
+      messages: [{ role: 'user' as const, text: 'x' }],
+      jsonSchema: { type: 'object' },
+    };
+
+    it('passes maxOutputTokens and temperature into the request body', async () => {
+      mockCreate.mockResolvedValue({
+        content: [{ type: 'tool_use', name: 'output', input: {} }],
+        stop_reason: 'tool_use',
+      });
+      const p = new AnthropicProvider(testAiCallConfig());
+      await p.complete({ ...jsonReq, maxOutputTokens: 1234, temperature: 0.3 });
+      const arg = mockCreate.mock.calls[0][0];
+      expect(arg.max_tokens).toBe(1234);
+      expect(arg.temperature).toBe(0.3);
+    });
+
+    it('returns the tool input as raw text and the stop reason', async () => {
+      mockCreate.mockResolvedValue({
+        content: [{ type: 'tool_use', name: 'output', input: { ok: true } }],
+        stop_reason: 'tool_use',
+      });
+      const p = new AnthropicProvider(testAiCallConfig());
+      const res = await p.complete(jsonReq);
+      expect(res.text).toBe('{"ok":true}');
+      expect(res.stopReason).toBe('tool_use');
+    });
+
+    it('throws TruncatedResponseError with the raw body when max_tokens is hit', async () => {
+      mockCreate.mockResolvedValue({
+        content: [{ type: 'tool_use', name: 'output', input: { items: [] } }],
+        stop_reason: 'max_tokens',
+        usage: { input_tokens: 5, output_tokens: 4096 },
+      });
+      const p = new AnthropicProvider(testAiCallConfig());
+      const err: unknown = await p.complete(jsonReq).catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(TruncatedResponseError);
+      expect(err).toMatchObject({
+        raw: '{"items":[]}',
+        usage: { inputTokens: 5, outputTokens: 4096 },
+      });
+    });
+
+    it('throws RefusalError when the model refuses', async () => {
+      mockCreate.mockResolvedValue({
+        content: [{ type: 'text', text: 'I cannot help with that.' }],
+        stop_reason: 'refusal',
+        usage: { input_tokens: 5, output_tokens: 6 },
+      });
+      const p = new AnthropicProvider(testAiCallConfig());
+      const err: unknown = await p.complete(jsonReq).catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(RefusalError);
+      expect(err).toMatchObject({
+        message: expect.stringContaining('refused'),
+        raw: 'I cannot help with that.',
+        usage: { inputTokens: 5, outputTokens: 6 },
+      });
+    });
   });
 
   it('classifies 429 as transient and 400 as non-transient', () => {

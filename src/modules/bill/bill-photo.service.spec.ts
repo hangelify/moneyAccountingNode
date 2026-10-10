@@ -63,7 +63,6 @@ describe('BillPhotoService', () => {
           category_confidence: 0.9,
         },
       ],
-      raw_extracted_text: '...',
     };
     const svc = new BillPhotoService(
       makeOrchestrator({ bill }),
@@ -76,6 +75,7 @@ describe('BillPhotoService', () => {
       USER_ID,
     );
     expect(res.items).toHaveLength(2);
+    expect(res).not.toHaveProperty('raw_extracted_text');
     expect(res.items[0].sub_category).toEqual({
       id: 'sub-a',
       name: 'bun',
@@ -108,7 +108,6 @@ describe('BillPhotoService', () => {
           category_confidence: 0.1,
         },
       ],
-      raw_extracted_text: '',
     };
     const svc = new BillPhotoService(
       makeOrchestrator({ bill }),
@@ -142,7 +141,6 @@ describe('BillPhotoService', () => {
           category_confidence: 0.8,
         },
       ],
-      raw_extracted_text: '',
     };
     const svc = new BillPhotoService(
       makeOrchestrator({ bill }),
@@ -176,7 +174,6 @@ describe('BillPhotoService', () => {
           category_reasoning: null,
         },
       ],
-      raw_extracted_text: '',
     };
     const svc = new BillPhotoService(
       makeOrchestrator({ bill }),
@@ -204,7 +201,6 @@ describe('BillPhotoService', () => {
         currency: null,
         total_amount: null,
         items: [],
-        raw_extracted_text: '',
       };
       const svc = new BillPhotoService(
         makeOrchestrator({ bill: empty, parseOnlyResult: empty }),
@@ -244,7 +240,6 @@ describe('BillPhotoService', () => {
           final_price: 2,
         },
       ],
-      raw_extracted_text: '',
     };
     const orchestrator = makeOrchestrator({ parseOnlyResult });
     const repo = makeRepo([]);
@@ -269,6 +264,7 @@ describe('BillPhotoService', () => {
         (i) => i.sub_category === null && i.category_confidence === 0,
       ),
     ).toBe(true);
+    expect(res).not.toHaveProperty('raw_extracted_text');
   });
 
   it('passes subcategory info derived from fetched subs to the orchestrator', async () => {
@@ -280,7 +276,6 @@ describe('BillPhotoService', () => {
         currency: null,
         total_amount: null,
         items: [],
-        raw_extracted_text: '',
       },
     });
     const svc = new BillPhotoService(orchestrator, makeRepo(subs));

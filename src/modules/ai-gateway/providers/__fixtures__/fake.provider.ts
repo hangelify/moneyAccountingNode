@@ -13,6 +13,8 @@ export type FakeProviderScript = Array<
 export class FakeLlmProvider implements LlmProvider {
   readonly isConfigured = true;
   readonly defaultModel: string;
+  /** Every request passed to `complete`, in call order. */
+  readonly requests: LlmRequest[] = [];
   private callIdx = 0;
 
   constructor(
@@ -24,7 +26,8 @@ export class FakeLlmProvider implements LlmProvider {
     this.defaultModel = opts?.defaultModel ?? 'fake-model';
   }
 
-  complete(_req: LlmRequest, opts?: LlmCallOptions): Promise<LlmResponse> {
+  complete(req: LlmRequest, opts?: LlmCallOptions): Promise<LlmResponse> {
+    this.requests.push(req);
     const step = this.script[this.callIdx++];
     if (!step) {
       return Promise.reject(

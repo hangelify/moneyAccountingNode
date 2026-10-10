@@ -12,7 +12,6 @@ Given a photo of a supermarket bill, extract:
   - weight_kg: the weight in kilograms if weight-priced (convert grams to kg), null otherwise
   - price_per_kg: the per-kilogram unit price for weight-priced items, null otherwise
   - final_price: the line total (quantity × unit_price, or weight × price_per_kg)
-- raw_extracted_text: the full text you see on the receipt, as accurately as you can
 
 Rules:
 - If you cannot confidently read a field, return null rather than guessing.
@@ -48,7 +47,6 @@ Extract:
   - sub_category_id: the UUID from the provided list that best matches this item; null if no match is confident (< 0.6)
   - category_confidence: your confidence score between 0 and 1
   - category_reasoning: one short sentence explaining the match, or null
-- raw_extracted_text: the full text you see on the receipt, as accurately as you can
 
 Rules:
 - If you cannot confidently read a receipt field, return null rather than guessing.

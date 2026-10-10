@@ -43,4 +43,14 @@ describe('BillParseCategorizeTask', () => {
     expect(user?.images?.[0].data).toBe(image);
     expect(user?.images?.[0].mediaType).toBe('image/jpeg');
   });
+
+  it('does not ask the model for the full OCR text', async () => {
+    const req = await task.buildRequest({
+      image: Buffer.from('img'),
+      mediaType: 'image/jpeg',
+      subcategories: [],
+    });
+    const system = req.messages.find((m) => m.role === 'system');
+    expect(system?.text).not.toContain('raw_extracted_text');
+  });
 });

@@ -61,7 +61,6 @@ export class BillPhotoService {
       bill_date: parsed.bill_date,
       currency: parsed.currency,
       total_amount: parsed.total_amount,
-      raw_extracted_text: parsed.raw_extracted_text,
       items: parsed.items.map(
         (it): ParsedBillItemResponseDto => ({
           name: it.name,
@@ -87,7 +86,6 @@ export class BillPhotoService {
       bill_date: bill.bill_date,
       currency: bill.currency,
       total_amount: bill.total_amount,
-      raw_extracted_text: bill.raw_extracted_text,
       items: bill.items.map((it): ParsedBillItemResponseDto => {
         const sub = it.sub_category_id
           ? byId.get(it.sub_category_id)

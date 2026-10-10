@@ -63,7 +63,6 @@ export const ParsedBillSchema = z.object({
     .describe('ISO-4217 currency code'),
   total_amount: bounded(MAX_AMOUNT).nullable().catch(null),
   items: z.array(ParsedBillItemSchema),
-  raw_extracted_text: z.string().describe('Full OCR text — debug aid'),
 });
 export type ParsedBill = z.infer<typeof ParsedBillSchema>;
 export type ParsedBillItem = z.infer<typeof ParsedBillItemSchema>;

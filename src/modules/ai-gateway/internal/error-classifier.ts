@@ -23,6 +23,22 @@ export class InvalidResponseError extends Error {
   }
 }
 
+/** The model hit its output token limit, so the body is cut off. */
+export class TruncatedResponseError extends InvalidResponseError {
+  constructor(message: string, raw?: string, usage?: LlmResponse['usage']) {
+    super(message, raw, usage);
+    this.name = 'TruncatedResponseError';
+  }
+}
+
+/** The model declined to answer (refusal or content filter). */
+export class RefusalError extends InvalidResponseError {
+  constructor(message: string, raw?: string, usage?: LlmResponse['usage']) {
+    super(message, raw, usage);
+    this.name = 'RefusalError';
+  }
+}
+
 export interface ClassifiedError {
   code: AiAttemptErrorCode;
   message: string;
@@ -53,6 +69,9 @@ export function classifyError(err: unknown): ClassifiedError {
     err instanceof OpenAI.APIConnectionTimeoutError
   ) {
     return { code: AiAttemptErrorCode.TIMEOUT, message: err.message };
+  }
+  if (err instanceof TruncatedResponseError) {
+    return { code: AiAttemptErrorCode.TRUNCATED, message: err.message };
   }
   if (err instanceof InvalidResponseError) {
     return { code: AiAttemptErrorCode.INVALID_RESPONSE, message: err.message };

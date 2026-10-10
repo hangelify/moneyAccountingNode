@@ -12,7 +12,11 @@ import { withRetry } from '../internal/retry';
 import { AI_CALL_CONFIG } from '../internal/ai-call-config';
 import type { AiCallConfig } from '../internal/ai-call-config';
 import { isTransient, retryAfterMs } from '../internal/transient';
-import { InvalidResponseError } from '../internal/error-classifier';
+import {
+  InvalidResponseError,
+  RefusalError,
+  TruncatedResponseError,
+} from '../internal/error-classifier';
 
 @Injectable()
 export class DeepSeekProvider implements LlmProvider {
@@ -109,16 +113,35 @@ export class DeepSeekProvider implements LlmProvider {
     );
 
     const resp = response as {
-      choices?: Array<{ message?: { content?: string | null } }>;
+      choices?: Array<{
+        message?: { content?: string | null };
+        finish_reason?: string | null;
+      }>;
       usage?: { prompt_tokens?: number; completion_tokens?: number };
       model?: string;
     };
 
-    const text = resp.choices?.[0]?.message?.content ?? '';
+    const choice = resp.choices?.[0];
+    const text = choice?.message?.content ?? '';
+    const stopReason = choice?.finish_reason ?? undefined;
     const usage = {
       inputTokens: resp.usage?.prompt_tokens ?? 0,
       outputTokens: resp.usage?.completion_tokens ?? 0,
     };
+    if (stopReason === 'content_filter') {
+      throw new RefusalError(
+        'DeepSeek refused the answer: stopped by the content filter',
+        text,
+        usage,
+      );
+    }
+    if (stopReason === 'length') {
+      throw new TruncatedResponseError(
+        'DeepSeek stopped at the output token limit (finish_reason=length)',
+        text,
+        usage,
+      );
+    }
     let json: unknown;
     if (req.jsonSchema) {
       try {
@@ -132,7 +155,7 @@ export class DeepSeekProvider implements LlmProvider {
       }
     }
 
-    return { text, json, model: resp.model ?? model, usage };
+    return { text, json, model: resp.model ?? model, usage, stopReason };
   }
 
   isTransient(err: unknown): boolean {

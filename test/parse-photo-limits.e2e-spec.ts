@@ -19,7 +19,6 @@ describe('parse-photo per-user AI limit (e2e)', () => {
       bill_date: null,
       currency: null,
       total_amount: null,
-      raw_extracted_text: '',
       items: [],
     },
     requestId: '00000000-0000-4000-8000-000000000000',

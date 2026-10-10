@@ -232,6 +232,8 @@ export class AiGatewayService {
         ...baseReq,
         jsonSchema,
         modelOverride: model,
+        maxOutputTokens: baseReq.maxOutputTokens ?? task.maxOutputTokens,
+        temperature: baseReq.temperature ?? task.temperature,
       };
 
       // Only the provider call is guarded here: anything after a paid

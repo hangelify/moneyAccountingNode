@@ -18,7 +18,6 @@ const bill = {
   currency: 'EUR',
   total_amount: 23.45,
   items: [item],
-  raw_extracted_text: '...',
 };
 
 const categorizedItem = {
@@ -175,5 +174,14 @@ describe.each([
     };
     const currencies = json.properties.currency.anyOf.find((s) => s.enum);
     expect(currencies?.enum).toEqual(Object.values(Currency));
+  });
+
+  it('does not ask the model for the full OCR text', () => {
+    // It roughly doubled the output tokens and pushed long receipts over
+    // the limit; the raw answer is kept in the audit anyway.
+    const json = toProviderJsonSchema(schema) as {
+      properties: Record<string, unknown>;
+    };
+    expect(json.properties).not.toHaveProperty('raw_extracted_text');
   });
 });

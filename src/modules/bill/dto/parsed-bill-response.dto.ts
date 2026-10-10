@@ -61,7 +61,4 @@ export class ParsedBillResponseDto {
 
   @ApiProperty({ type: [ParsedBillItemResponseDto] })
   items!: ParsedBillItemResponseDto[];
-
-  @ApiProperty({ example: 'LIDL\nROSII 1.234 kg × 8.99 = 11.09\n...' })
-  raw_extracted_text!: string;
 }

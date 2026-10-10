@@ -66,7 +66,6 @@ describe('BillController', () => {
       currency: null,
       total_amount: null,
       items: [],
-      raw_extracted_text: '',
     };
     const draftId = 'draft-uuid-001';
     parseAndCategorize.mockResolvedValue({ parsed: dto, requestId: 'req-1' });
@@ -102,7 +101,6 @@ describe('BillController', () => {
       currency: null,
       total_amount: 1,
       items: [],
-      raw_extracted_text: '',
     };
     parseAndCategorize.mockResolvedValue({ parsed: dto, requestId: 'req-9' });
     billCrudMock.createDraftFromParsed.mockRejectedValue(

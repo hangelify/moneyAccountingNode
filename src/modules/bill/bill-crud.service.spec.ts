@@ -494,7 +494,6 @@ describe('BillCrudService', () => {
         bill_date: '2026-05-19',
         currency: 'EUR',
         total_amount: 9.99,
-        raw_extracted_text: '',
         items: [],
       };
 
@@ -601,7 +600,6 @@ describe('BillCrudService', () => {
         bill_date: null,
         currency: null,
         total_amount: 28.2,
-        raw_extracted_text: '',
         items: [
           {
             name: 'Paine Pumpern',
@@ -638,7 +636,6 @@ describe('BillCrudService', () => {
         bill_date: null,
         currency: null,
         total_amount: 88.39,
-        raw_extracted_text: '',
         items: [
           {
             name: 'Carnaciori Ki',
@@ -679,7 +676,6 @@ describe('BillCrudService', () => {
         bill_date: null,
         currency: null,
         total_amount: 60,
-        raw_extracted_text: '',
         items: [
           {
             name: 'Lapte 1L',
@@ -734,7 +730,6 @@ describe('BillCrudService', () => {
         bill_date: null,
         currency: null,
         total_amount: 100,
-        raw_extracted_text: '',
         items: [
           {
             name: 'Lapte 1L',
@@ -797,7 +792,6 @@ describe('BillCrudService', () => {
         bill_date: '2026-05-07',
         currency: 'EUR',
         total_amount: 1.2,
-        raw_extracted_text: '',
         items: [item],
       };
 

@@ -95,3 +95,17 @@ export const ApiDeleteCategoryResponses = () =>
     ApiNotFoundResponse(),
     ApiUnauthorizedResponse(),
   );
+
+export const ApiSeedDefaultCategoriesResponses = () =>
+  applyDecorators(
+    ApiResponse({
+      status: 204,
+      description: 'Default categories seeded (missing ones created)',
+    }),
+    ApiBadRequestResponse('Bad request - Household ID is not a valid UUID'),
+    ApiUnauthorizedResponse(),
+    ApiResponse({
+      status: 403,
+      description: 'Caller is not a member of the household',
+    }),
+  );

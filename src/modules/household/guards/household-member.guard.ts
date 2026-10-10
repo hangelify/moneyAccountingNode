@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@mikro-orm/nestjs';
 import { EntityRepository } from '@mikro-orm/core';
+import { isUUID } from 'class-validator';
 import { Household } from '../../../entities/household.entity';
 import { HouseholdMember } from '../../../entities/household-member.entity';
 import type { AuthenticatedUser } from '../../auth/types/jwt-payload.interface';
@@ -35,6 +36,9 @@ export class HouseholdMemberGuard implements CanActivate {
     const hid = request.params?.hid;
     if (!hid) {
       throw new BadRequestException('Missing household ID in route params');
+    }
+    if (!isUUID(hid)) {
+      throw new BadRequestException('Household ID must be a valid UUID');
     }
 
     const household = await this.householdRepo.findOne({

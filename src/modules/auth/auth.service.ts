@@ -153,7 +153,7 @@ export class AuthService {
       this.logger.error(
         `Failed to seed default categories for user ${user.id}: ${err instanceof Error ? err.message : String(err)}`,
       );
-      // Continue — user can invoke POST /users/me/seed-default-categories to backfill.
+      // Continue — user can invoke POST /households/:hid/categories/seed-defaults to backfill.
     }
 
     const issued = await this.startSession(user, ipAddress, userAgent);

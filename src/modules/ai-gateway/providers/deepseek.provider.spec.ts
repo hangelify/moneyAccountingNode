@@ -104,16 +104,22 @@ describe('DeepSeekProvider', () => {
     process.env.DEEPSEEK_MODEL = 'deepseek-chat';
     mockCreate.mockResolvedValue({
       choices: [{ message: { content: 'not json {' } }],
-      usage: { prompt_tokens: 1, completion_tokens: 1 },
+      usage: { prompt_tokens: 3, completion_tokens: 4 },
       model: 'deepseek-chat',
     });
     const p = new DeepSeekProvider(testAiCallConfig());
-    await expect(
-      p.complete({
+    const err: unknown = await p
+      .complete({
         messages: [{ role: 'user', text: 'x' }],
         jsonSchema: { type: 'object' },
-      }),
-    ).rejects.toBeInstanceOf(InvalidResponseError);
+      })
+      .catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(InvalidResponseError);
+    // The call was paid for: the audit needs its tokens and body.
+    expect(err).toMatchObject({
+      raw: 'not json {',
+      usage: { inputTokens: 3, outputTokens: 4 },
+    });
   });
 
   it('classifies 429 as transient and 400 as non-transient', () => {

@@ -1,16 +1,22 @@
 import Anthropic from '@anthropic-ai/sdk';
 import OpenAI from 'openai';
 import { AiAttemptErrorCode } from '../../../entities/ai-request-attempt.entity';
+import type { LlmResponse } from '../types/llm-request';
 import {
   DeadlineExceededError,
   RetryExhaustedError,
   TimeoutError,
 } from './retry';
 
+/**
+ * The provider answered (and billed) but the body was unusable. Carries the
+ * raw body and token usage so the audit can still account for the call.
+ */
 export class InvalidResponseError extends Error {
   constructor(
     message: string,
     public readonly raw?: string,
+    public readonly usage?: LlmResponse['usage'],
   ) {
     super(message);
     this.name = 'InvalidResponseError';

@@ -115,24 +115,24 @@ export class DeepSeekProvider implements LlmProvider {
     };
 
     const text = resp.choices?.[0]?.message?.content ?? '';
+    const usage = {
+      inputTokens: resp.usage?.prompt_tokens ?? 0,
+      outputTokens: resp.usage?.completion_tokens ?? 0,
+    };
     let json: unknown;
     if (req.jsonSchema) {
       try {
         json = JSON.parse(text);
       } catch {
-        throw new InvalidResponseError('DeepSeek returned non-JSON body', text);
+        throw new InvalidResponseError(
+          'DeepSeek returned non-JSON body',
+          text,
+          usage,
+        );
       }
     }
 
-    return {
-      text,
-      json,
-      model: resp.model ?? model,
-      usage: {
-        inputTokens: resp.usage?.prompt_tokens ?? 0,
-        outputTokens: resp.usage?.completion_tokens ?? 0,
-      },
-    };
+    return { text, json, model: resp.model ?? model, usage };
   }
 
   isTransient(err: unknown): boolean {

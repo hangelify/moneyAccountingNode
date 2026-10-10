@@ -10,6 +10,8 @@ import { BaseEntity } from './base.entity';
 import { AiRequest } from './ai-request.entity';
 
 export enum AiAttemptStatus {
+  /** The provider call is in flight (or the process died during it). */
+  PENDING = 'PENDING',
   SUCCESS = 'SUCCESS',
   FAILED = 'FAILED',
 }

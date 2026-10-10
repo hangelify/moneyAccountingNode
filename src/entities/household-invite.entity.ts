@@ -1,9 +1,23 @@
-import { Entity, Property, BeforeCreate, ManyToOne } from '@mikro-orm/core';
+import {
+  Entity,
+  Property,
+  BeforeCreate,
+  ManyToOne,
+  Index,
+} from '@mikro-orm/core';
 import { BaseEntity } from './base.entity';
 import { Household } from './household.entity';
 import { User } from './user.entity';
 
 @Entity({ tableName: 'household_invites' })
+@Index({
+  name: 'household_invites_household_id_index',
+  properties: ['household'],
+})
+@Index({
+  name: 'household_invites_invited_by_index',
+  properties: ['invited_by'],
+})
 export class HouseholdInvite extends BaseEntity {
   @ManyToOne(() => Household, { nullable: false, deleteRule: 'cascade' })
   household!: Household;

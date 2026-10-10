@@ -4,11 +4,17 @@ import {
   BeforeCreate,
   BeforeUpdate,
   ManyToOne,
+  Index,
 } from '@mikro-orm/core';
 import { BaseEntity } from './base.entity';
 import { Household } from './household.entity';
 
 @Entity({ tableName: 'markets' })
+@Index({
+  name: 'markets_household_id_index',
+  expression:
+    'create index "markets_household_id_index" on "markets" ("household_id") where "deleted_at" is null',
+})
 export class Market extends BaseEntity {
   @Property({ type: 'varchar', length: 255, nullable: false })
   name!: string;

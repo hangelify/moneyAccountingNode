@@ -5,6 +5,7 @@ import {
   ManyToOne,
   OneToMany,
   Collection,
+  Index,
 } from '@mikro-orm/core';
 import { BaseEntity } from './base.entity';
 import { User } from './user.entity';
@@ -12,6 +13,7 @@ import { HouseholdMember } from './household-member.entity';
 import { HouseholdInvite } from './household-invite.entity';
 
 @Entity({ tableName: 'households' })
+@Index({ name: 'households_created_by_index', properties: ['created_by'] })
 export class Household extends BaseEntity {
   @Property({ type: 'varchar', length: 255, nullable: false })
   name!: string;

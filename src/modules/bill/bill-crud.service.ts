@@ -2,9 +2,10 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  ConflictException,
 } from '@nestjs/common';
 import { InjectRepository } from '@mikro-orm/nestjs';
-import { EntityRepository, EntityManager } from '@mikro-orm/core';
+import { EntityRepository, EntityManager, LockMode } from '@mikro-orm/core';
 import { Bill } from '../../entities/bill.entity';
 import { BillSubCategory } from '../../entities/bill-sub-category.entity';
 import { Market } from '../../entities/market.entity';
@@ -14,7 +15,7 @@ import { Household } from '../../entities/household.entity';
 import { BillStatus } from '../../types/bill-status.enum';
 import { Currency } from '../../types/currency.enum';
 import { ListBillsQueryDto } from './dto/list-bills-query.dto';
-import { CreateBillDto } from './dto/create-bill.dto';
+import { CreateBillDto, CreateBillItemDto } from './dto/create-bill.dto';
 import { UpdateBillDto } from './dto/update-bill.dto';
 import { ConfirmBillDto } from './dto/confirm-bill.dto';
 import type {
@@ -124,31 +125,8 @@ export class BillCrudService {
     bill.currency = dto.currency;
     if (market) bill.market = market;
 
-    const bscEntities: BillSubCategory[] = [];
-    for (const item of dto.items) {
-      const subCat = await this.subCategoryRepository.findOne(
-        {
-          id: item.sub_category_id,
-          deleted_at: null,
-          category: { household: { id: householdId }, deleted_at: null },
-        },
-        { populate: ['category'] },
-      );
-      if (!subCat) {
-        throw new BadRequestException(
-          `SubCategory with ID ${item.sub_category_id} not found or belongs to another user`,
-        );
-      }
-      const bsc = new BillSubCategory();
-      bsc.bill = bill;
-      bsc.sub_category = subCat;
-      bsc.raw_name = subCat.name;
-      bsc.product_count = item.product_count;
-      bsc.amount = item.amount;
-      if (item.product_weight !== undefined)
-        bsc.product_weight = item.product_weight;
-      bscEntities.push(bsc);
-    }
+    const subCats = await this.findSubCategories(householdId, dto.items);
+    const bscEntities = this.toBillItems(bill, dto.items, subCats);
 
     this.em.persist(bill);
     for (const bsc of bscEntities) this.em.persist(bsc);
@@ -440,64 +418,109 @@ export class BillCrudService {
     userId: string,
     dto: ConfirmBillDto,
   ): Promise<BillDetailResponseDto> {
-    const bill = await this.billRepository.findOne(
-      {
-        id,
-        household: { id: householdId },
-        status: BillStatus.DRAFT,
-        deleted_at: null,
-      },
-      { populate: ['market'] },
-    );
-    if (!bill)
-      throw new NotFoundException(`Draft bill with ID ${id} not found`);
+    // Validate before touching the draft: a rejected confirm keeps its items.
+    const subCats = await this.findSubCategories(householdId, dto.items);
 
-    bill.created_by = this.em.getReference(User, userId);
+    return this.em.transactional(async (em) => {
+      // Not filtered by status: a concurrent confirm waits on the row lock,
+      // then sees CONFIRMED here and gets 409 instead of writing its items.
+      const bill = await em.findOne(
+        Bill,
+        { id, household: { id: householdId }, deleted_at: null },
+        { lockMode: LockMode.PESSIMISTIC_WRITE },
+      );
+      if (!bill)
+        throw new NotFoundException(`Draft bill with ID ${id} not found`);
+      if (bill.status !== BillStatus.DRAFT)
+        throw new ConflictException(`Bill with ID ${id} is already confirmed`);
 
-    // Resolve market
-    if (dto.market_id) {
-      const market = await this.marketRepository.findOne({
-        id: dto.market_id,
-        household: { id: householdId },
-        deleted_at: null,
-      });
-      if (!market) {
+      bill.created_by = em.getReference(User, userId);
+
+      // Resolve market
+      if (dto.market_id) {
+        const market = await em.findOne(Market, {
+          id: dto.market_id,
+          household: { id: householdId },
+          deleted_at: null,
+        });
+        if (!market) {
+          throw new BadRequestException(
+            `Market with ID ${dto.market_id} not found or belongs to another user`,
+          );
+        }
+        bill.market = market;
+      } else if (dto.new_market) {
+        bill.market = await this.findOrCreateMarket(
+          em,
+          householdId,
+          dto.new_market,
+        );
+      } else {
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+        bill.market = null as any;
+      }
+
+      // Apply overrides
+      if (dto.bill_date !== undefined) bill.bill_date = new Date(dto.bill_date);
+      if (dto.currency !== undefined) bill.currency = dto.currency;
+      if (dto.total_amount !== undefined) bill.amount = dto.total_amount;
+      if (dto.description !== undefined) bill.description = dto.description;
+
+      // Replace items
+      await em.nativeDelete(BillSubCategory, { bill: id });
+      const bscEntities = this.toBillItems(bill, dto.items, subCats);
+
+      bill.status = BillStatus.CONFIRMED;
+      for (const bsc of bscEntities) em.persist(bsc);
+      await em.flush();
+
+      return this.toDetailDto(bill, bscEntities);
+    });
+  }
+
+  /**
+   * Loads the household's sub-categories for `items` in one query.
+   * Throws 400 on a repeated or unknown id.
+   */
+  private async findSubCategories(
+    householdId: string,
+    items: CreateBillItemDto[],
+  ): Promise<Map<string, SubCategory>> {
+    const ids = new Set<string>();
+    for (const { sub_category_id } of items) {
+      if (ids.has(sub_category_id)) {
         throw new BadRequestException(
-          `Market with ID ${dto.market_id} not found or belongs to another user`,
+          `Duplicate sub_category_id ${sub_category_id} in items: merge them into one item`,
         );
       }
-      bill.market = market;
-    } else if (dto.new_market) {
-      bill.market = await this.findOrCreateMarket(householdId, dto.new_market);
-    } else {
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-      bill.market = null as any;
+      ids.add(sub_category_id);
     }
 
-    // Apply overrides
-    if (dto.bill_date !== undefined) bill.bill_date = new Date(dto.bill_date);
-    if (dto.currency !== undefined) bill.currency = dto.currency;
-    if (dto.total_amount !== undefined) bill.amount = dto.total_amount;
-    if (dto.description !== undefined) bill.description = dto.description;
-
-    // Replace items
-    await this.em.nativeDelete(BillSubCategory, { bill: id });
-
-    const bscEntities: BillSubCategory[] = [];
-    for (const item of dto.items) {
-      const subCat = await this.subCategoryRepository.findOne(
-        {
-          id: item.sub_category_id,
-          deleted_at: null,
-          category: { household: { id: householdId }, deleted_at: null },
-        },
-        { populate: ['category'] },
+    const found = await this.subCategoryRepository.find(
+      {
+        id: { $in: [...ids] },
+        deleted_at: null,
+        category: { household: { id: householdId }, deleted_at: null },
+      },
+      { populate: ['category'] },
+    );
+    const byId = new Map(found.map((s) => [s.id, s]));
+    const missing = [...ids].filter((sid) => !byId.has(sid));
+    if (missing.length) {
+      throw new BadRequestException(
+        `SubCategory with ID ${missing.join(', ')} not found or belongs to another user`,
       );
-      if (!subCat) {
-        throw new BadRequestException(
-          `SubCategory with ID ${item.sub_category_id} not found or belongs to another user`,
-        );
-      }
+    }
+    return byId;
+  }
+
+  private toBillItems(
+    bill: Bill,
+    items: CreateBillItemDto[],
+    subCats: Map<string, SubCategory>,
+  ): BillSubCategory[] {
+    return items.map((item) => {
+      const subCat = subCats.get(item.sub_category_id)!;
       const bsc = new BillSubCategory();
       bsc.bill = bill;
       bsc.sub_category = subCat;
@@ -506,22 +529,16 @@ export class BillCrudService {
       bsc.amount = item.amount;
       if (item.product_weight !== undefined)
         bsc.product_weight = item.product_weight;
-      bscEntities.push(bsc);
-    }
-
-    bill.status = BillStatus.CONFIRMED;
-    this.em.persist(bill);
-    for (const bsc of bscEntities) this.em.persist(bsc);
-    await this.em.flush();
-
-    return this.toDetailDto(bill, bscEntities);
+      return bsc;
+    });
   }
 
   private async findOrCreateMarket(
+    em: EntityManager,
     householdId: string,
     dto: { name: string; city?: string; country?: string; address?: string },
   ): Promise<Market> {
-    const existing = await this.marketRepository.findOne({
+    const existing = await em.findOne(Market, {
       // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
       name: { $ilike: dto.name } as any,
       household: { id: householdId },
@@ -534,8 +551,8 @@ export class BillCrudService {
     market.city = dto.city;
     market.country = dto.country;
     market.address = dto.address;
-    market.household = this.em.getReference(Household, householdId);
-    this.em.persist(market);
+    market.household = em.getReference(Household, householdId);
+    em.persist(market);
     return market;
   }
 

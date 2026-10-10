@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import type { DiscoveryService } from '@nestjs/core';
+import { Logger } from '@nestjs/common';
 import type { FactoryProvider } from '@nestjs/common';
 import { AiGatewayBootstrapper, AiGatewayModule } from './ai-gateway.module';
 import { AI_CALL_CONFIG } from './internal/ai-call-config';
@@ -11,13 +12,13 @@ import { LlmProvider, ProviderName } from './types/llm-provider';
 function makeProvider(
   name: ProviderName,
   caps: Capability[],
-  opts: { configured?: boolean } = {},
+  opts: { configured?: boolean; defaultModel?: string } = {},
 ): LlmProvider {
   return {
     name,
     capabilities: new Set<Capability>(caps),
     isConfigured: opts.configured ?? true,
-    defaultModel: 'fake',
+    defaultModel: opts.defaultModel ?? 'gpt-4o',
     complete: () => Promise.resolve({ text: '', model: 'fake' }),
     isTransient: () => false,
   };
@@ -107,6 +108,95 @@ describe('AiGatewayBootstrapper (boot-time capability check)', () => {
     ]);
     const bootstrapper = new AiGatewayBootstrapper(discovery, providers);
     expect(() => bootstrapper.onApplicationBootstrap()).not.toThrow();
+  });
+});
+
+class OverrideTask extends AiTask<{ x: number }, { y: number }> {
+  readonly name = 'test.override';
+  readonly requiredCapabilities = new Set<Capability>(['text', 'json']);
+  readonly inputSchema = z.object({ x: z.number() });
+  readonly outputSchema = z.object({ y: z.number() });
+  buildRequest() {
+    return Promise.resolve({ messages: [] });
+  }
+  override readonly modelOverrides = {
+    deepseek: 'deepseek-unpriced',
+    anthropic: 'claude-unpriced',
+  };
+}
+
+describe('AiGatewayBootstrapper (boot-time pricing check)', () => {
+  let warn: jest.SpyInstance;
+  beforeEach(() => {
+    warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => {});
+  });
+  afterEach(() => warn.mockRestore());
+
+  function pricingWarnings(): string[] {
+    return warn.mock.calls
+      .map((c: unknown[]) => String(c[0]))
+      .filter((m) => m.includes('pricing'));
+  }
+
+  function boot(providers: LlmProvider[], tasks: unknown[]): void {
+    new AiGatewayBootstrapper(
+      makeDiscovery(tasks),
+      providers,
+    ).onApplicationBootstrap();
+  }
+
+  it('does not warn when every configured model is priced', () => {
+    boot(
+      [
+        makeProvider('anthropic', ['text', 'json'], {
+          defaultModel: 'claude-sonnet-4-6',
+        }),
+        makeProvider('openai', ['text', 'json'], {
+          defaultModel: 'gpt-4o-2024-08-06',
+        }),
+      ],
+      [new TextTask()],
+    );
+    expect(pricingWarnings()).toEqual([]);
+  });
+
+  it("warns when a configured provider's default model has no price", () => {
+    boot(
+      [
+        makeProvider('deepseek', ['text', 'json'], {
+          defaultModel: 'deepseek-mystery',
+        }),
+      ],
+      [new TextTask()],
+    );
+    const msgs = pricingWarnings();
+    expect(msgs).toHaveLength(1);
+    expect(msgs[0]).toContain("'deepseek-mystery'");
+    expect(msgs[0]).toContain('deepseek default model');
+  });
+
+  it("warns when a task's model override for a configured provider has no price", () => {
+    boot([makeProvider('deepseek', ['text', 'json'])], [new OverrideTask()]);
+    const msgs = pricingWarnings();
+    expect(msgs).toHaveLength(1);
+    expect(msgs[0]).toContain("'deepseek-unpriced'");
+    expect(msgs[0]).toContain("task 'test.override' (deepseek)");
+  });
+
+  it('ignores defaults and overrides of providers that are not configured', () => {
+    boot(
+      [
+        makeProvider('deepseek', ['text', 'json'], {
+          defaultModel: 'deepseek-flash',
+        }),
+        makeProvider('anthropic', ['text', 'json'], {
+          configured: false,
+          defaultModel: 'claude-unpriced-default',
+        }),
+      ],
+      [new OverrideTask()],
+    );
+    expect(pricingWarnings().join('\n')).not.toContain('claude-unpriced');
   });
 });
 

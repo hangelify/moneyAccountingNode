@@ -8,6 +8,7 @@ import {
 } from '../types/llm-provider';
 import { LlmRequest, LlmResponse } from '../types/llm-request';
 import { readOptionalKey, readModelWhenConfigured } from './provider.env';
+import { toUsage } from './usage';
 import { withRetry } from '../internal/retry';
 import { AI_CALL_CONFIG } from '../internal/ai-call-config';
 import type { AiCallConfig } from '../internal/ai-call-config';
@@ -124,10 +125,10 @@ export class DeepSeekProvider implements LlmProvider {
     const choice = resp.choices?.[0];
     const text = choice?.message?.content ?? '';
     const stopReason = choice?.finish_reason ?? undefined;
-    const usage = {
-      inputTokens: resp.usage?.prompt_tokens ?? 0,
-      outputTokens: resp.usage?.completion_tokens ?? 0,
-    };
+    const usage = toUsage(
+      resp.usage?.prompt_tokens,
+      resp.usage?.completion_tokens,
+    );
     if (stopReason === 'content_filter') {
       throw new RefusalError(
         'DeepSeek refused the answer: stopped by the content filter',

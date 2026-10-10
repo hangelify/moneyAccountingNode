@@ -8,7 +8,7 @@ export class Session extends BaseEntity {
   user!: User;
 
   @Property({ type: 'varchar', length: 45, nullable: true })
-  ip_address?: string;
+  ip_address?: string | null;
 
   @Property({ type: 'text', nullable: true })
   user_agent?: string;

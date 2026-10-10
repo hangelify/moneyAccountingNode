@@ -21,7 +21,7 @@ export class RefreshToken extends BaseEntity {
   jti!: string;
 
   @Property({ type: 'varchar', length: 45, nullable: true })
-  ip_address?: string;
+  ip_address?: string | null;
 
   @Property({ type: 'text', nullable: true })
   user_agent?: string;

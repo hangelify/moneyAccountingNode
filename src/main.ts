@@ -5,13 +5,17 @@ import { NestExpressApplication } from '@nestjs/platform-express';
 import { ValidationPipe } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
+import { applyTrustProxy, parseTrustProxy } from './config/trust-proxy';
 
 async function bootstrap() {
+  // Parsed before the app is created so an invalid value fails startup fast.
+  const trustProxy = parseTrustProxy(process.env.TRUST_PROXY);
+
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
 
-  // Configure trust proxy for correct IP address extraction behind reverse proxies
-  // This enables req.ip to work correctly and allows X-Forwarded-For header processing
-  app.set('trust proxy', true);
+  // req.ip (rate limiting, session/audit IPs) only honours X-Forwarded-For
+  // from proxies listed in TRUST_PROXY; by default the header is ignored.
+  applyTrustProxy(app, trustProxy);
 
   // Enable CORS
   app.enableCors({

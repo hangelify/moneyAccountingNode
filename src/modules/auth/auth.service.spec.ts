@@ -11,6 +11,9 @@ import { Log } from '../../entities/log.entity';
 
 interface Deps {
   seedForHousehold: jest.Mock;
+  createSession: jest.Mock;
+  createRefreshToken: jest.Mock;
+  createLog: jest.Mock;
 }
 
 function makeService(opts?: Partial<Deps>): {
@@ -32,19 +35,22 @@ function makeService(opts?: Partial<Deps>): {
   process.env.JWT_REFRESH_EXPIRES_IN_MS = '604800000';
 
   // Repository mocks: findOne returns null (no existing user) for user; create returns the entity passed.
+  const createRefreshToken = jest.fn().mockImplementation((data) => data);
+  const createSession = jest
+    .fn()
+    .mockImplementation((data) => ({ id: 'session-id', ...data }));
+  const createLog = jest.fn().mockImplementation((data) => data);
   const userRepo = {
     findOne: jest.fn().mockResolvedValue(null),
   } as unknown as EntityRepository<User>;
   const refreshTokenRepo = {
-    create: jest.fn().mockImplementation((data) => data),
+    create: createRefreshToken,
   } as unknown as EntityRepository<RefreshToken>;
   const sessionRepo = {
-    create: jest
-      .fn()
-      .mockImplementation((data) => ({ id: 'session-id', ...data })),
+    create: createSession,
   } as unknown as EntityRepository<Session>;
   const logRepo = {
-    create: jest.fn().mockImplementation((data) => data),
+    create: createLog,
   } as unknown as EntityRepository<Log>;
 
   // EntityManager: persist().flush() chain. Side-effect: assigns an id to the user before flush returns.
@@ -77,7 +83,10 @@ function makeService(opts?: Partial<Deps>): {
     jwtService,
     { seedForHousehold } as unknown as CategoryDefaultsService,
   );
-  return { service, deps: { seedForHousehold } };
+  return {
+    service,
+    deps: { seedForHousehold, createSession, createRefreshToken, createLog },
+  };
 }
 
 describe('AuthService.register seeder hook', () => {
@@ -110,6 +119,36 @@ describe('AuthService.register seeder hook', () => {
       'jest',
     );
     expect(tokens.access_token).toBeDefined();
+  });
+});
+
+describe('AuthService ip_address sanitization', () => {
+  const registerDto = {
+    email: 'ip-user@test',
+    password: 'supersecret-password',
+    first_name: 'Ip',
+  };
+
+  function persistedIps(deps: Deps): unknown[] {
+    return [deps.createSession, deps.createRefreshToken, deps.createLog]
+      .flatMap((create) => create.mock.calls)
+      .map(([data]) => (data as { ip_address?: unknown }).ip_address);
+  }
+
+  it('stores null instead of a non-IP value that does not fit varchar(45)', async () => {
+    const { service, deps } = makeService();
+    await service.register(registerDto, 'x'.repeat(100), 'jest');
+
+    const ips = persistedIps(deps);
+    expect(ips).toHaveLength(3);
+    for (const ip of ips) expect(ip).toBeNull();
+  });
+
+  it('stores a valid IP as is', async () => {
+    const { service, deps } = makeService();
+    await service.register(registerDto, '2001:db8::1', 'jest');
+
+    for (const ip of persistedIps(deps)) expect(ip).toBe('2001:db8::1');
   });
 });
 /* eslint-enable @typescript-eslint/no-unsafe-return */

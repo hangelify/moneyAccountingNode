@@ -285,6 +285,7 @@ cp .env.example .env
 | `NODE_ENV` | no | `development` | `development`, `test`, or `production` |
 | `FRONTEND_URL` | no | `http://localhost:5173` | CORS allowed origin for the frontend |
 | `LOG_LEVEL` | no | — | Logger verbosity: `debug`, `log`, `warn`, `error` |
+| `TRUST_PROXY` | no | off | Which proxies may set `X-Forwarded-For`. Unset/`false`: header ignored. Hop count (`1` for production behind a single reverse proxy) or a comma-separated list of addresses/subnets (`loopback, 10.0.0.0/8`). `true` is rejected; an invalid value stops startup. See [Rate Limiting](#rate-limiting) |
 
 ### JWT
 
@@ -465,6 +466,8 @@ Rate limits are enforced globally and stored in Redis so they work correctly acr
 | `POST /auth/refresh` | 10 requests | 60 seconds per IP |
 
 Exceeding a limit returns `429 Too Many Requests`.
+
+The client IP is `req.ip`. It is derived from `X-Forwarded-For` only for proxies trusted through `TRUST_PROXY`. Leave it unset when the API is exposed directly; otherwise any client could pick a new IP per request and dodge the limits. Behind a single reverse proxy (nginx, Traefik, a cloud load balancer) set `TRUST_PROXY=1`. The proxy must overwrite or append to `X-Forwarded-For`, never pass through what the client sent. IP values that are not valid addresses are stored as `NULL` in `sessions`, `refresh_tokens` and `logs`.
 
 ---
 

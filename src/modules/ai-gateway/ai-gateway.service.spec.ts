@@ -437,6 +437,23 @@ describe('AiGatewayService', () => {
       expect(attempts).toHaveLength(1);
     });
 
+    it('always tries the first provider, whatever the budget', async () => {
+      const p1 = new FakeLlmProvider(
+        'openai',
+        new Set<Capability>(['text', 'json']),
+        [okResponse({ ok: true })],
+      );
+      const svc = await boot(
+        [p1],
+        testAiCallConfig({ taskDeadlineMs: 5_000, minAttemptBudgetMs: 10_000 }),
+      );
+      await cleanupOwnedRows();
+
+      await expect(svc.run(new PingTask(), { n: 1 })).resolves.toEqual({
+        ok: true,
+      });
+    });
+
     it('still fails over while enough budget is left', async () => {
       const p1 = new FakeLlmProvider(
         'openai',

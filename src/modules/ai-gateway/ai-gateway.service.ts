@@ -123,7 +123,8 @@ export class AiGatewayService {
     let outOfTime = false;
     for (let i = 0; i < candidates.length; i++) {
       const provider = candidates[i];
-      if (deadline.remainingMs() < this.config.minAttemptBudgetMs) {
+      // The first provider always gets a go; later ones only with enough budget.
+      if (i > 0 && deadline.remainingMs() < this.config.minAttemptBudgetMs) {
         outOfTime = true;
         lastError ??= new DeadlineExceededError(this.config.taskDeadlineMs);
         break;

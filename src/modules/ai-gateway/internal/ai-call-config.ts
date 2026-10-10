@@ -31,6 +31,8 @@ function readInt(env: Env, name: string, def: number, min: number): number {
   return value;
 }
 
+const MIN_ATTEMPT_BUDGET_MS = 5_000;
+
 export function loadAiCallConfig(env: Env = process.env): AiCallConfig {
   return {
     callTimeoutMs: readInt(env, 'AI_CALL_TIMEOUT_MS', 60_000, 1),
@@ -38,7 +40,13 @@ export function loadAiCallConfig(env: Env = process.env): AiCallConfig {
     retryBackoffMs: readInt(env, 'AI_TRANSIENT_RETRY_BACKOFF_MS', 500, 0),
     maxBackoffMs: 8_000,
     maxRetryAfterMs: 10_000,
-    taskDeadlineMs: readInt(env, 'AI_TASK_DEADLINE_MS', 90_000, 1),
-    minAttemptBudgetMs: 5_000,
+    // A shorter deadline would leave no room for even one useful attempt.
+    taskDeadlineMs: readInt(
+      env,
+      'AI_TASK_DEADLINE_MS',
+      90_000,
+      MIN_ATTEMPT_BUDGET_MS,
+    ),
+    minAttemptBudgetMs: MIN_ATTEMPT_BUDGET_MS,
   };
 }

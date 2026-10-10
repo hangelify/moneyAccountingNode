@@ -36,4 +36,10 @@ describe('loadAiCallConfig', () => {
   ])('fails fast naming the variable when %s=%s', (name, value) => {
     expect(() => loadAiCallConfig({ [name]: value })).toThrow(name);
   });
+
+  it('fails fast when the task deadline leaves no room for an attempt', () => {
+    expect(() => loadAiCallConfig({ AI_TASK_DEADLINE_MS: '3000' })).toThrow(
+      'AI_TASK_DEADLINE_MS',
+    );
+  });
 });

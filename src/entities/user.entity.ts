@@ -10,6 +10,8 @@ import { Currency } from '../types/currency.enum';
 import { LanguageCode } from '../types/language-code.enum';
 import * as bcrypt from 'bcrypt';
 
+export const PASSWORD_HASH_ROUNDS = 10;
+
 @Entity({ tableName: 'users' })
 export class User extends BaseEntity {
   @Property({ type: 'varchar', length: 255, nullable: false })
@@ -58,7 +60,7 @@ export class User extends BaseEntity {
     this.created_at = new Date();
     this.updated_at = new Date();
     if (this.password) {
-      this.password = await bcrypt.hash(this.password, 10);
+      this.password = await bcrypt.hash(this.password, PASSWORD_HASH_ROUNDS);
     }
   }
 

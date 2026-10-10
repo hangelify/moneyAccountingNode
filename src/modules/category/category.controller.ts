@@ -17,6 +17,7 @@ import {
   ApiParam,
 } from '@nestjs/swagger';
 import { CategoryService } from './category.service';
+import { CategoryDefaultsService } from './category-defaults.service';
 import { CreateCategoryDto } from './dto/create-category.dto';
 import { BulkCreateCategoryDto } from './dto/bulk-create-category.dto';
 import { UpdateCategoryDto } from './dto/update-category.dto';
@@ -33,6 +34,7 @@ import {
   ApiGetAllCategoriesResponses,
   ApiUpdateCategoryResponses,
   ApiDeleteCategoryResponses,
+  ApiSeedDefaultCategoriesResponses,
 } from './decorators/api-responses.decorator';
 
 @ApiTags('categories')
@@ -40,7 +42,21 @@ import {
 @UseGuards(JwtAuthGuard, HouseholdMemberGuard)
 @ApiBearerAuth('JWT-auth')
 export class CategoryController {
-  constructor(private readonly categoryService: CategoryService) {}
+  constructor(
+    private readonly categoryService: CategoryService,
+    private readonly categoryDefaultsService: CategoryDefaultsService,
+  ) {}
+
+  @Post('seed-defaults')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({
+    summary:
+      'Seed (or restore) the default category tree for the household. Idempotent.',
+  })
+  @ApiSeedDefaultCategoriesResponses()
+  async seedDefaults(@CurrentHousehold() ctx: HouseholdContext): Promise<void> {
+    await this.categoryDefaultsService.seedForHousehold(ctx.householdId);
+  }
 
   @Post('bulk')
   @HttpCode(HttpStatus.CREATED)

@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/unbound-method */
 import {
   BadRequestException,
   ExecutionContext,
@@ -33,6 +34,8 @@ function makeCtx(userId: string, hid?: string): ExecutionContext {
   } as unknown as ExecutionContext;
 }
 
+const HID = '11111111-1111-4111-8111-111111111111';
+
 describe('HouseholdMemberGuard', () => {
   it('throws BadRequestException when hid is missing', async () => {
     const { guard } = makeGuard();
@@ -41,30 +44,39 @@ describe('HouseholdMemberGuard', () => {
     );
   });
 
+  it('throws BadRequestException without querying the DB when hid is not a UUID', async () => {
+    const { guard, householdRepo, memberRepo } = makeGuard();
+    await expect(
+      guard.canActivate(makeCtx('user-1', 'not-a-uuid')),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(householdRepo.findOne).not.toHaveBeenCalled();
+    expect(memberRepo.findOne).not.toHaveBeenCalled();
+  });
+
   it('throws ForbiddenException when household not found or deleted', async () => {
     const { guard, householdRepo } = makeGuard();
     (householdRepo.findOne as jest.Mock).mockResolvedValue(null);
     await expect(
-      guard.canActivate(makeCtx('user-1', 'hid-1')),
+      guard.canActivate(makeCtx('user-1', HID)),
     ).rejects.toBeInstanceOf(ForbiddenException);
   });
 
   it('throws ForbiddenException when user is not a member', async () => {
     const { guard, householdRepo, memberRepo } = makeGuard();
-    (householdRepo.findOne as jest.Mock).mockResolvedValue({ id: 'hid-1' });
+    (householdRepo.findOne as jest.Mock).mockResolvedValue({ id: HID });
     (memberRepo.findOne as jest.Mock).mockResolvedValue(null);
     await expect(
-      guard.canActivate(makeCtx('user-1', 'hid-1')),
+      guard.canActivate(makeCtx('user-1', HID)),
     ).rejects.toBeInstanceOf(ForbiddenException);
   });
 
   it('returns true and attaches household context when user is a member', async () => {
     const { guard, householdRepo, memberRepo } = makeGuard();
-    (householdRepo.findOne as jest.Mock).mockResolvedValue({ id: 'hid-1' });
+    (householdRepo.findOne as jest.Mock).mockResolvedValue({ id: HID });
     (memberRepo.findOne as jest.Mock).mockResolvedValue({ role: 'owner' });
     const request: Record<string, unknown> = {
       user: { id: 'user-1' },
-      params: { hid: 'hid-1' },
+      params: { hid: HID },
     };
     const ctx = {
       switchToHttp: () => ({ getRequest: () => request }),
@@ -73,6 +85,6 @@ describe('HouseholdMemberGuard', () => {
     const result = await guard.canActivate(ctx);
 
     expect(result).toBe(true);
-    expect(request.household).toEqual({ householdId: 'hid-1', role: 'owner' });
+    expect(request.household).toEqual({ householdId: HID, role: 'owner' });
   });
 });

@@ -34,7 +34,6 @@ export class AiRequestAttempt extends BaseEntity {
   attempt_number!: number;
 
   @Property({ type: 'varchar', length: 32, nullable: false })
-  @Index()
   provider_name!: string;
 
   @Property({ type: 'varchar', length: 128, nullable: false })

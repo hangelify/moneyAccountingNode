@@ -5185,26 +5185,6 @@
       "indexes": [
         {
           "columnNames": [
-            "task_name"
-          ],
-          "composite": false,
-          "keyName": "ai_requests_task_name_index",
-          "constraint": false,
-          "primary": false,
-          "unique": false
-        },
-        {
-          "columnNames": [
-            "status"
-          ],
-          "composite": false,
-          "keyName": "ai_requests_status_index",
-          "constraint": false,
-          "primary": false,
-          "unique": false
-        },
-        {
-          "columnNames": [
             "created_at"
           ],
           "composite": false,
@@ -5223,6 +5203,15 @@
           "constraint": false,
           "primary": false,
           "unique": false
+        },
+        {
+          "keyName": "ai_requests_pending_index",
+          "columnNames": [],
+          "composite": false,
+          "constraint": false,
+          "primary": false,
+          "unique": false,
+          "expression": "create index \"ai_requests_pending_index\" on \"ai_requests\" (\"created_at\") where \"status\" = 'PENDING'"
         },
         {
           "keyName": "ai_requests_pkey",
@@ -5744,16 +5733,6 @@
           ],
           "composite": false,
           "keyName": "ai_request_attempts_ai_request_id_index",
-          "constraint": false,
-          "primary": false,
-          "unique": false
-        },
-        {
-          "columnNames": [
-            "provider_name"
-          ],
-          "composite": false,
-          "keyName": "ai_request_attempts_provider_name_index",
           "constraint": false,
           "primary": false,
           "unique": false

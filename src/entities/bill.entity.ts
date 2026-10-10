@@ -8,6 +8,7 @@ import {
   ManyToOne,
   Collection,
   Enum,
+  Index,
 } from '@mikro-orm/core';
 import { BaseEntity } from './base.entity';
 import { BillSubCategory } from './bill-sub-category.entity';
@@ -18,6 +19,18 @@ import { Currency } from '../types/currency.enum';
 import { BillStatus } from '../types/bill-status.enum';
 
 @Entity({ tableName: 'bills' })
+// Dashboard, bill list and drafts: household + status, range on bill_date.
+@Index({
+  name: 'bills_household_status_date_index',
+  expression:
+    'create index "bills_household_status_date_index" on "bills" ("household_id", "status", "bill_date" desc) where "deleted_at" is null',
+})
+@Index({
+  name: 'bills_market_id_index',
+  expression:
+    'create index "bills_market_id_index" on "bills" ("market_id") where "deleted_at" is null',
+})
+@Index({ name: 'bills_created_by_user_id_index', properties: ['created_by'] })
 export class Bill extends BaseEntity {
   @Property({ type: 'text', nullable: true })
   description?: string;

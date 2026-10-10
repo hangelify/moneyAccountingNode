@@ -5214,6 +5214,17 @@
           "unique": false
         },
         {
+          "columnNames": [
+            "user_id",
+            "created_at"
+          ],
+          "composite": true,
+          "keyName": "ai_requests_user_id_created_at_index",
+          "constraint": false,
+          "primary": false,
+          "unique": false
+        },
+        {
           "keyName": "ai_requests_pkey",
           "columnNames": [
             "id"

@@ -4,6 +4,8 @@ import {
   ApiBadRequestResponse,
   ApiUnauthorizedResponse,
   ApiBadGatewayResponse,
+  ApiTooManyRequestsResponse,
+  ApiServiceUnavailableResponse,
   ApiResponse,
 } from '@nestjs/swagger';
 import { ParsedBillResponseDto } from './parsed-bill-response.dto';
@@ -22,6 +24,14 @@ export function ApiParsePhotoResponses(): MethodDecorator & ClassDecorator {
     ApiBadGatewayResponse({
       description:
         'All AI providers failed. Response body includes requestId for audit lookup.',
+    }),
+    ApiTooManyRequestsResponse({
+      description:
+        'Per-user AI limit (per minute / per 24 h) or daily AI budget exceeded.',
+    }),
+    ApiServiceUnavailableResponse({
+      description:
+        'All AI call slots of this instance are busy; see Retry-After.',
     }),
   );
 }

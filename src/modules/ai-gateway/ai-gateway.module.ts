@@ -18,6 +18,7 @@ import { AiRequestLogger } from './internal/ai-request-logger';
 import { LLM_PROVIDERS, LlmProvider } from './types/llm-provider';
 import { AiTask } from './types/ai-task';
 import { AI_CALL_CONFIG, loadAiCallConfig } from './internal/ai-call-config';
+import { AI_USAGE_LIMITS, loadAiUsageLimits } from './internal/ai-usage-limits';
 
 export interface AiGatewayOptions {
   providers: Type<LlmProvider>[];
@@ -80,6 +81,7 @@ export class AiGatewayModule {
     const providers: Provider[] = [
       // Parsed once at boot: an invalid AI_* value fails startup.
       { provide: AI_CALL_CONFIG, useFactory: () => loadAiCallConfig() },
+      { provide: AI_USAGE_LIMITS, useFactory: () => loadAiUsageLimits() },
       ...providerClasses,
       {
         provide: LLM_PROVIDERS,
@@ -99,7 +101,8 @@ export class AiGatewayModule {
         MikroOrmModule.forFeature([AiRequest, AiRequestAttempt]),
       ],
       providers,
-      exports: [AiGatewayService],
+      // Limits are exported for the per-user AI throttler on HTTP routes.
+      exports: [AiGatewayService, AI_USAGE_LIMITS],
       global: true,
     };
   }

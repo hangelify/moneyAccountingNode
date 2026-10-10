@@ -1,5 +1,6 @@
 import { Test } from '@nestjs/testing';
 import { MikroOrmModule } from '@mikro-orm/nestjs';
+import { ThrottlerModule } from '@nestjs/throttler';
 import { createMikroOrmConfig } from '../../../mikro-orm.config';
 import { AiGatewayModule } from '../../ai-gateway/ai-gateway.module';
 import { BillModule } from '../../bill/bill.module';
@@ -52,6 +53,8 @@ describe('HouseholdMemberGuard wiring', () => {
         MikroOrmModule.forRoot({ ...createMikroOrmConfig(), connect: false }),
         // Global in AppModule; no AI providers are needed to build the graph.
         AiGatewayModule.forRoot({ providers: [] }),
+        // Global in AppModule; UserThrottlerGuard (parse-photo) needs it.
+        ThrottlerModule.forRoot([{ ttl: 60_000, limit: 100 }]),
         feature,
       ],
     }).compile();

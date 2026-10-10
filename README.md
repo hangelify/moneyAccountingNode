@@ -314,6 +314,10 @@ All AI provider keys are **optional**. An adapter is silently skipped at boot if
 | `AI_TRANSIENT_RETRY_ATTEMPTS` | no | `2` | Retry attempts on transient errors (connection, 408, 409, 429, 5xx) |
 | `AI_TRANSIENT_RETRY_BACKOFF_MS` | no | `500` | Base of exponential backoff with full jitter; `retry-after` on 429 is honoured (capped at 10 s) |
 | `AI_TASK_DEADLINE_MS` | no | `90000` | Total budget of one AI task across all providers (min `5000`); a further provider is skipped when less than 5 s remain |
+| `AI_USER_LIMIT_PER_MINUTE` | no | `10` | AI requests (e.g. `parse-photo`) one user may make per minute; see [Rate Limiting](#rate-limiting) |
+| `AI_USER_LIMIT_PER_DAY` | no | `100` | AI requests one user may make per 24 hours |
+| `AI_DAILY_BUDGET_USD` | no | `1` | Spend of one user on AI over the last 24 hours (sum of `ai_requests.total_cost_usd`) after which AI calls are refused with `429` |
+| `AI_MAX_CONCURRENCY` | no | `4` | AI calls running at once **per API instance**; further calls get `503` with `Retry-After` |
 
 ### Object Storage (S3 / MinIO)
 
@@ -465,8 +469,17 @@ Rate limits are enforced globally and stored in Redis so they work correctly acr
 | `POST /auth/register` | 10 requests | 60 seconds per IP |
 | `POST /auth/login` | 10 requests | 60 seconds per IP |
 | `POST /auth/refresh` | 10 requests | 60 seconds per IP |
+| AI endpoints (`POST /households/:hid/bills/parse-photo`) | `AI_USER_LIMIT_PER_MINUTE` (10) | 60 seconds per user |
+| AI endpoints | `AI_USER_LIMIT_PER_DAY` (100) | 24 hours per user |
 
-Exceeding a limit returns `429 Too Many Requests`.
+Exceeding a limit returns `429 Too Many Requests` with `Retry-After`. Once the per-day AI limit is hit, the user is blocked for a full 24 hours from that moment, not until the window rolls over.
+
+AI endpoints have further guards on top of the per-user limits:
+
+- **Daily budget.** Before each AI call the user's spend over the last 24 hours is summed from `ai_requests.total_cost_usd`. Once it reaches `AI_DAILY_BUDGET_USD` the call is refused with `429` (no `Retry-After`). Calls still in flight have no cost yet, so concurrent calls can overshoot the budget by their own cost. Calls without a recorded cost (model missing from the pricing table, or aborted before the provider reported token usage) count as $0.
+- **Concurrency.** At most `AI_MAX_CONCURRENCY` AI calls run at once; a call beyond that gets `503 Service Unavailable` with `Retry-After`. The counter lives in process memory, so with N API instances up to N × `AI_MAX_CONCURRENCY` calls may run.
+
+The per-user limits are counted after authentication (`UserThrottlerGuard`), so a client cannot dodge them by changing IP.
 
 The client IP is `req.ip`. It is derived from `X-Forwarded-For` only for proxies trusted through `TRUST_PROXY`. Leave it unset when the API is exposed directly; otherwise any client could pick a new IP per request and dodge the limits. Behind a single reverse proxy (nginx, Traefik, a cloud load balancer) set `TRUST_PROXY=1`. The proxy must overwrite or append to `X-Forwarded-For`, never pass through what the client sent. IP values that are not valid addresses are stored as `NULL` in `sessions`, `refresh_tokens` and `logs`.
 

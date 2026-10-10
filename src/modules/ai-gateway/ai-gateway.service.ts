@@ -11,13 +11,25 @@ import {
   AiAttemptStatus,
   AiAttemptErrorCode,
 } from '../../entities/ai-request-attempt.entity';
-import { AiGatewayExhaustedError, NoCapableProviderError } from './errors';
+import {
+  AiBudgetExceededError,
+  AiCapacityExceededError,
+  AiGatewayExhaustedError,
+  NoCapableProviderError,
+} from './errors';
 import { classifyError } from './internal/error-classifier';
 import { STORAGE_SERVICE } from '../storage/storage.service';
 import type { StorageService } from '../storage/storage.service';
 import { AI_CALL_CONFIG } from './internal/ai-call-config';
 import type { AiCallConfig } from './internal/ai-call-config';
 import { DeadlineExceededError, raceAbort } from './internal/retry';
+import { AI_USAGE_LIMITS } from './internal/ai-usage-limits';
+import type { AiUsageLimits } from './internal/ai-usage-limits';
+import { ConcurrencyLimiter } from './internal/concurrency-limiter';
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+/** Hint for callers refused a slot; a typical AI call takes seconds. */
+const CAPACITY_RETRY_AFTER_SEC = 10;
 
 interface Deadline {
   signal: AbortSignal;
@@ -28,27 +40,66 @@ interface Deadline {
 export class AiGatewayService {
   private readonly log = new Logger(AiGatewayService.name);
   private readonly resolver: ProviderResolver;
+  private readonly slots: ConcurrencyLimiter;
 
   constructor(
     @Inject(LLM_PROVIDERS) providers: LlmProvider[],
     @Inject(STORAGE_SERVICE) private readonly storage: StorageService,
     private readonly logger: AiRequestLogger,
     @Inject(AI_CALL_CONFIG) private readonly config: AiCallConfig,
+    @Inject(AI_USAGE_LIMITS) private readonly limits: AiUsageLimits,
   ) {
     this.resolver = new ProviderResolver(
       providers.filter((p) => p.isConfigured),
     );
+    this.slots = new ConcurrencyLimiter(limits.maxConcurrency);
   }
 
   /**
    * Runs the task within `AI_TASK_DEADLINE_MS`. When the deadline fires the
    * in-flight provider call is aborted and no further provider is tried, so
    * the caller gets an error instead of a late result nobody waits for.
+   *
+   * Refuses up front when the user has spent `AI_DAILY_BUDGET_USD` in the
+   * last 24 hours (`AiBudgetExceededError`) or when `AI_MAX_CONCURRENCY`
+   * calls already run in this process (`AiCapacityExceededError`).
    */
   async run<In, Out>(
     task: AiTask<In, Out>,
     input: In,
     opts?: { userId?: string },
+  ): Promise<Out> {
+    if (opts?.userId) await this.assertWithinBudget(opts.userId);
+    const release = this.slots.tryAcquire();
+    if (!release) {
+      throw new AiCapacityExceededError(
+        this.limits.maxConcurrency,
+        CAPACITY_RETRY_AFTER_SEC,
+      );
+    }
+    try {
+      return await this.runWithDeadline(task, input, opts);
+    } finally {
+      release();
+    }
+  }
+
+  // Requests still in flight have no cost yet, so concurrent calls of one
+  // user can overshoot the budget by what they end up costing.
+  private async assertWithinBudget(userId: string): Promise<void> {
+    const spent = await this.logger.spentSinceUsd(
+      userId,
+      new Date(Date.now() - DAY_MS),
+    );
+    if (spent >= this.limits.dailyBudgetUsd) {
+      throw new AiBudgetExceededError(spent, this.limits.dailyBudgetUsd);
+    }
+  }
+
+  private async runWithDeadline<In, Out>(
+    task: AiTask<In, Out>,
+    input: In,
+    opts: { userId?: string } | undefined,
   ): Promise<Out> {
     const ms = this.config.taskDeadlineMs;
     const endsAt = Date.now() + ms;

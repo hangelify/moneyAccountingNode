@@ -3,6 +3,7 @@ import type { DiscoveryService } from '@nestjs/core';
 import type { FactoryProvider } from '@nestjs/common';
 import { AiGatewayBootstrapper, AiGatewayModule } from './ai-gateway.module';
 import { AI_CALL_CONFIG } from './internal/ai-call-config';
+import { AI_USAGE_LIMITS } from './internal/ai-usage-limits';
 import { AiTask } from './types/ai-task';
 import { Capability } from './types/capability';
 import { LlmProvider, ProviderName } from './types/llm-provider';
@@ -134,5 +135,30 @@ describe('AiGatewayModule.forRoot (call config)', () => {
   it('fails startup on an invalid AI env value', () => {
     process.env.AI_TRANSIENT_RETRY_ATTEMPTS = 'NaN';
     expect(() => configFactory()()).toThrow('AI_TRANSIENT_RETRY_ATTEMPTS');
+  });
+});
+
+describe('AiGatewayModule.forRoot (usage limits)', () => {
+  const saved = process.env.AI_MAX_CONCURRENCY;
+  afterEach(() => {
+    if (saved === undefined) delete process.env.AI_MAX_CONCURRENCY;
+    else process.env.AI_MAX_CONCURRENCY = saved;
+  });
+
+  it('provides and exports the parsed usage limits', () => {
+    process.env.AI_MAX_CONCURRENCY = '7';
+    const mod = AiGatewayModule.forRoot({ providers: [] });
+    const provider = (mod.providers ?? []).find(
+      (p) =>
+        typeof p === 'object' &&
+        'provide' in p &&
+        p.provide === AI_USAGE_LIMITS,
+    ) as FactoryProvider<unknown> | undefined;
+
+    expect(provider).toBeDefined();
+    expect((provider!.useFactory as () => unknown)()).toMatchObject({
+      maxConcurrency: 7,
+    });
+    expect(mod.exports).toContain(AI_USAGE_LIMITS);
   });
 });

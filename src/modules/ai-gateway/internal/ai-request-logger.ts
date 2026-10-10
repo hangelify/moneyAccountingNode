@@ -53,6 +53,18 @@ export class AiRequestLogger {
 
   constructor(private readonly em: EntityManager) {}
 
+  /** Sum of `total_cost_usd` of the user's requests created after `since`. */
+  async spentSinceUsd(userId: string, since: Date): Promise<number> {
+    const rows = await (this.em
+      .fork()
+      .getConnection()
+      .execute(
+        'SELECT SUM(total_cost_usd) AS spent FROM ai_requests WHERE user_id = ? AND created_at > ?',
+        [userId, since],
+      ) as Promise<Array<{ spent: string | null }>>);
+    return Number(rows[0]?.spent ?? 0);
+  }
+
   async begin(args: BeginArgs): Promise<{ parentId: string }> {
     const em = this.em.fork();
     const now = new Date();

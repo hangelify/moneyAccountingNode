@@ -1,6 +1,6 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import { z } from 'zod';
 import { AiTask } from './types/ai-task';
+import type { AiTaskResult } from './types/ai-task';
 import type { LlmProvider } from './types/llm-provider';
 import { LLM_PROVIDERS } from './types/llm-provider';
 import { LlmRequest } from './types/llm-request';
@@ -26,6 +26,7 @@ import { DeadlineExceededError, raceAbort } from './internal/retry';
 import { AI_USAGE_LIMITS } from './internal/ai-usage-limits';
 import type { AiUsageLimits } from './internal/ai-usage-limits';
 import { ConcurrencyLimiter } from './internal/concurrency-limiter';
+import { toProviderJsonSchema } from './internal/provider-json-schema';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 /** Hint for callers refused a slot; a typical AI call takes seconds. */
@@ -56,7 +57,9 @@ export class AiGatewayService {
   }
 
   /**
-   * Runs the task within `AI_TASK_DEADLINE_MS`. When the deadline fires the
+   * Runs the task within `AI_TASK_DEADLINE_MS` and returns its output with
+   * the `ai_requests` id, so a caller that fails afterwards can still point
+   * at the paid-for result. When the deadline fires the
    * in-flight provider call is aborted and no further provider is tried, so
    * the caller gets an error instead of a late result nobody waits for.
    *
@@ -68,7 +71,7 @@ export class AiGatewayService {
     task: AiTask<In, Out>,
     input: In,
     opts?: { userId?: string },
-  ): Promise<Out> {
+  ): Promise<AiTaskResult<Out>> {
     if (opts?.userId) await this.assertWithinBudget(opts.userId);
     const release = this.slots.tryAcquire();
     if (!release) {
@@ -100,7 +103,7 @@ export class AiGatewayService {
     task: AiTask<In, Out>,
     input: In,
     opts: { userId?: string } | undefined,
-  ): Promise<Out> {
+  ): Promise<AiTaskResult<Out>> {
     const ms = this.config.taskDeadlineMs;
     const endsAt = Date.now() + ms;
     const ctrl = new AbortController();
@@ -123,7 +126,7 @@ export class AiGatewayService {
     input: In,
     opts: { userId?: string } | undefined,
     deadline: Deadline,
-  ): Promise<Out> {
+  ): Promise<AiTaskResult<Out>> {
     // 1. Input validation
     task.inputSchema.parse(input);
 
@@ -142,9 +145,7 @@ export class AiGatewayService {
     }
 
     // 4. Compile JSON schema once
-    const jsonSchema = z.toJSONSchema(
-      task.outputSchema as unknown as Parameters<typeof z.toJSONSchema>[0],
-    ) as object;
+    const jsonSchema = toProviderJsonSchema(task.outputSchema);
 
     // 5. Open audit parent row
     const promptForLog = {
@@ -234,7 +235,7 @@ export class AiGatewayService {
           chosenAttemptId: attemptId,
           finalOutput: parsed.data,
         });
-        return parsed.data;
+        return { data: parsed.data, requestId: parentId };
       } catch (err) {
         const latencyMs = Date.now() - t0;
         const { code, message } = classifyError(err);

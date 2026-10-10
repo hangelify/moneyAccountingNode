@@ -16,6 +16,8 @@ import {
   ParseFilePipe,
   MaxFileSizeValidator,
   FileTypeValidator,
+  Logger,
+  UnprocessableEntityException,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import {
@@ -69,6 +71,8 @@ const MAX_IMAGE_SIZE_BYTES = 10 * 1024 * 1024;
 @UseGuards(JwtAuthGuard, HouseholdMemberGuard)
 @ApiBearerAuth('JWT-auth')
 export class BillController {
+  private readonly log = new Logger(BillController.name);
+
   constructor(
     private readonly billPhoto: BillPhotoService,
     private readonly billCrud: BillCrudService,
@@ -107,17 +111,34 @@ export class BillController {
     )
     file: Express.Multer.File,
   ): Promise<ParsedBillResponseDto> {
-    const parsed = await this.billPhoto.parseAndCategorize(
+    const { parsed, requestId } = await this.billPhoto.parseAndCategorize(
       file.buffer,
       file.mimetype as 'image/png' | 'image/jpeg' | 'image/webp',
       ctx.householdId,
       user.id,
     );
-    const draftId = await this.billCrud.createDraftFromParsed(
-      ctx.householdId,
-      user.id,
-      parsed,
-    );
+    let draftId: string;
+    try {
+      draftId = await this.billCrud.createDraftFromParsed(
+        ctx.householdId,
+        user.id,
+        parsed,
+      );
+    } catch (err) {
+      // The AI call is already paid for: hand back what it recognized so the
+      // client can create the bill manually instead of paying again.
+      this.log.error(
+        `Saving the draft for AI request ${requestId} failed`,
+        err instanceof Error ? err.stack : String(err),
+      );
+      throw new UnprocessableEntityException({
+        statusCode: HttpStatus.UNPROCESSABLE_ENTITY,
+        message:
+          'The bill was recognized but the draft could not be saved; create it manually',
+        request_id: requestId,
+        parsed,
+      });
+    }
     return { ...parsed, draft_id: draftId };
   }
 

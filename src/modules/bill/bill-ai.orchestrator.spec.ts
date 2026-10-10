@@ -32,7 +32,9 @@ describe('BillAiOrchestrator', () => {
       },
     ];
 
-    const runMock = jest.fn().mockResolvedValueOnce(bill);
+    const runMock = jest
+      .fn()
+      .mockResolvedValueOnce({ data: bill, requestId: 'req-1' });
     const parser = { name: 'bill.parse' } as unknown as BillParserTask;
     const parseCategorize = {
       name: 'bill.parse-categorize',
@@ -52,7 +54,7 @@ describe('BillAiOrchestrator', () => {
       subcategories,
     );
 
-    expect(result).toEqual(bill);
+    expect(result).toEqual({ data: bill, requestId: 'req-1' });
     expect(runMock).toHaveBeenCalledTimes(1);
     expect(runMock).toHaveBeenCalledWith(
       parseCategorize,
@@ -61,7 +63,7 @@ describe('BillAiOrchestrator', () => {
     );
   });
 
-  it('parseOnly calls only the parser and returns its ParsedBill directly', async () => {
+  it('parseOnly calls only the parser and returns its ParsedBill with the request id', async () => {
     const parsed = {
       market_name: 'Lidl',
       bill_date: null,
@@ -70,7 +72,8 @@ describe('BillAiOrchestrator', () => {
       items: [],
       raw_extracted_text: '',
     };
-    const runMock = jest.fn().mockResolvedValueOnce(parsed);
+    const out = { data: parsed, requestId: 'req-2' };
+    const runMock = jest.fn().mockResolvedValueOnce(out);
     const parser = { name: 'bill.parse' } as unknown as BillParserTask;
     const parseCategorize = {
       name: 'bill.parse-categorize',
@@ -85,7 +88,7 @@ describe('BillAiOrchestrator', () => {
     const buf = Buffer.from('img');
     const res = await orchestrator.parseOnly(buf, 'image/jpeg', 'user-1');
 
-    expect(res).toBe(parsed);
+    expect(res).toBe(out);
     expect(runMock).toHaveBeenCalledTimes(1);
     expect(runMock).toHaveBeenCalledWith(
       parser,

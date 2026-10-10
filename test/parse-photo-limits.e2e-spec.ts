@@ -18,13 +18,16 @@ describe('parse-photo per-user AI limit (e2e)', () => {
   let app: NestExpressApplication;
   // Stands in for the AI call: the limit is under test, not the parsing.
   const parseAndCategorize = jest.fn().mockResolvedValue({
-    draft_id: '',
-    market_name: null,
-    bill_date: null,
-    currency: null,
-    total_amount: null,
-    raw_extracted_text: '',
-    items: [],
+    parsed: {
+      draft_id: '',
+      market_name: null,
+      bill_date: null,
+      currency: null,
+      total_amount: null,
+      raw_extracted_text: '',
+      items: [],
+    },
+    requestId: '00000000-0000-4000-8000-000000000000',
   });
 
   beforeAll(async () => {

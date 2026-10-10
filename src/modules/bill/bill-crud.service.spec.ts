@@ -752,5 +752,106 @@ describe('BillCrudService', () => {
       expect(bsc2.raw_name).toBe('Unknown item');
       expect(bsc2.sub_category).toBeUndefined();
     });
+
+    // The DTO normally comes out of the zod schema; these guard the DB
+    // columns if it does not.
+    describe('coerces values the columns cannot hold', () => {
+      const item: ParsedBillResponseDto['items'][number] = {
+        name: 'BREAD',
+        quantity: 1,
+        unit: 'piece',
+        weight_kg: null,
+        price_per_kg: null,
+        final_price: 1.2,
+        sub_category: null,
+        category_confidence: 0.5,
+      };
+      const base: ParsedBillResponseDto = {
+        draft_id: '',
+        market_name: null,
+        bill_date: '2026-05-07',
+        currency: 'EUR',
+        total_amount: 1.2,
+        raw_extracted_text: '',
+        items: [item],
+      };
+
+      async function draft(parsed: ParsedBillResponseDto) {
+        const { service, em } = makeService();
+        await service.createDraftFromParsed(householdId, userId, parsed);
+        const calls = (em.persist as jest.Mock).mock.calls as [unknown][];
+        return {
+          bill: calls[0][0] as Bill,
+          bsc: calls[1]?.[0] as BillSubCategory | undefined,
+        };
+      }
+
+      it.each([
+        ['EUR', Currency.EUR],
+        ['eur', Currency.EUR],
+        ['LEI', undefined],
+        ['AUD', undefined],
+      ])('currency %p -> %p', async (raw, expected) => {
+        const { bill } = await draft({ ...base, currency: raw });
+        expect(bill.currency).toBe(expected);
+      });
+
+      it('keeps a valid ISO bill_date', async () => {
+        const { bill } = await draft(base);
+        expect(bill.bill_date.toISOString().slice(0, 10)).toBe('2026-05-07');
+      });
+
+      it.each(['07.05.2026', '2026-02-30', '0000-01-01', 'garbage'])(
+        'replaces bill_date %p with a valid date',
+        async (raw) => {
+          const { bill } = await draft({ ...base, bill_date: raw });
+          expect(Number.isNaN(bill.bill_date.getTime())).toBe(false);
+          expect(bill.bill_date.getUTCFullYear()).toBeGreaterThan(2000);
+        },
+      );
+
+      it('falls back to 0 for an out-of-range total', async () => {
+        const { bill } = await draft({ ...base, total_amount: 1e20 });
+        expect(bill.amount).toBe(0);
+      });
+
+      it('truncates raw_name to 255 chars', async () => {
+        const { bsc } = await draft({
+          ...base,
+          items: [{ ...item, name: 'x'.repeat(300) }],
+        });
+        expect(bsc?.raw_name).toHaveLength(255);
+      });
+
+      it('drops out-of-range item numbers and unknown units', async () => {
+        const { bsc } = await draft({
+          ...base,
+          items: [
+            {
+              ...item,
+              quantity: 1e12,
+              unit: 'kilograms' as never,
+              weight_kg: 1e8,
+              price_per_kg: 1e9,
+              final_price: Infinity,
+              category_confidence: 1.7,
+            },
+          ],
+        });
+        expect(bsc).toMatchObject({ product_count: 1, amount: 0 });
+        expect(bsc?.unit).toBeUndefined();
+        expect(bsc?.product_weight).toBeUndefined();
+        expect(bsc?.price_per_unit).toBeUndefined();
+        expect(bsc?.category_confidence).toBeUndefined();
+      });
+
+      it('drops a negative category confidence', async () => {
+        const { bsc } = await draft({
+          ...base,
+          items: [{ ...item, category_confidence: -0.5 }],
+        });
+        expect(bsc?.category_confidence).toBeUndefined();
+      });
+    });
   });
 });

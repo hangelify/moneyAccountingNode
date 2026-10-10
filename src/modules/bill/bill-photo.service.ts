@@ -23,19 +23,19 @@ export class BillPhotoService {
     mediaType: 'image/png' | 'image/jpeg' | 'image/webp',
     householdId: string,
     userId: string,
-  ): Promise<ParsedBillResponseDto> {
+  ): Promise<{ parsed: ParsedBillResponseDto; requestId: string }> {
     const subs = await this.subCategoryRepo.find(
       { deleted_at: null, category: { household: { id: householdId } } },
       { populate: ['category'] },
     );
 
     if (subs.length === 0) {
-      const parsed = await this.orchestrator.parseOnly(
+      const { data, requestId } = await this.orchestrator.parseOnly(
         image,
         mediaType,
         userId,
       );
-      return this.fromParsed(parsed);
+      return { parsed: this.fromParsed(data), requestId };
     }
 
     const byId = new Map(subs.map((s) => [s.id, s]));
@@ -45,13 +45,13 @@ export class BillPhotoService {
       sub_category_name: s.name,
     }));
 
-    const bill = await this.orchestrator.parseAndCategorize(
+    const { data, requestId } = await this.orchestrator.parseAndCategorize(
       image,
       mediaType,
       userId,
       subcategories,
     );
-    return this.fromParsedAndCategorized(bill, byId);
+    return { parsed: this.fromParsedAndCategorized(data, byId), requestId };
   }
 
   private fromParsed(parsed: ParsedBill): ParsedBillResponseDto {
@@ -102,7 +102,7 @@ export class BillPhotoService {
           sub_category: sub
             ? { id: sub.id, name: sub.name, category_name: sub.category.name }
             : null,
-          category_confidence: it.category_confidence,
+          category_confidence: it.category_confidence ?? 0,
           category_reasoning: it.category_reasoning ?? undefined,
         };
       }),

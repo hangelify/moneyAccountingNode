@@ -17,6 +17,7 @@ import { AiGatewayService } from './ai-gateway.service';
 import { AiRequestLogger } from './internal/ai-request-logger';
 import { LLM_PROVIDERS, LlmProvider } from './types/llm-provider';
 import { AiTask } from './types/ai-task';
+import { AI_CALL_CONFIG, loadAiCallConfig } from './internal/ai-call-config';
 
 export interface AiGatewayOptions {
   providers: Type<LlmProvider>[];
@@ -77,6 +78,8 @@ export class AiGatewayModule {
   static forRoot(options: AiGatewayOptions): DynamicModule {
     const providerClasses = options.providers;
     const providers: Provider[] = [
+      // Parsed once at boot: an invalid AI_* value fails startup.
+      { provide: AI_CALL_CONFIG, useFactory: () => loadAiCallConfig() },
       ...providerClasses,
       {
         provide: LLM_PROVIDERS,

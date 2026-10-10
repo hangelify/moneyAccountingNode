@@ -1,8 +1,14 @@
 import { Capability } from '../../types/capability';
-import { LlmProvider, ProviderName } from '../../types/llm-provider';
+import {
+  LlmCallOptions,
+  LlmProvider,
+  ProviderName,
+} from '../../types/llm-provider';
 import { LlmRequest, LlmResponse } from '../../types/llm-request';
 
-export type FakeProviderScript = Array<() => Promise<LlmResponse>>;
+export type FakeProviderScript = Array<
+  (opts?: LlmCallOptions) => Promise<LlmResponse>
+>;
 
 export class FakeLlmProvider implements LlmProvider {
   readonly isConfigured = true;
@@ -18,8 +24,7 @@ export class FakeLlmProvider implements LlmProvider {
     this.defaultModel = opts?.defaultModel ?? 'fake-model';
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  complete(_req: LlmRequest): Promise<LlmResponse> {
+  complete(_req: LlmRequest, opts?: LlmCallOptions): Promise<LlmResponse> {
     const step = this.script[this.callIdx++];
     if (!step) {
       return Promise.reject(
@@ -28,7 +33,7 @@ export class FakeLlmProvider implements LlmProvider {
         ),
       );
     }
-    return step();
+    return step(opts);
   }
 
   isTransient(err: unknown): boolean {

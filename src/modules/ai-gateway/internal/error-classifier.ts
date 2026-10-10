@@ -1,5 +1,11 @@
+import Anthropic from '@anthropic-ai/sdk';
+import OpenAI from 'openai';
 import { AiAttemptErrorCode } from '../../../entities/ai-request-attempt.entity';
-import { RetryExhaustedError, TimeoutError } from './retry';
+import {
+  DeadlineExceededError,
+  RetryExhaustedError,
+  TimeoutError,
+} from './retry';
 
 export class InvalidResponseError extends Error {
   constructor(
@@ -34,7 +40,12 @@ function messageOf(err: unknown): string {
 }
 
 export function classifyError(err: unknown): ClassifiedError {
-  if (err instanceof TimeoutError) {
+  if (
+    err instanceof TimeoutError ||
+    err instanceof DeadlineExceededError ||
+    err instanceof Anthropic.APIConnectionTimeoutError ||
+    err instanceof OpenAI.APIConnectionTimeoutError
+  ) {
     return { code: AiAttemptErrorCode.TIMEOUT, message: err.message };
   }
   if (err instanceof InvalidResponseError) {

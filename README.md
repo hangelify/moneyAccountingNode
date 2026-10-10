@@ -310,9 +310,10 @@ All AI provider keys are **optional**. An adapter is silently skipped at boot if
 | `OPENAI_MODEL` | no* | `gpt-4o` | Model ID. Required when `OPENAI_API_KEY` is set |
 | `DEEPSEEK_API_KEY` | no | — | DeepSeek API key |
 | `DEEPSEEK_MODEL` | no* | `deepseek-chat` | Model ID. Required when `DEEPSEEK_API_KEY` is set |
-| `AI_CALL_TIMEOUT_MS` | no | `60000` | Per-call timeout in milliseconds |
-| `AI_TRANSIENT_RETRY_ATTEMPTS` | no | `2` | Retry attempts on transient errors |
-| `AI_TRANSIENT_RETRY_BACKOFF_MS` | no | `500` | Initial backoff between retries in milliseconds |
+| `AI_CALL_TIMEOUT_MS` | no | `60000` | Per-call timeout in milliseconds; the HTTP request is aborted and not retried on the same provider |
+| `AI_TRANSIENT_RETRY_ATTEMPTS` | no | `2` | Retry attempts on transient errors (connection, 408, 409, 429, 5xx) |
+| `AI_TRANSIENT_RETRY_BACKOFF_MS` | no | `500` | Base of exponential backoff with full jitter; `retry-after` on 429 is honoured (capped at 10 s) |
+| `AI_TASK_DEADLINE_MS` | no | `90000` | Total budget of one AI task across all providers (min `5000`); a further provider is skipped when less than 5 s remain |
 
 ### Object Storage (S3 / MinIO)
 

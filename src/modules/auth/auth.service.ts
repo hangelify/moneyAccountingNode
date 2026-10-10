@@ -21,6 +21,7 @@ import { TokenResponseDto } from './dto/token-response.dto';
 import { JwtPayload } from './types/jwt-payload.interface';
 import { requireEnv, requireIntEnv } from './auth.env';
 import { CategoryDefaultsService } from '../category/category-defaults.service';
+import { sanitizeIp } from '../../common/utils/ip.util';
 
 interface IssuedTokens {
   tokens: TokenResponseDto;
@@ -268,7 +269,8 @@ export class AuthService {
     });
 
     freshSession.last_activity_at = now;
-    if (ipAddress) freshSession.ip_address = ipAddress;
+    const sanitizedIp = sanitizeIp(ipAddress);
+    if (sanitizedIp) freshSession.ip_address = sanitizedIp;
     if (userAgent) freshSession.user_agent = userAgent;
 
     const issued = await this.issueTokensForSession(
@@ -335,7 +337,7 @@ export class AuthService {
 
     const session = this.sessionRepository.create({
       user,
-      ip_address: ipAddress,
+      ip_address: sanitizeIp(ipAddress),
       user_agent: userAgent,
       created_at: now,
       absolute_expires_at: new Date(now.getTime() + sessionLifetimeMs),
@@ -411,7 +413,7 @@ export class AuthService {
       session,
       token_hash: refreshTokenHash,
       jti: refreshJti,
-      ip_address: ipAddress,
+      ip_address: sanitizeIp(ipAddress),
       user_agent: userAgent,
       created_at: new Date(),
       expires_at: refreshExpiresAt,
@@ -462,7 +464,7 @@ export class AuthService {
       context: 'Authentication',
       message: `Auth attempt: ${message} - ${email}`,
       metadata: { email, success },
-      ip_address: ipAddress,
+      ip_address: sanitizeIp(ipAddress),
       user_agent: userAgent,
       created_at: new Date(),
     });

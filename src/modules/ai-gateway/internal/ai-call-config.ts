@@ -17,9 +17,14 @@ export interface AiCallConfig {
   minAttemptBudgetMs: number;
 }
 
-type Env = Record<string, string | undefined>;
+export type Env = Record<string, string | undefined>;
 
-function readInt(env: Env, name: string, def: number, min: number): number {
+export function readInt(
+  env: Env,
+  name: string,
+  def: number,
+  min: number,
+): number {
   const raw = env[name];
   if (raw === undefined || raw.trim() === '') return def;
   const value = /^\d+$/.test(raw.trim()) ? Number(raw) : NaN;

@@ -20,6 +20,8 @@ export enum AiRequestStatus {
 }
 
 @Entity({ tableName: 'ai_requests' })
+// Daily AI budget: SUM(total_cost_usd) per user over the last 24 hours.
+@Index({ properties: ['user', 'created_at'] })
 export class AiRequest extends BaseEntity {
   @Property({ type: 'varchar', length: 128, nullable: false })
   @Index()

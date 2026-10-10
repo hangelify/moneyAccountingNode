@@ -16,11 +16,22 @@ import { LLM_PROVIDERS, LlmProvider } from './types/llm-provider';
 import { Capability } from './types/capability';
 import { LlmResponse } from './types/llm-request';
 import { FakeLlmProvider } from './providers/__fixtures__/fake.provider';
-import { AiGatewayExhaustedError, NoCapableProviderError } from './errors';
+import {
+  AiBudgetExceededError,
+  AiCapacityExceededError,
+  AiGatewayExhaustedError,
+  NoCapableProviderError,
+} from './errors';
 import { STORAGE_SERVICE, StorageService } from '../storage/storage.service';
 import { AI_CALL_CONFIG, AiCallConfig } from './internal/ai-call-config';
 import { DeadlineExceededError } from './internal/retry';
 import { testAiCallConfig } from './providers/__fixtures__/call-bounds.shared';
+import {
+  AI_USAGE_LIMITS,
+  AiUsageLimits,
+  loadAiUsageLimits,
+} from './internal/ai-usage-limits';
+import { User } from '../../entities/user.entity';
 
 jest.setTimeout(30_000);
 
@@ -109,6 +120,7 @@ async function buildModule(
   providers: LlmProvider[],
   mockStorage: StorageService,
   config: AiCallConfig,
+  limits: AiUsageLimits,
 ) {
   return Test.createTestingModule({
     imports: [
@@ -130,6 +142,7 @@ async function buildModule(
       { provide: LLM_PROVIDERS, useValue: providers },
       { provide: STORAGE_SERVICE, useValue: mockStorage },
       { provide: AI_CALL_CONFIG, useValue: config },
+      { provide: AI_USAGE_LIMITS, useValue: limits },
     ],
   }).compile();
 }
@@ -153,8 +166,12 @@ describe('AiGatewayService', () => {
   async function boot(
     providers: LlmProvider[],
     config: AiCallConfig = testAiCallConfig(),
+    limits: Partial<AiUsageLimits> = {},
   ) {
-    const mod = await buildModule(providers, mockStorage, config);
+    const mod = await buildModule(providers, mockStorage, config, {
+      ...loadAiUsageLimits({}),
+      ...limits,
+    });
     orm = mod.get(MikroORM);
     em = orm.em;
     return mod.get(AiGatewayService);
@@ -562,5 +579,162 @@ describe('AiGatewayService', () => {
 
     const attempts = await findOwnedAttempts();
     expect(attempts).toHaveLength(0);
+  });
+
+  describe('daily budget', () => {
+    let userId: string;
+
+    beforeEach(() => {
+      userId = '';
+    });
+
+    afterEach(async () => {
+      if (userId) {
+        await em
+          .fork()
+          .getConnection()
+          .execute('DELETE FROM users WHERE id = ?', [userId]);
+      }
+    });
+
+    async function createUser(): Promise<string> {
+      const fork = em.fork();
+      const user = fork.create(User, {
+        first_name: 'Budget',
+        email: `budget-${Date.now()}-${Math.random().toString(36).slice(2)}@example.com`,
+        password: 'x',
+      } as never);
+      await fork.persist(user).flush();
+      return user.id;
+    }
+
+    /** A finished audit row of `costUsd`, `hoursAgo` hours back. */
+    async function spend(costUsd: number, hoursAgo = 0) {
+      await em
+        .fork()
+        .getConnection()
+        .execute(
+          `INSERT INTO ai_requests
+             (id, task_name, user_id, status, required_capabilities, prompt,
+              total_cost_usd, created_at, updated_at)
+           VALUES (gen_random_uuid(), 'test.ping', ?, 'SUCCESS', '[]', '{"messages":[]}',
+              ?, NOW() - make_interval(hours => ?), NOW())`,
+          [userId, costUsd, hoursAgo],
+        );
+    }
+
+    it('refuses before uploading or calling a provider once the 24h spend reaches the budget', async () => {
+      const step = jest.fn(okResponse({ ok: true }));
+      const fake = new FakeLlmProvider(
+        'openai',
+        new Set<Capability>(['text', 'vision', 'json']),
+        [step],
+      );
+      const svc = await boot([fake], undefined, { dailyBudgetUsd: 1 });
+      await cleanupOwnedRows();
+      userId = await createUser();
+      await spend(0.6);
+      await spend(0.4);
+
+      const err: unknown = await svc
+        .run(new VisionPingTask(), { data: Buffer.from([1]) }, { userId })
+        .catch((e: unknown) => e);
+
+      expect(err).toBeInstanceOf(AiBudgetExceededError);
+      expect(err).toMatchObject({ spentUsd: 1, budgetUsd: 1 });
+      expect(step).not.toHaveBeenCalled();
+      expect(putSpy).not.toHaveBeenCalled();
+      expect(await findOwnedParents()).toHaveLength(2);
+    });
+
+    it('lets the call through while under budget, ignoring spend older than 24h', async () => {
+      const fake = new FakeLlmProvider(
+        'openai',
+        new Set<Capability>(['text', 'json']),
+        [okResponse({ ok: true })],
+      );
+      const svc = await boot([fake], undefined, { dailyBudgetUsd: 1 });
+      await cleanupOwnedRows();
+      userId = await createUser();
+      await spend(0.9);
+      await spend(5, 25);
+
+      await expect(
+        svc.run(new PingTask(), { n: 1 }, { userId }),
+      ).resolves.toEqual({ ok: true });
+    });
+  });
+
+  describe('concurrency limit', () => {
+    function deferred() {
+      let resolve!: (r: LlmResponse) => void;
+      const promise = new Promise<LlmResponse>((r) => (resolve = r));
+      return { promise, resolve };
+    }
+
+    const okJson: LlmResponse = {
+      text: '{"ok":true}',
+      json: { ok: true },
+      model: 'fake-model',
+      usage: { inputTokens: 1, outputTokens: 1 },
+    };
+
+    it('refuses a call beyond AI_MAX_CONCURRENCY and frees the slot when a call ends', async () => {
+      const first = deferred();
+      const fake = new FakeLlmProvider(
+        'openai',
+        new Set<Capability>(['text', 'json']),
+        [() => first.promise, okResponse({ ok: true })],
+      );
+      const svc = await boot([fake], undefined, { maxConcurrency: 1 });
+      await cleanupOwnedRows();
+
+      const running = svc.run(new PingTask(), { n: 1 });
+      const err: unknown = await svc
+        .run(new PingTask(), { n: 2 })
+        .catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(AiCapacityExceededError);
+      expect((err as AiCapacityExceededError).retryAfterSec).toBeGreaterThan(0);
+
+      first.resolve(okJson);
+      await expect(running).resolves.toEqual({ ok: true });
+      await expect(svc.run(new PingTask(), { n: 3 })).resolves.toEqual({
+        ok: true,
+      });
+    });
+
+    it('frees the slot when a call fails', async () => {
+      const fake = new FakeLlmProvider(
+        'openai',
+        new Set<Capability>(['text', 'json']),
+        [errResponse(new Error('boom')), okResponse({ ok: true })],
+      );
+      const svc = await boot([fake], undefined, { maxConcurrency: 1 });
+      await cleanupOwnedRows();
+
+      await expect(svc.run(new PingTask(), { n: 1 })).rejects.toBeInstanceOf(
+        AiGatewayExhaustedError,
+      );
+      await expect(svc.run(new PingTask(), { n: 2 })).resolves.toEqual({
+        ok: true,
+      });
+    });
+
+    it('frees the slot when the task input is invalid', async () => {
+      const fake = new FakeLlmProvider(
+        'openai',
+        new Set<Capability>(['text', 'json']),
+        [okResponse({ ok: true })],
+      );
+      const svc = await boot([fake], undefined, { maxConcurrency: 1 });
+      await cleanupOwnedRows();
+
+      await expect(
+        svc.run(new PingTask(), { n: 'x' } as unknown as PingIn),
+      ).rejects.toThrow();
+      await expect(svc.run(new PingTask(), { n: 2 })).resolves.toEqual({
+        ok: true,
+      });
+    });
   });
 });

@@ -1,4 +1,8 @@
 import { Test } from '@nestjs/testing';
+import {
+  EXCEPTION_FILTERS_METADATA,
+  GUARDS_METADATA,
+} from '@nestjs/common/constants';
 import { APP_FILTER } from '@nestjs/core';
 import { BillController } from './bill.controller';
 import { BillPhotoService } from './bill-photo.service';
@@ -8,6 +12,8 @@ import { BillDashboardQueryDto } from './dto/bill-dashboard.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { HouseholdMemberGuard } from '../household/guards/household-member.guard';
 import { AiGatewayExhaustedFilter } from './filters/ai-gateway-exhausted.filter';
+import { AiUsageLimitFilter } from './filters/ai-usage-limit.filter';
+import { UserThrottlerGuard } from '../ai-gateway/guards/user-throttler.guard';
 
 describe('BillController', () => {
   let controller: BillController;
@@ -43,6 +49,8 @@ describe('BillController', () => {
       .overrideGuard(JwtAuthGuard)
       .useValue({ canActivate: () => true })
       .overrideGuard(HouseholdMemberGuard)
+      .useValue({ canActivate: () => true })
+      .overrideGuard(UserThrottlerGuard)
       .useValue({ canActivate: () => true })
       .compile();
     controller = mod.get(BillController);
@@ -83,6 +91,30 @@ describe('BillController', () => {
       dto,
     );
     expect(res).toEqual({ ...dto, draft_id: draftId });
+  });
+
+  describe('parsePhoto limits', () => {
+    const handler = Object.getOwnPropertyDescriptor(
+      BillController.prototype,
+      'parsePhoto',
+    )!.value as object;
+
+    it('throttles per user after the controller-level auth guards', () => {
+      // Method guards run after class guards, so req.user is already set.
+      expect(Reflect.getMetadata(GUARDS_METADATA, BillController)).toEqual([
+        JwtAuthGuard,
+        HouseholdMemberGuard,
+      ]);
+      expect(Reflect.getMetadata(GUARDS_METADATA, handler)).toEqual([
+        UserThrottlerGuard,
+      ]);
+    });
+
+    it('maps AI usage-limit errors to HTTP', () => {
+      expect(
+        Reflect.getMetadata(EXCEPTION_FILTERS_METADATA, handler),
+      ).toContain(AiUsageLimitFilter);
+    });
   });
 
   describe('getDashboard', () => {

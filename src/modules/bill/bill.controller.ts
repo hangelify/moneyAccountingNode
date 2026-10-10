@@ -59,6 +59,8 @@ import {
 import { ListBillsQueryDto } from './dto/list-bills-query.dto';
 import { ConfirmBillDto } from './dto/confirm-bill.dto';
 import { AiGatewayExhaustedFilter } from './filters/ai-gateway-exhausted.filter';
+import { AiUsageLimitFilter } from './filters/ai-usage-limit.filter';
+import { UserThrottlerGuard } from '../ai-gateway/guards/user-throttler.guard';
 
 const MAX_IMAGE_SIZE_BYTES = 10 * 1024 * 1024;
 
@@ -75,8 +77,10 @@ export class BillController {
 
   @Post('parse-photo')
   @HttpCode(HttpStatus.OK)
+  // Runs after the class-level JwtAuthGuard, so it can count per user.
+  @UseGuards(UserThrottlerGuard)
   @UseInterceptors(FileInterceptor('image'))
-  @UseFilters(AiGatewayExhaustedFilter)
+  @UseFilters(AiGatewayExhaustedFilter, AiUsageLimitFilter)
   @ApiOperation({
     summary:
       'Upload a grocery receipt photo; return parsed + categorized items. Image is stored to S3; the AI request is audited.',

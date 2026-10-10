@@ -118,7 +118,11 @@ export const ApiConfirmBillResponses = () =>
     }),
     ApiResponse({
       status: 404,
-      description: 'Draft bill not found or already confirmed',
+      description: 'Draft bill not found',
+    }),
+    ApiResponse({
+      status: 409,
+      description: 'Bill is already confirmed',
     }),
     ApiResponse({
       status: 400,

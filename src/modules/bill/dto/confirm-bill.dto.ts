@@ -6,6 +6,8 @@ import {
   IsString,
   IsOptional,
   IsArray,
+  ArrayMinSize,
+  ArrayMaxSize,
   ValidateNested,
   IsPositive,
   Length,
@@ -13,7 +15,7 @@ import {
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Currency } from '../../../types/currency.enum';
-import { CreateBillItemDto } from './create-bill.dto';
+import { CreateBillItemDto, MAX_BILL_ITEMS } from './create-bill.dto';
 
 export class NewMarketDto {
   @ApiProperty({ example: 'Lidl' })
@@ -79,8 +81,14 @@ export class ConfirmBillDto {
   @IsOptional()
   description?: string;
 
-  @ApiProperty({ type: [CreateBillItemDto] })
+  @ApiProperty({
+    type: [CreateBillItemDto],
+    minItems: 1,
+    maxItems: MAX_BILL_ITEMS,
+  })
   @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(MAX_BILL_ITEMS)
   @ValidateNested({ each: true })
   @Type(() => CreateBillItemDto)
   items!: CreateBillItemDto[];

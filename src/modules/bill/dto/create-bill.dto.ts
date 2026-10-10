@@ -8,12 +8,16 @@ import {
   IsInt,
   IsPositive,
   IsArray,
+  ArrayMinSize,
+  ArrayMaxSize,
   ValidateNested,
   Min,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Currency } from '../../../types/currency.enum';
+
+export const MAX_BILL_ITEMS = 200;
 
 export class CreateBillItemDto {
   @ApiProperty({ format: 'uuid' })
@@ -61,8 +65,14 @@ export class CreateBillDto {
   @IsOptional()
   description?: string;
 
-  @ApiProperty({ type: [CreateBillItemDto] })
+  @ApiProperty({
+    type: [CreateBillItemDto],
+    minItems: 1,
+    maxItems: MAX_BILL_ITEMS,
+  })
   @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(MAX_BILL_ITEMS)
   @ValidateNested({ each: true })
   @Type(() => CreateBillItemDto)
   items!: CreateBillItemDto[];

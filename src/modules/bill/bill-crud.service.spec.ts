@@ -1,5 +1,9 @@
 /* eslint-disable @typescript-eslint/unbound-method */
-import { NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  NotFoundException,
+  BadRequestException,
+  ConflictException,
+} from '@nestjs/common';
 import { EntityManager, EntityRepository } from '@mikro-orm/core';
 import { BillCrudService } from './bill-crud.service';
 import { Bill } from '../../entities/bill.entity';
@@ -48,16 +52,20 @@ function makeService() {
     findOne: jest.fn(),
   } as unknown as EntityRepository<Market>;
   const subCategoryRepo = {
-    findOne: jest.fn(),
+    find: jest.fn(),
   } as unknown as EntityRepository<SubCategory>;
   const mockExecute = jest.fn();
   const em = {
     persist: jest.fn().mockReturnThis(),
     flush: jest.fn().mockResolvedValue(undefined),
+    findOne: jest.fn(),
     getReference: jest.fn().mockReturnValue({}),
     nativeDelete: jest.fn().mockResolvedValue(1),
     getConnection: jest.fn().mockReturnValue({ execute: mockExecute }),
   } as unknown as EntityManager;
+  (em as unknown as { transactional: jest.Mock }).transactional = jest.fn(
+    (cb: (em: EntityManager) => unknown) => cb(em),
+  );
   return {
     service: new BillCrudService(billRepo, marketRepo, subCategoryRepo, em),
     billRepo,
@@ -85,13 +93,14 @@ describe('BillCrudService', () => {
         user: { id: userId },
         deleted_at: null,
       });
-      (subCategoryRepo.findOne as jest.Mock).mockResolvedValue({
-        id: subCatId,
-        name: 'bun',
-        deleted_at: null,
-        category: { name: 'Bread' },
-        user: { id: userId },
-      });
+      (subCategoryRepo.find as jest.Mock).mockResolvedValue([
+        {
+          id: subCatId,
+          name: 'bun',
+          deleted_at: null,
+          category: { name: 'Bread' },
+        },
+      ]);
 
       const dto: CreateBillDto = {
         market_id: marketId,
@@ -521,7 +530,7 @@ describe('BillCrudService', () => {
 
   describe('confirmBill', () => {
     it('confirms a draft bill and returns detail DTO', async () => {
-      const { service, billRepo, subCategoryRepo, em } = makeService();
+      const { service, subCategoryRepo, em } = makeService();
       const bill = {
         id: billId,
         status: BillStatus.DRAFT,
@@ -531,14 +540,15 @@ describe('BillCrudService', () => {
         deleted_at: undefined,
         market: undefined,
       } as unknown as Bill;
-      (billRepo.findOne as jest.Mock).mockResolvedValue(bill);
-      (subCategoryRepo.findOne as jest.Mock).mockResolvedValue({
-        id: subCatId,
-        name: 'bun',
-        deleted_at: null,
-        category: { name: 'Bread' },
-      });
-      jest.spyOn(em, 'nativeDelete').mockResolvedValue(1);
+      (em.findOne as jest.Mock).mockResolvedValue(bill);
+      (subCategoryRepo.find as jest.Mock).mockResolvedValue([
+        {
+          id: subCatId,
+          name: 'bun',
+          deleted_at: null,
+          category: { name: 'Bread' },
+        },
+      ]);
 
       const dto: ConfirmBillDto = {
         total_amount: 12,
@@ -558,12 +568,27 @@ describe('BillCrudService', () => {
     });
 
     it('throws NotFoundException when draft not found', async () => {
-      const { service, billRepo } = makeService();
-      (billRepo.findOne as jest.Mock).mockResolvedValue(null);
+      const { service, subCategoryRepo, em } = makeService();
+      (subCategoryRepo.find as jest.Mock).mockResolvedValue([]);
+      (em.findOne as jest.Mock).mockResolvedValue(null);
 
       await expect(
         service.confirmBill(billId, householdId, userId, { items: [] }),
       ).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it('throws ConflictException when the bill is already confirmed', async () => {
+      const { service, subCategoryRepo, em } = makeService();
+      (subCategoryRepo.find as jest.Mock).mockResolvedValue([]);
+      (em.findOne as jest.Mock).mockResolvedValue({
+        id: billId,
+        status: BillStatus.CONFIRMED,
+      });
+
+      await expect(
+        service.confirmBill(billId, householdId, userId, { items: [] }),
+      ).rejects.toBeInstanceOf(ConflictException);
+      expect(em.nativeDelete as jest.Mock).not.toHaveBeenCalled();
     });
   });
 

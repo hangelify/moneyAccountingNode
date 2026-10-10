@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@mikro-orm/nestjs';
 import { EntityRepository } from '@mikro-orm/core';
 import { User } from '../../entities/user.entity';
@@ -12,7 +12,7 @@ export class UserService {
   ) {}
 
   async getProfile(userId: string): Promise<UserProfileDto> {
-    const user = await this.userRepository.findOneOrFail(
+    const user = await this.userRepository.findOne(
       { id: userId },
       {
         fields: [
@@ -28,6 +28,7 @@ export class UserService {
         ],
       },
     );
+    if (!user) throw new NotFoundException('User not found');
 
     return {
       id: user.id,

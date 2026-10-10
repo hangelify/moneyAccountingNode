@@ -37,9 +37,9 @@ export class HouseholdMemberGuard implements CanActivate {
     if (!hid) {
       throw new BadRequestException('Missing household ID in route params');
     }
-    if (!isUUID(hid)) {
-      throw new BadRequestException('Household ID must be a valid UUID');
-    }
+    // Same answer as for a household the user is not a member of: the
+    // response must not tell malformed ids from foreign ones.
+    if (!isUUID(hid)) throw new ForbiddenException();
 
     const household = await this.householdRepo.findOne({
       id: hid,

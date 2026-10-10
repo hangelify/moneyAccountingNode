@@ -62,11 +62,11 @@ describe('Category seed-defaults (e2e)', () => {
     ).toBeGreaterThan(0);
   });
 
-  it('rejects an invalid hid with 400, not 500', async () => {
+  it('rejects an invalid hid with 403, as a foreign household, not 500', async () => {
     await request(app.getHttpServer())
       .post('/households/not-a-uuid/categories/seed-defaults')
       .set('Authorization', `Bearer ${userA.accessToken}`)
-      .expect(400);
+      .expect(403);
   });
 
   it('requires authentication (401)', async () => {

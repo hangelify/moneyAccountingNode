@@ -102,10 +102,10 @@ export const ApiSeedDefaultCategoriesResponses = () =>
       status: 204,
       description: 'Default categories seeded (missing ones created)',
     }),
-    ApiBadRequestResponse('Bad request - Household ID is not a valid UUID'),
     ApiUnauthorizedResponse(),
     ApiResponse({
       status: 403,
-      description: 'Caller is not a member of the household',
+      description:
+        'Caller is not a member of the household (or the household ID is malformed)',
     }),
   );

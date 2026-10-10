@@ -5,6 +5,7 @@ import {
   Put,
   Delete,
   Param,
+  ParseUUIDPipe,
   Body,
   HttpCode,
   HttpStatus,
@@ -69,7 +70,7 @@ export class BudgetController {
   @ApiGetBudgetResponses()
   async getBudget(
     @CurrentHousehold() ctx: HouseholdContext,
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
   ): Promise<BudgetResponseDto> {
     return this.budgetService.getBudget(id, ctx.householdId);
   }
@@ -85,7 +86,7 @@ export class BudgetController {
   @ApiUpdateBudgetResponses()
   async updateBudget(
     @CurrentHousehold() ctx: HouseholdContext,
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body() updateBudgetDto: UpdateBudgetDto,
   ): Promise<BudgetResponseDto> {
     return this.budgetService.updateBudget(
@@ -106,7 +107,7 @@ export class BudgetController {
   @ApiDeleteBudgetResponses()
   async deleteBudget(
     @CurrentHousehold() ctx: HouseholdContext,
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
   ): Promise<void> {
     return this.budgetService.softDeleteBudget(id, ctx.householdId);
   }

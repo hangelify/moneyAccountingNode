@@ -5,6 +5,7 @@ import {
   Put,
   Delete,
   Param,
+  ParseUUIDPipe,
   Body,
   HttpCode,
   HttpStatus,
@@ -75,7 +76,7 @@ export class PlaningHorizonController {
   @ApiGetPlaningHorizonResponses()
   async getPlaningHorizon(
     @CurrentHousehold() ctx: HouseholdContext,
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
   ): Promise<PlaningHorizonResponseDto> {
     return this.planingHorizonService.getPlaningHorizon(id, ctx.householdId);
   }
@@ -91,7 +92,7 @@ export class PlaningHorizonController {
   @ApiUpdatePlaningHorizonResponses()
   async updatePlaningHorizon(
     @CurrentHousehold() ctx: HouseholdContext,
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body() updatePlaningHorizonDto: UpdatePlaningHorizonDto,
   ): Promise<PlaningHorizonBaseResponseDto> {
     return this.planingHorizonService.updatePlaningHorizon(
@@ -112,7 +113,7 @@ export class PlaningHorizonController {
   @ApiDeletePlaningHorizonResponses()
   async deletePlaningHorizon(
     @CurrentHousehold() ctx: HouseholdContext,
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
   ): Promise<void> {
     return this.planingHorizonService.softDeletePlaningHorizon(
       id,

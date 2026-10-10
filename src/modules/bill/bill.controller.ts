@@ -5,6 +5,7 @@ import {
   Put,
   Delete,
   Param,
+  ParseUUIDPipe,
   Body,
   Query,
   HttpCode,
@@ -202,7 +203,7 @@ export class BillController {
   async getBill(
     @CurrentUser() _user: AuthenticatedUser,
     @CurrentHousehold() ctx: HouseholdContext,
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
   ): Promise<BillDetailResponseDto> {
     return this.billCrud.getBill(id, ctx.householdId);
   }
@@ -221,7 +222,7 @@ export class BillController {
   async confirmBill(
     @CurrentUser() user: AuthenticatedUser,
     @CurrentHousehold() ctx: HouseholdContext,
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: ConfirmBillDto,
   ): Promise<BillDetailResponseDto> {
     return this.billCrud.confirmBill(id, ctx.householdId, user.id, dto);
@@ -239,7 +240,7 @@ export class BillController {
   async updateBill(
     @CurrentUser() _user: AuthenticatedUser,
     @CurrentHousehold() ctx: HouseholdContext,
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateBillDto,
   ): Promise<BillResponseDto> {
     return this.billCrud.updateBill(id, ctx.householdId, dto);
@@ -257,7 +258,7 @@ export class BillController {
   async deleteBill(
     @CurrentUser() _user: AuthenticatedUser,
     @CurrentHousehold() ctx: HouseholdContext,
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
   ): Promise<void> {
     return this.billCrud.softDeleteBill(id, ctx.householdId);
   }

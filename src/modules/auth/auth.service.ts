@@ -7,7 +7,7 @@ import {
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@mikro-orm/nestjs';
-import { EntityRepository, EntityManager } from '@mikro-orm/core';
+import { EntityRepository, EntityManager, sql } from '@mikro-orm/core';
 import { createHash, randomUUID } from 'crypto';
 import * as bcrypt from 'bcrypt';
 import { PASSWORD_HASH_ROUNDS, User } from '../../entities/user.entity';
@@ -28,6 +28,7 @@ import {
 } from './auth.env';
 import { CategoryDefaultsService } from '../category/category-defaults.service';
 import { sanitizeIp } from '../../common/utils/ip.util';
+import { normalizeEmail } from '../../common/transforms/normalize-email';
 
 // Compared against when the email is unknown, so that path costs one bcrypt
 // round like a real password check and does not reveal which emails exist.
@@ -73,7 +74,8 @@ export class AuthService implements OnModuleInit {
     }
 
     const user = await this.userRepository.findOne(
-      { email },
+      // lower(email) matches the users_email_lower_unique index.
+      { [sql.lower('email')]: normalizeEmail(email) },
       {
         fields: [
           'id',
@@ -133,7 +135,7 @@ export class AuthService implements OnModuleInit {
     userAgent?: string,
   ): Promise<TokenResponseDto> {
     const existingUser = await this.userRepository.findOne({
-      email: registerDto.email,
+      [sql.lower('email')]: normalizeEmail(registerDto.email),
     });
 
     if (existingUser) {
@@ -148,7 +150,7 @@ export class AuthService implements OnModuleInit {
     }
 
     const user = new User();
-    user.email = registerDto.email;
+    user.email = normalizeEmail(registerDto.email);
     user.password = registerDto.password;
     user.first_name = registerDto.first_name;
     user.last_name = registerDto.last_name;

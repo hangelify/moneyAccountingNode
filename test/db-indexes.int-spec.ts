@@ -79,6 +79,10 @@ describe('database indexes (PostgreSQL)', () => {
       'ON public.household_invites USING btree (invited_by)',
     ],
     [
+      'users_email_lower_unique',
+      'CREATE UNIQUE INDEX users_email_lower_unique ON public.users USING btree (lower((email)::text))',
+    ],
+    [
       'ai_requests_pending_index',
       `ON public.ai_requests USING btree (created_at) WHERE (status = 'PENDING'::ai_request_status_enum)`,
     ],
@@ -92,6 +96,7 @@ describe('database indexes (PostgreSQL)', () => {
     'ai_request_attempts_provider_name_index',
     'sessions_is_active_index',
     'bills_bill_date_index',
+    'users_email_unique',
   ])('no longer has the write-only %s', async (name) => {
     expect((await indexDefs()).has(name)).toBe(false);
   });
@@ -125,6 +130,14 @@ describe('database indexes (PostgreSQL)', () => {
         order by b.bill_date desc limit 50`,
     );
     expect(p).toContain('bills_household_status_date_index');
+  });
+
+  it('user lookup by email uses users_email_lower_unique', async () => {
+    // Shape of AuthService's lookups: where lower(email) = ?
+    const p = await plan(
+      `select u0.* from users u0 where lower(u0.email) = 'user@x.com' limit 1`,
+    );
+    expect(p).toContain('users_email_lower_unique');
   });
 
   it('findOrCreateMarket uses markets_household_id_index', async () => {

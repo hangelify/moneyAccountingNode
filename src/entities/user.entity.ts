@@ -4,6 +4,7 @@ import {
   BeforeCreate,
   BeforeUpdate,
   Enum,
+  Unique,
 } from '@mikro-orm/core';
 import { BaseEntity } from './base.entity';
 import { Currency } from '../types/currency.enum';
@@ -13,6 +14,13 @@ import * as bcrypt from 'bcrypt';
 export const PASSWORD_HASH_ROUNDS = 10;
 
 @Entity({ tableName: 'users' })
+// Case-insensitive: one account per address whatever its case. Emails are
+// also stored lowercased (see NormalizeEmail).
+@Unique({
+  name: 'users_email_lower_unique',
+  expression:
+    'create unique index "users_email_lower_unique" on "users" (lower("email"))',
+})
 export class User extends BaseEntity {
   @Property({ type: 'varchar', length: 255, nullable: false })
   first_name!: string;
@@ -20,7 +28,7 @@ export class User extends BaseEntity {
   @Property({ type: 'varchar', length: 255, nullable: true })
   last_name?: string;
 
-  @Property({ type: 'varchar', length: 255, nullable: false, unique: true })
+  @Property({ type: 'varchar', length: 255, nullable: false })
   email!: string;
 
   @Property({ type: 'varchar', length: 255, nullable: true })

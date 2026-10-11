@@ -272,6 +272,10 @@ export class BillController {
   @Get('dashboard')
   @ApiOperation({
     summary: 'Dashboard data: period totals, bill list, category stats',
+    description:
+      'Totals and category shares are grouped per currency (by_currency) and ' +
+      'never summed across currencies. Bills without a currency form a ' +
+      'separate series with currency null.',
   })
   @ApiDashboardResponses()
   async getDashboard(

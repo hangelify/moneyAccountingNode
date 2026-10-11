@@ -8,6 +8,7 @@ import {
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { Currency } from '../../../types/currency.enum';
 
 export class BillDashboardQueryDto {
   @ApiProperty({ enum: ['month', 'quarter', 'year'] })
@@ -67,8 +68,8 @@ export class DashboardBillSummaryDto {
   @ApiProperty({ example: 1192.21 })
   total_amount!: number;
 
-  @ApiProperty({ example: 'MDL' })
-  currency!: string;
+  @ApiProperty({ enum: Currency, nullable: true })
+  currency!: Currency | null;
 
   @ApiProperty({ nullable: true, example: 'Nr.1 SUPERMARKET' })
   market_name!: string | null;
@@ -92,21 +93,43 @@ export class DashboardCategoryStatDto {
 
   @ApiProperty({
     example: 37.7,
-    description: 'Share of total categorized spend, 0–100',
+    description: 'Share of the categorized spend in the same currency, 0–100',
   })
   percentage!: number;
 }
 
-export class BillDashboardResponseDto {
-  @ApiProperty({ type: [DashboardPeriodTotalDto] })
+export class DashboardCurrencySeriesDto {
+  @ApiProperty({
+    enum: Currency,
+    nullable: true,
+    description:
+      'Currency of the bills in this series; null groups bills without a currency',
+  })
+  currency!: Currency | null;
+
+  @ApiProperty({
+    type: [DashboardPeriodTotalDto],
+    description: 'Every period of the range, zero-filled',
+  })
   period_totals!: DashboardPeriodTotalDto[];
+
+  @ApiProperty({ type: [DashboardCategoryStatDto] })
+  category_stats!: DashboardCategoryStatDto[];
+}
+
+export class BillDashboardResponseDto {
+  @ApiProperty({
+    type: [DashboardCurrencySeriesDto],
+    description:
+      'One series per currency found in the range, never summed across currencies. ' +
+      'Sorted by currency code, the null series (bills without a currency) last; ' +
+      'empty when the range has no bills.',
+  })
+  by_currency!: DashboardCurrencySeriesDto[];
 
   @ApiProperty({
     type: [DashboardBillSummaryDto],
     description: 'Capped at 50 most recent',
   })
   bills!: DashboardBillSummaryDto[];
-
-  @ApiProperty({ type: [DashboardCategoryStatDto] })
-  category_stats!: DashboardCategoryStatDto[];
 }

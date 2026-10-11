@@ -378,7 +378,7 @@ describe('BillController', () => {
 
   describe('getDashboard', () => {
     it('delegates to BillDashboardService and returns its response', async () => {
-      const response = { period_totals: [], bills: [], category_stats: [] };
+      const response = { by_currency: [], bills: [] };
       billDashboardMock.getDashboard.mockResolvedValue(response);
 
       const query: BillDashboardQueryDto = {

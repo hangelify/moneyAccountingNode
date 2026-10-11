@@ -42,6 +42,7 @@ describe('AppController (e2e)', () => {
   it('rejects unknown body fields with 400 (global ValidationPipe)', async () => {
     const res = await request(app.getHttpServer())
       .post('/auth/login')
+      .set('X-Client-Type', 'mobile')
       .send({ email: 'a@example.com', password: 'password123', admin: true });
     expect(res.status).toBe(400);
     expect(JSON.stringify(res.body)).toContain('admin');

@@ -25,6 +25,7 @@ describe('Trust proxy & IP-based rate limiting (e2e)', () => {
     for (let i = 0; i < 11; i++) {
       const res = await request(app.getHttpServer())
         .post('/auth/login')
+        .set('X-Client-Type', 'mobile')
         .set('X-Forwarded-For', `203.0.113.${i + 1}`)
         .send({ email: 'nobody@example.com', password: 'wrong-password' });
       statuses.push(res.status);
@@ -41,6 +42,7 @@ describe('Trust proxy & IP-based rate limiting (e2e)', () => {
     const email = `xff-${Date.now()}-${Math.random().toString(36).substring(7)}@example.com`;
     const res = await request(app.getHttpServer())
       .post('/auth/register')
+      .set('X-Client-Type', 'mobile')
       .set('X-Forwarded-For', garbage)
       .send({
         email,
@@ -72,6 +74,7 @@ describe('Trust proxy & IP-based rate limiting (e2e)', () => {
     const email = `xff-ok-${Date.now()}-${Math.random().toString(36).substring(7)}@example.com`;
     await request(app.getHttpServer())
       .post('/auth/register')
+      .set('X-Client-Type', 'mobile')
       .set('X-Forwarded-For', `10.9.9.9, ${clientIp}`)
       .send({
         email,

@@ -4,7 +4,9 @@ import { ApiProperty } from '@nestjs/swagger';
 export class LogoutDto {
   @ApiProperty({
     description:
-      'Refresh token to revoke. If omitted, the current session is revoked.',
+      'Mobile mode only: refresh token to revoke. Web mode reads the ' +
+      'refresh_token cookie. If neither is present, the current session ' +
+      'is revoked.',
     required: false,
   })
   @IsOptional()

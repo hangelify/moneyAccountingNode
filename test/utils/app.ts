@@ -85,6 +85,7 @@ export async function registerUser(
   const password = 'password123';
   const reg = await request(app.getHttpServer())
     .post('/auth/register')
+    .set('X-Client-Type', 'mobile')
     .send({ email, password, first_name: label })
     .expect(201);
   const tokens = reg.body as TokenResponseDto;

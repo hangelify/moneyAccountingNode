@@ -24,11 +24,15 @@ describe('Auth session flow (e2e)', () => {
   const me = (accessToken: string) =>
     http().get('/auth/me').set('Authorization', `Bearer ${accessToken}`);
   const refresh = (refreshToken: string) =>
-    http().post('/auth/refresh').send({ refresh_token: refreshToken });
+    http()
+      .post('/auth/refresh')
+      .set('X-Client-Type', 'mobile')
+      .send({ refresh_token: refreshToken });
 
   async function login(): Promise<TokenResponseDto> {
     const res = await http()
       .post('/auth/login')
+      .set('X-Client-Type', 'mobile')
       .send({ email: user.email, password: user.password })
       .expect(200);
     return res.body as TokenResponseDto;
@@ -195,6 +199,7 @@ describe('Auth session flow (e2e)', () => {
       const tokens = await login();
       await http()
         .post('/auth/logout')
+        .set('X-Client-Type', 'mobile')
         .set('Authorization', `Bearer ${tokens.access_token}`)
         .expect(200);
 
@@ -207,6 +212,7 @@ describe('Auth session flow (e2e)', () => {
       const staying = await login();
       await http()
         .post('/auth/logout')
+        .set('X-Client-Type', 'mobile')
         .set('Authorization', `Bearer ${ending.access_token}`)
         .expect(200);
 
@@ -215,7 +221,10 @@ describe('Auth session flow (e2e)', () => {
     });
 
     it('requires authentication', async () => {
-      await http().post('/auth/logout').expect(401);
+      await http()
+        .post('/auth/logout')
+        .set('X-Client-Type', 'mobile')
+        .expect(401);
     });
   });
 

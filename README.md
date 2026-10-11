@@ -17,6 +17,7 @@ A NestJS REST API for household financial management. Supports multi-user househ
   - [Production build](#production-build)
   - [Full Docker stack](#full-docker-stack)
 - [Database Migrations](#database-migrations)
+- [Authentication: web and mobile clients](#authentication-web-and-mobile-clients)
 - [Swagger API Docs](#swagger-api-docs)
 - [Rate Limiting](#rate-limiting)
 - [Testing](#testing)
@@ -285,7 +286,7 @@ cp .env.example .env
 |---|---|---|---|
 | `PORT` | no | `3000` | HTTP port the API listens on |
 | `NODE_ENV` | no | `development` | `development`, `test`, or `production` |
-| `FRONTEND_URL` | no | `http://localhost:5173` | CORS allowed origin for the frontend |
+| `FRONTEND_URL` | no | `http://localhost:5173` | Frontend origin: CORS allowed origin and the `Origin` accepted by web-mode `/auth` endpoints (see [Authentication](#authentication-web-and-mobile-clients)) |
 | `LOG_LEVEL` | no | — | Logger verbosity: `debug`, `log`, `warn`, `error` |
 | `TRUST_PROXY` | no | off | Which proxies may set `X-Forwarded-For`. Unset/`false`: header ignored. Hop count (`1` for production behind a single reverse proxy) or a comma-separated list of addresses/subnets (`loopback, 10.0.0.0/8`). `true` is rejected; an invalid value stops startup. See [Rate Limiting](#rate-limiting) |
 
@@ -441,6 +442,41 @@ npm run seed
 
 ---
 
+## Authentication: web and mobile clients
+
+Login returns a short-lived access token (send it as `Authorization: Bearer <token>`) and a refresh token. How the refresh token travels depends on the client mode, which the server picks for `POST /auth/login`, `/auth/register`, `/auth/refresh` and `/auth/logout`:
+
+| Request | Mode |
+|---|---|
+| `Origin` equals `FRONTEND_URL`, or the API's own origin (Swagger UI) | **web** |
+| `X-Client-Type: mobile` and no `Origin` header | **mobile** |
+| `X-Client-Type: mobile` with an `Origin` header | `403` |
+| no `X-Client-Type`, foreign or missing `Origin` | `403` |
+| `X-Client-Type` with any value other than `mobile` | `400` |
+
+### Web mode (SPA)
+
+- The refresh token is never in a response body. It is set as a cookie `refresh_token; HttpOnly; Secure; SameSite=Strict; Path=/auth; Max-Age=<JWT_REFRESH_EXPIRES_IN_MS>`, so page scripts (and an XSS payload) cannot read it.
+- `/auth/refresh` reads the token only from that cookie (a `refresh_token` in the body is ignored) and rotates the cookie.
+- `/auth/logout` (still needs the Bearer access token) revokes the cookie's session and clears the cookie.
+- CSRF protection: `SameSite=Strict` plus the `Origin` check above — a request from another site is rejected with `403` before any token is read.
+- SPA and API must be same-site (e.g. `app.example.com` and `api.example.com`; locally `localhost:5173` and `localhost:3000`), otherwise the `Strict` cookie is not sent.
+
+Frontend checklist:
+
+1. Send every `/auth/*` request with `fetch(url, { method: 'POST', credentials: 'include' })`.
+2. Keep the access token in memory only (a module variable or state store) — never in `localStorage`/`sessionStorage`.
+3. On page load and on any `401`, call `POST /auth/refresh` with no body to get a new access token; if that returns `401`, the session is over — show the login screen. Refresh rotates the cookie, so tabs must not refresh concurrently: serialise refreshes across tabs (e.g. `navigator.locks.request('auth-refresh', ...)`), or retry once after a `401` before treating the session as over.
+4. Log out with `POST /auth/logout` (Bearer header + `credentials: 'include'`). Logout needs a valid access token; if it is missing or expired, call `/auth/refresh` first — otherwise the `401` leaves the HttpOnly cookie in place and the next page load signs the user back in.
+
+Local development: Chrome and Firefox accept `Secure` cookies on `http://localhost`. Safari does not, so use Chrome/Firefox or serve the API over HTTPS when testing in Safari.
+
+### Mobile mode (native apps)
+
+Send `X-Client-Type: mobile` on the four endpoints above (native HTTP clients send no `Origin`). Responses include `refresh_token` in the body, no cookie is set; send it back as `{ "refresh_token": "..." }` to `/auth/refresh` (required) and optionally to `/auth/logout`. Store it in the platform's secure storage (Keychain / Keystore). Browsers cannot use this mode: any request carrying `Origin` is rejected.
+
+---
+
 ## Swagger API Docs
 
 Swagger UI is served at:
@@ -455,14 +491,14 @@ For example with the default port: `http://localhost:3000/api`
 
 Most endpoints require a JWT access token. To authorize:
 
-1. Call `POST /auth/register` or `POST /auth/login` — the response body contains `access_token`.
+1. Call `POST /auth/register` or `POST /auth/login` (leave `X-Client-Type` empty) — the response body contains `access_token`, and the browser stores the refresh cookie.
 2. Click the **Authorize** button (lock icon) at the top of the Swagger UI page.
 3. In the **JWT-auth (http, Bearer)** field, paste only the token value (without the `Bearer ` prefix).
 4. Click **Authorize**, then **Close**.
 
 All subsequent requests from Swagger UI will include the `Authorization: Bearer <token>` header automatically. The authorization is persisted across page refreshes.
 
-When the access token expires (see `JWT_EXPIRES_IN_MS`), call `POST /auth/refresh` with your `refresh_token` to obtain a new access token, then re-authorize in the UI.
+Swagger UI is served from the API's own origin, so it uses web mode. When the access token expires (see `JWT_EXPIRES_IN_MS`), call `POST /auth/refresh` with an empty body — the refresh cookie is sent automatically — then re-authorize in the UI with the new `access_token`.
 
 ---
 

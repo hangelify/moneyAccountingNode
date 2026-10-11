@@ -9,7 +9,10 @@ export class TokenResponseDto {
   access_token!: string;
 
   @ApiProperty({
-    description: 'JWT refresh token',
+    description:
+      'JWT refresh token. Mobile mode only; web clients receive it as the ' +
+      'HttpOnly refresh_token cookie instead.',
+    required: false,
     example:
       'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c',
   })
@@ -27,3 +30,8 @@ export class TokenResponseDto {
   })
   token_type!: string;
 }
+
+// What the auth endpoints return: web mode strips refresh_token (it goes to
+// the cookie), mobile mode returns the full TokenResponseDto.
+export type ClientTokenResponse = Omit<TokenResponseDto, 'refresh_token'> &
+  Partial<Pick<TokenResponseDto, 'refresh_token'>>;

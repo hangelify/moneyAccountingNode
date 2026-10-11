@@ -27,6 +27,7 @@ describe('Auth token standards (e2e)', () => {
   async function login(): Promise<TokenResponseDto> {
     const res = await http()
       .post('/auth/login')
+      .set('X-Client-Type', 'mobile')
       .send({ email: user.email, password: user.password })
       .expect(200);
     return res.body as TokenResponseDto;
@@ -89,6 +90,7 @@ describe('Auth token standards (e2e)', () => {
     it('on register', async () => {
       const res = await http()
         .post('/auth/register')
+        .set('X-Client-Type', 'mobile')
         .send({
           email: `std-reg-${Date.now()}@example.com`,
           password: 'password123',
@@ -101,6 +103,7 @@ describe('Auth token standards (e2e)', () => {
     it('on login', async () => {
       const res = await http()
         .post('/auth/login')
+        .set('X-Client-Type', 'mobile')
         .send({ email: user.email, password: user.password })
         .expect(200);
       expectNoStore(res);
@@ -110,6 +113,7 @@ describe('Auth token standards (e2e)', () => {
       const tokens = await login();
       const res = await http()
         .post('/auth/refresh')
+        .set('X-Client-Type', 'mobile')
         .send({ refresh_token: tokens.refresh_token })
         .expect(200);
       expectNoStore(res);
@@ -133,6 +137,7 @@ describe('Auth token standards (e2e)', () => {
       const tokens = await login();
       await http()
         .post('/auth/logout')
+        .set('X-Client-Type', 'mobile')
         .set('Authorization', `Bearer ${tokens.access_token}`)
         .send({ refresh_token: tokens.refresh_token })
         .expect(200);
@@ -215,7 +220,10 @@ describe('Auth token standards (e2e)', () => {
 
   describe('refresh token verification', () => {
     const refresh = (refreshToken: string) =>
-      http().post('/auth/refresh').send({ refresh_token: refreshToken });
+      http()
+        .post('/auth/refresh')
+        .set('X-Client-Type', 'mobile')
+        .send({ refresh_token: refreshToken });
 
     async function resignRefresh(
       overrides: Record<string, unknown>,

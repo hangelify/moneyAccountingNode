@@ -12,6 +12,7 @@ import {
 } from '../../entities/ai-request-attempt.entity';
 import { AiRequestLogger } from './internal/ai-request-logger';
 import { AiGatewayService } from './ai-gateway.service';
+import { Household } from '../../entities/household.entity';
 import { AiTask, TaskRequest } from './types/ai-task';
 import { LLM_PROVIDERS, LlmProvider } from './types/llm-provider';
 import { Capability } from './types/capability';
@@ -179,7 +180,7 @@ describe('AiGatewayService', () => {
   let em: EntityManager;
   let putSpy: jest.Mock<
     Promise<{ key: string }>,
-    [Buffer, 'image/png' | 'image/jpeg' | 'image/webp']
+    [Buffer, 'image/png' | 'image/jpeg' | 'image/webp', string?]
   >;
   let mockStorage: StorageService;
   let logger: AiRequestLogger;
@@ -203,7 +204,7 @@ describe('AiGatewayService', () => {
     putSpy = jest
       .fn<
         Promise<{ key: string }>,
-        [Buffer, 'image/png' | 'image/jpeg' | 'image/webp']
+        [Buffer, 'image/png' | 'image/jpeg' | 'image/webp', string?]
       >()
       .mockResolvedValue({ key: 'ai/images/fake.png' });
     mockStorage = {
@@ -277,6 +278,24 @@ describe('AiGatewayService', () => {
     expect(attempts[0].status).toBe(AiAttemptStatus.SUCCESS);
     expect(attempts[0].provider_name).toBe('openai');
     expect(parents[0].chosen_attempt_id).toBe(attempts[0].id);
+  });
+
+  it('stores the successful answer once, as the parent final_output', async () => {
+    const fake = new FakeLlmProvider(
+      'openai',
+      new Set<Capability>(['text', 'json']),
+      [okResponse({ ok: true })],
+    );
+    const svc = await boot([fake]);
+    await cleanupOwnedRows();
+
+    await svc.run(new PingTask(), { n: 1 });
+
+    const [parent] = await findOwnedParents();
+    expect(parent.final_output).toEqual({ ok: true });
+    const [attempt] = await findOwnedAttempts();
+    expect(attempt.raw_response_text).toBeNull();
+    expect(attempt.parsed_json).toBeNull();
   });
 
   it("passes the task's maxOutputTokens and temperature to the provider", async () => {
@@ -632,11 +651,50 @@ describe('AiGatewayService', () => {
     expect(out.data).toEqual({ ok: true });
 
     expect(putSpy).toHaveBeenCalledTimes(1);
-    expect(putSpy).toHaveBeenCalledWith(buf, 'image/png');
+    expect(putSpy).toHaveBeenCalledWith(buf, 'image/png', undefined);
 
     const parents = await findOwnedParents();
     expect(parents).toHaveLength(1);
     expect(parents[0].image_s3_keys).toEqual(['ai/images/fake.png']);
+  });
+
+  it("records the household and stores its images in the household's folder", async () => {
+    const fork = em.fork();
+    const user = fork.create(User, {
+      first_name: 'Household',
+      email: `hh-${Date.now()}-${Math.random().toString(36).slice(2)}@example.com`,
+      password: 'x',
+    } as never);
+    const household = fork.create(Household, {
+      name: 'AI household',
+      created_by: user,
+    } as never);
+    await fork.flush();
+    const buf = Buffer.from([1, 2, 3, 4]);
+    const fake = new FakeLlmProvider(
+      'openai',
+      new Set<Capability>(['text', 'vision', 'json']),
+      [okResponse({ ok: true })],
+    );
+    const svc = await boot([fake]);
+    await cleanupOwnedRows();
+
+    try {
+      await svc.run(
+        new VisionPingTask(),
+        { data: buf },
+        { householdId: household.id },
+      );
+
+      expect(putSpy).toHaveBeenCalledWith(buf, 'image/png', household.id);
+      const [parent] = await findOwnedParents();
+      expect(parent.household?.id).toBe(household.id);
+    } finally {
+      await cleanupOwnedRows();
+      const conn = em.fork().getConnection();
+      await conn.execute('DELETE FROM households WHERE id = ?', [household.id]);
+      await conn.execute('DELETE FROM users WHERE id = ?', [user.id]);
+    }
   });
 
   it('uses modelOverrides when resolving the attempt model', async () => {

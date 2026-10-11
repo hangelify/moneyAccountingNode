@@ -49,7 +49,7 @@ describe('BillAiOrchestrator', () => {
     const result = await orchestrator.parseAndCategorize(
       buf,
       'image/png',
-      'user-123',
+      { userId: 'user-123', householdId: 'hh-1' },
       subcategories,
     );
 
@@ -58,7 +58,7 @@ describe('BillAiOrchestrator', () => {
     expect(runMock).toHaveBeenCalledWith(
       parseCategorize,
       { image: buf, mediaType: 'image/png', subcategories },
-      { userId: 'user-123' },
+      { userId: 'user-123', householdId: 'hh-1' },
     );
   });
 
@@ -84,14 +84,17 @@ describe('BillAiOrchestrator', () => {
       parseCategorize,
     );
     const buf = Buffer.from('img');
-    const res = await orchestrator.parseOnly(buf, 'image/jpeg', 'user-1');
+    const res = await orchestrator.parseOnly(buf, 'image/jpeg', {
+      userId: 'user-1',
+      householdId: 'hh-1',
+    });
 
     expect(res).toBe(out);
     expect(runMock).toHaveBeenCalledTimes(1);
     expect(runMock).toHaveBeenCalledWith(
       parser,
       { image: buf, mediaType: 'image/jpeg' },
-      { userId: 'user-1' },
+      { userId: 'user-1', householdId: 'hh-1' },
     );
   });
 });

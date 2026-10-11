@@ -14,7 +14,15 @@ import type { StorageEnv } from './storage.env';
 export type ImageMediaType = 'image/png' | 'image/jpeg' | 'image/webp';
 
 export interface StorageService {
-  put(buffer: Buffer, mediaType: ImageMediaType): Promise<{ key: string }>;
+  /**
+   * Stores an image under its content hash, in the household's folder when
+   * one is given, so a household's images can be listed and deleted.
+   */
+  put(
+    buffer: Buffer,
+    mediaType: ImageMediaType,
+    householdId?: string,
+  ): Promise<{ key: string }>;
   exists(key: string): Promise<boolean>;
   getSignedUrl(key: string, expiresInSec?: number): Promise<string>;
 }
@@ -71,6 +79,7 @@ export class S3StorageService implements StorageService {
   async put(
     buffer: Buffer,
     mediaType: ImageMediaType,
+    householdId?: string,
   ): Promise<{ key: string }> {
     const ext = Object.hasOwn(EXTENSION_MAP, mediaType)
       ? EXTENSION_MAP[mediaType]
@@ -79,10 +88,10 @@ export class S3StorageService implements StorageService {
       throw new Error(`Unsupported image media type: ${String(mediaType)}`);
     }
     const hash = createHash('sha256').update(buffer).digest('hex');
-    const key = `ai/images/${hash}.${ext}`;
-    if (await this.exists(key)) {
-      return { key };
-    }
+    const dir = householdId ? `ai/images/${householdId}` : 'ai/images';
+    const key = `${dir}/${hash}.${ext}`;
+    // Written even when the key exists: a rewrite restarts the bucket
+    // lifecycle expiry, so a re-uploaded photo lives as long as a new one.
     await this.client.send(
       new PutObjectCommand({
         Bucket: this.bucket,

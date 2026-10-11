@@ -45,7 +45,7 @@ export class BillPhotoService {
       const { data, requestId } = await this.orchestrator.parseOnly(
         image,
         mediaType,
-        userId,
+        { userId, householdId },
       );
       return {
         parsed: this.fromParsed(data),
@@ -64,7 +64,7 @@ export class BillPhotoService {
     const { data, requestId } = await this.orchestrator.parseAndCategorize(
       image,
       mediaType,
-      userId,
+      { userId, householdId },
       subcategories,
     );
     return {

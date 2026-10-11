@@ -45,6 +45,13 @@ interface Deadline {
   remainingMs(): number;
 }
 
+export interface AiRunOptions {
+  /** Counted against this user's daily budget. */
+  userId?: string;
+  /** Owner of the request's data: audit row and stored images. */
+  householdId?: string;
+}
+
 @Injectable()
 export class AiGatewayService {
   private readonly log = new Logger(AiGatewayService.name);
@@ -78,7 +85,7 @@ export class AiGatewayService {
   async run<In, Out>(
     task: AiTask<In, Out>,
     input: In,
-    opts?: { userId?: string },
+    opts?: AiRunOptions,
   ): Promise<AiTaskResult<Out>> {
     if (opts?.userId) await this.assertWithinBudget(opts.userId);
     const release = this.slots.tryAcquire();
@@ -110,7 +117,7 @@ export class AiGatewayService {
   private async runWithDeadline<In, Out>(
     task: AiTask<In, Out>,
     input: In,
-    opts: { userId?: string } | undefined,
+    opts: AiRunOptions | undefined,
   ): Promise<AiTaskResult<Out>> {
     const ms = this.config.taskDeadlineMs;
     const endsAt = Date.now() + ms;
@@ -132,7 +139,7 @@ export class AiGatewayService {
   private async runWithin<In, Out>(
     task: AiTask<In, Out>,
     input: In,
-    opts: { userId?: string } | undefined,
+    opts: AiRunOptions | undefined,
     deadline: Deadline,
   ): Promise<AiTaskResult<Out>> {
     // 1. Input validation
@@ -154,6 +161,7 @@ export class AiGatewayService {
     const { parentId } = await this.logger.begin({
       taskName: task.name,
       userId: opts?.userId,
+      householdId: opts?.householdId,
       requiredCapabilities: Array.from(task.requiredCapabilities),
       prompt: promptForLog,
     });
@@ -177,7 +185,11 @@ export class AiGatewayService {
       for (const m of baseReq.messages) {
         if (m.role === 'user' && m.images) {
           for (const img of m.images) {
-            const { key } = await this.storage.put(img.data, img.mediaType);
+            const { key } = await this.storage.put(
+              img.data,
+              img.mediaType,
+              opts?.householdId,
+            );
             s3Keys.push(key);
           }
         }
@@ -291,8 +303,8 @@ export class AiGatewayService {
 
       await finishAttempt({
         status: AiAttemptStatus.SUCCESS,
-        rawText: res.text,
-        parsedJson: parsed.data,
+        // The answer is stored once, as the request's final_output: a receipt
+        // OCR is the bulk of the audit row.
         inputTokens: res.usage?.inputTokens,
         outputTokens: res.usage?.outputTokens,
         latencyMs,

@@ -2,7 +2,6 @@ import { createHash } from 'crypto';
 import {
   S3Client,
   PutObjectCommand,
-  HeadObjectCommand,
   CreateBucketCommand,
   HeadBucketCommand,
   GetObjectCommand,
@@ -51,30 +50,33 @@ describe('S3StorageService', () => {
     it('stores the buffer at ai/images/<sha256>.<ext> and returns the key', async () => {
       const buf = Buffer.from('fake-png-bytes');
       const expectedHash = createHash('sha256').update(buf).digest('hex');
-      const send = jest
-        .fn()
-        .mockImplementationOnce(() =>
-          Promise.reject(new NotFoundError('missing')),
-        )
-        .mockImplementationOnce(() => Promise.resolve({}));
+      const send = jest.fn().mockResolvedValue({});
       wireSendMock(send);
 
       const svc = new S3StorageService(makeEnv());
       const { key } = await svc.put(buf, 'image/png');
 
       expect(key).toBe(`ai/images/${expectedHash}.png`);
-      expect(send).toHaveBeenNthCalledWith(1, expect.any(HeadObjectCommand));
-      expect(send).toHaveBeenNthCalledWith(2, expect.any(PutObjectCommand));
+      expect(send).toHaveBeenCalledTimes(1);
+      expect(send).toHaveBeenCalledWith(expect.any(PutObjectCommand));
+    });
+
+    it("stores a household's image under ai/images/<householdId>/", async () => {
+      const buf = Buffer.from('fake-png-bytes');
+      const expectedHash = createHash('sha256').update(buf).digest('hex');
+      const send = jest.fn().mockResolvedValue({});
+      wireSendMock(send);
+
+      const svc = new S3StorageService(makeEnv());
+      const { key } = await svc.put(buf, 'image/png', 'hh-1');
+
+      expect(key).toBe(`ai/images/hh-1/${expectedHash}.png`);
+      expect(send).toHaveBeenCalledWith(expect.any(PutObjectCommand));
     });
 
     it('uses the jpg extension for image/jpeg', async () => {
       const buf = Buffer.from('j');
-      const send = jest
-        .fn()
-        .mockImplementationOnce(() =>
-          Promise.reject(new NotFoundError('missing')),
-        )
-        .mockImplementationOnce(() => Promise.resolve({}));
+      const send = jest.fn().mockResolvedValue({});
       wireSendMock(send);
 
       const svc = new S3StorageService(makeEnv());
@@ -95,7 +97,7 @@ describe('S3StorageService', () => {
       expect(send).not.toHaveBeenCalled();
     });
 
-    it('dedupes: skips PUT when the object already exists', async () => {
+    it('rewrites an image already stored, so its lifecycle expiry restarts', async () => {
       const buf = Buffer.from('already-there');
       const send = jest.fn().mockResolvedValue({});
       wireSendMock(send);
@@ -104,15 +106,11 @@ describe('S3StorageService', () => {
       await svc.put(buf, 'image/png');
 
       expect(send).toHaveBeenCalledTimes(1);
-      expect(send).toHaveBeenCalledWith(expect.any(HeadObjectCommand));
+      expect(send).toHaveBeenCalledWith(expect.any(PutObjectCommand));
     });
 
-    it('propagates non-404 errors from HEAD', async () => {
-      const send = jest.fn().mockRejectedValue(
-        Object.assign(new Error('denied'), {
-          $metadata: { httpStatusCode: 403 },
-        }),
-      );
+    it('propagates errors from PUT', async () => {
+      const send = jest.fn().mockRejectedValue(new Error('denied'));
       wireSendMock(send);
 
       const svc = new S3StorageService(makeEnv());

@@ -20,6 +20,7 @@ A NestJS REST API for household financial management. Supports multi-user househ
 - [Authentication: web and mobile clients](#authentication-web-and-mobile-clients)
 - [Swagger API Docs](#swagger-api-docs)
 - [Rate Limiting](#rate-limiting)
+- [Data Retention](#data-retention)
 - [Testing](#testing)
 - [Useful Scripts](#useful-scripts)
 
@@ -529,6 +530,66 @@ AI endpoints have further guards on top of the per-user limits:
 The per-user limits are counted after authentication (`UserThrottlerGuard`), so a client cannot dodge them by changing IP.
 
 The client IP is `req.ip`. It is derived from `X-Forwarded-For` only for proxies trusted through `TRUST_PROXY`. Leave it unset when the API is exposed directly; otherwise any client could pick a new IP per request and dodge the limits. Behind a single reverse proxy (nginx, Traefik, a cloud load balancer) set `TRUST_PROXY=1`. The proxy must overwrite or append to `X-Forwarded-For`, never pass through what the client sent. IP values that are not valid addresses are stored as `NULL` in `sessions`, `refresh_tokens` and `logs`.
+
+---
+
+## Data Retention
+
+A daily job (`RetentionService`, 04:00 UTC) clears data that is no longer
+needed. Every batch (5000 rows) runs in its own transaction under a
+PostgreSQL advisory lock (`pg_try_advisory_xact_lock`), so with several app
+instances only one does the work and the others skip.
+
+| Data | Rule | Variable | Default |
+|---|---|---|---|
+| `refresh_tokens` | deleted N days after `expires_at` | `REFRESH_TOKEN_RETENTION_DAYS` | 7 |
+| `sessions` | deleted N days after `absolute_expires_at`, or once revoked and unused for N days (their refresh tokens go with them) | `SESSION_RETENTION_DAYS` | 30 |
+| `ai_requests.prompt`, `ai_requests.final_output`, `ai_request_attempts.raw_response_text`, `ai_request_attempts.parsed_json` | set to `NULL` N days after the request (PENDING requests are left to the stale-request sweeper) | `AI_AUDIT_RAW_RETENTION_DAYS` | 30 |
+| Unconfirmed AI draft bills | soft-deleted N days after creation (03:00 UTC job) | `DRAFT_RETENTION_DAYS` | 30 |
+| Receipt images in S3 | expired by a bucket lifecycle rule (below) | — | 31 days |
+
+Kept indefinitely: `logs`, and the AI audit metadata (status, provider,
+model, tokens, cost, latency), which is small once the payloads are gone.
+All values are whole days >= 1; an invalid value stops startup.
+
+A successful AI answer is stored once, as `ai_requests.final_output`; only
+failed attempts keep their raw and parsed provider responses for diagnosis.
+
+### Receipt images
+
+Images are stored as `ai/images/<householdId>/<sha256>.<ext>` (images
+uploaded before this layout, and calls without a household, use
+`ai/images/<sha256>.<ext>`). `ai_requests.household_id` records the owning
+household, so a household's images and audit rows can be found and deleted
+on request.
+
+The app does not delete images itself: they are only needed to review a
+draft, so configure a lifecycle rule on the bucket that expires them a day
+after the draft retention period (S3 rounds expiry up to the next midnight
+UTC, and draft cleanup runs at 03:00 UTC): 31 days for the default 30.
+Uploading a photo that is already stored rewrites the object, which restarts
+its expiry.
+
+MinIO:
+
+```bash
+mc ilm rule add --prefix "ai/images/" --expire-days 31 local/<bucket>
+```
+
+AWS S3 (`aws s3api put-bucket-lifecycle-configuration --bucket <bucket> --lifecycle-configuration file://lifecycle.json`):
+
+```json
+{
+  "Rules": [
+    {
+      "ID": "expire-ai-images",
+      "Filter": { "Prefix": "ai/images/" },
+      "Status": "Enabled",
+      "Expiration": { "Days": 31 }
+    }
+  ]
+}
+```
 
 ---
 

@@ -21,6 +21,7 @@ import { DeepSeekProvider } from './modules/ai-gateway/providers/deepseek.provid
 import { BillModule } from './modules/bill/bill.module';
 import { MarketModule } from './modules/market/market.module';
 import { HouseholdModule } from './modules/household/household.module';
+import { RetentionModule } from './modules/retention/retention.module';
 
 export const APP_THROTTLERS = [{ name: 'default', ttl: 60_000, limit: 100 }];
 
@@ -40,6 +41,7 @@ export const APP_THROTTLERS = [{ name: 'default', ttl: 60_000, limit: 100 }];
     BillModule,
     MarketModule,
     HouseholdModule,
+    RetentionModule,
     ThrottlerModule.forRootAsync({
       useFactory: () => ({
         throttlers: APP_THROTTLERS,

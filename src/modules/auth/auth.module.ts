@@ -4,6 +4,7 @@ import { PassportModule } from '@nestjs/passport';
 import { MikroOrmModule } from '@mikro-orm/nestjs';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
+import { PasswordService } from './password.service';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { UserModule } from '../user/user.module';
 import { CategoryModule } from '../category/category.module';
@@ -51,6 +52,7 @@ import { LoginLockoutService } from './login-lockout/login-lockout.service';
   controllers: [AuthController],
   providers: [
     AuthService,
+    PasswordService,
     JwtStrategy,
     LoginLockoutService,
     {

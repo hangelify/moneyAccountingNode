@@ -9,9 +9,6 @@ import {
 import { BaseEntity } from './base.entity';
 import { Currency } from '../types/currency.enum';
 import { LanguageCode } from '../types/language-code.enum';
-import * as bcrypt from 'bcrypt';
-
-export const PASSWORD_HASH_ROUNDS = 10;
 
 @Entity({ tableName: 'users' })
 // Case-insensitive: one account per address whatever its case. Emails are
@@ -34,6 +31,7 @@ export class User extends BaseEntity {
   @Property({ type: 'varchar', length: 255, nullable: true })
   username?: string;
 
+  // A bcrypt hash, set by PasswordService; the entity never hashes.
   @Property({ type: 'varchar', length: 255, nullable: false, hidden: true })
   password!: string;
 
@@ -64,20 +62,13 @@ export class User extends BaseEntity {
   deleted_at?: Date;
 
   @BeforeCreate()
-  async beforeCreate() {
+  beforeCreate() {
     this.created_at = new Date();
     this.updated_at = new Date();
-    if (this.password) {
-      this.password = await bcrypt.hash(this.password, PASSWORD_HASH_ROUNDS);
-    }
   }
 
   @BeforeUpdate()
   beforeUpdate() {
     this.updated_at = new Date();
-  }
-
-  async validatePassword(password: string): Promise<boolean> {
-    return bcrypt.compare(password, this.password);
   }
 }

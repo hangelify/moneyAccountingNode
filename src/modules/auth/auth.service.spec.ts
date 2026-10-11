@@ -8,6 +8,7 @@ import { User } from '../../entities/user.entity';
 import { RefreshToken } from '../../entities/refresh-token.entity';
 import { Session } from '../../entities/session.entity';
 import { Log } from '../../entities/log.entity';
+import { PasswordService } from './password.service';
 
 // Wrap the real bcrypt so calls can be counted (its exports are not spy-able).
 jest.mock('bcrypt', () => {
@@ -25,6 +26,8 @@ interface Deps {
   createSession: jest.Mock;
   createRefreshToken: jest.Mock;
   createLog: jest.Mock;
+  updateUser: jest.Mock;
+  persist: jest.Mock;
 }
 
 function makeService(opts?: Partial<Pick<Deps, 'seedForHousehold'>>): {
@@ -52,8 +55,10 @@ function makeService(opts?: Partial<Pick<Deps, 'seedForHousehold'>>): {
     .mockImplementation((data) => ({ id: 'session-id', ...data }));
   const createLog = jest.fn().mockImplementation((data) => data);
   const findUser = jest.fn().mockResolvedValue(null);
+  const updateUser = jest.fn().mockResolvedValue(1);
   const userRepo = {
     findOne: findUser,
+    nativeUpdate: updateUser,
   } as unknown as EntityRepository<User>;
   const refreshTokenRepo = {} as unknown as EntityRepository<RefreshToken>;
   const sessionRepo = {
@@ -64,6 +69,12 @@ function makeService(opts?: Partial<Pick<Deps, 'seedForHousehold'>>): {
   } as unknown as EntityRepository<Log>;
 
   // EntityManager: persist().flush() chain. Side-effect: assigns an id to the user before flush returns.
+  const persist = jest.fn().mockImplementation((entity: { id?: string }) => {
+    if (entity && typeof entity === 'object' && !entity.id) {
+      entity.id = 'user-' + Math.random().toString(36).slice(2);
+    }
+    return { flush: jest.fn().mockResolvedValue(undefined) };
+  });
   const em = {
     // Only refresh rows are created through the EntityManager.
     create: jest
@@ -71,12 +82,7 @@ function makeService(opts?: Partial<Pick<Deps, 'seedForHousehold'>>): {
       .mockImplementation((_entity: unknown, data: unknown) =>
         createRefreshToken(data),
       ),
-    persist: jest.fn().mockImplementation((entity: { id?: string }) => {
-      if (entity && typeof entity === 'object' && !entity.id) {
-        entity.id = 'user-' + Math.random().toString(36).slice(2);
-      }
-      return { flush: jest.fn().mockResolvedValue(undefined) };
-    }),
+    persist,
     flush: jest.fn().mockResolvedValue(undefined),
     transactional: jest
       .fn()
@@ -98,6 +104,7 @@ function makeService(opts?: Partial<Pick<Deps, 'seedForHousehold'>>): {
     em,
     jwtService,
     { seedForHousehold } as unknown as CategoryDefaultsService,
+    new PasswordService(),
   );
   return {
     service,
@@ -107,6 +114,8 @@ function makeService(opts?: Partial<Pick<Deps, 'seedForHousehold'>>): {
       createSession,
       createRefreshToken,
       createLog,
+      updateUser,
+      persist,
     },
   };
 }
@@ -220,6 +229,91 @@ describe('AuthService.login password checks', () => {
     const wrong = service.login({ email: 'known@test', password: 'nope-123' });
     await expect(wrong).rejects.toThrow(
       new UnauthorizedException('Invalid credentials'),
+    );
+  });
+});
+
+describe('AuthService password hashing', () => {
+  const password = 'Qwerty123';
+
+  it('stores a bcrypt hash at the current cost on registration', async () => {
+    const { service, deps } = makeService();
+    await service.register(
+      { email: 'hash@test', password, first_name: 'Hash' },
+      '1.2.3.4',
+      'jest',
+    );
+
+    const user = deps.persist.mock.calls
+      .map(([entity]) => entity as unknown)
+      .find((entity): entity is User => entity instanceof User);
+    expect(user).toBeDefined();
+    expect(user!.password).not.toBe(password);
+    expect(bcrypt.getRounds(user!.password)).toBe(12);
+    expect(await bcrypt.compare(password, user!.password)).toBe(true);
+  });
+
+  it('rehashes a legacy cost-10 hash on successful login', async () => {
+    const { service, deps } = makeService();
+    const user = new User();
+    user.id = 'legacy-user';
+    user.email = 'legacy@test';
+    user.password = await bcrypt.hash(password, 10);
+    deps.findUser.mockResolvedValue(user);
+
+    await service.login({ email: 'legacy@test', password });
+
+    expect(deps.updateUser).toHaveBeenCalledTimes(1);
+    const [where, data] = deps.updateUser.mock.calls[0] as [
+      unknown,
+      { password: string },
+    ];
+    // Only the hash that was checked is replaced, so a password changed
+    // meanwhile is not overwritten with the old one.
+    expect(where).toEqual({ id: 'legacy-user', password: user.password });
+    expect(bcrypt.getRounds(data.password)).toBe(12);
+    expect(await bcrypt.compare(password, data.password)).toBe(true);
+  });
+
+  it('does not rehash after a failed login', async () => {
+    const { service, deps } = makeService();
+    const user = new User();
+    user.id = 'legacy-user';
+    user.email = 'legacy@test';
+    user.password = await bcrypt.hash(password, 10);
+    deps.findUser.mockResolvedValue(user);
+
+    await expect(
+      service.login({ email: 'legacy@test', password: 'wrong-pass' }),
+    ).rejects.toThrow(UnauthorizedException);
+    expect(deps.updateUser).not.toHaveBeenCalled();
+  });
+
+  it('still logs in when the rehash cannot be saved', async () => {
+    const { service, deps } = makeService();
+    const user = new User();
+    user.id = 'legacy-user';
+    user.email = 'legacy@test';
+    user.password = await bcrypt.hash(password, 10);
+    deps.findUser.mockResolvedValue(user);
+    deps.updateUser.mockRejectedValue(new Error('db down'));
+
+    const tokens = await service.login({ email: 'legacy@test', password });
+    expect(tokens.access_token).toBeDefined();
+  });
+});
+
+describe('AuthService soft-deleted users', () => {
+  it('looks up only users that are not soft-deleted on login', async () => {
+    const { service, deps } = makeService();
+
+    await expect(
+      service.login({ email: 'gone@test', password: 'Qwerty123' }),
+    ).rejects.toThrow(UnauthorizedException);
+
+    expect(deps.findUser).toHaveBeenCalledWith(
+      expect.objectContaining({ deleted_at: null }),
+      expect.anything(),
     );
   });
 });

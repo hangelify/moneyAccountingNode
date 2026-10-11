@@ -33,7 +33,11 @@ COPY nest-cli.json ./
 # Production dependencies only: the MikroORM CLI (migration:up in
 # docker-entrypoint.sh) loads the compiled dist/mikro-orm.config.js and
 # dist/migrations, so ts-node and the TypeScript sources are not needed.
-RUN npm ci --omit=dev && npm cache clean --force
+# npm ci still runs the `prepare` lifecycle (husky), and husky is a
+# devDependency, so drop that script first.
+RUN npm pkg delete scripts.prepare \
+  && npm ci --omit=dev \
+  && npm cache clean --force
 
 # Copy built application from builder
 COPY --from=builder /app/dist ./dist

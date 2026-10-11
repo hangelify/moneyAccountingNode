@@ -27,9 +27,11 @@ import { HouseholdService } from './household.service';
 import { CreateHouseholdDto } from './dto/create-household.dto';
 import { UpdateHouseholdDto } from './dto/update-household.dto';
 import { CreateInviteDto } from './dto/create-invite.dto';
+import { AcceptInviteDto } from './dto/accept-invite.dto';
 import {
   HouseholdResponseDto,
   HouseholdDetailResponseDto,
+  InviteListItemDto,
   InviteResponseDto,
 } from './dto/household-response.dto';
 
@@ -113,20 +115,47 @@ export class HouseholdController {
     return this.householdService.createInvite(hid, user.id, dto);
   }
 
-  @Post('invites/:token/accept')
+  @Get(':hid/invites')
+  @UseGuards(HouseholdMemberGuard)
+  @ApiOperation({ summary: 'List the household invites (owner only)' })
+  @ApiParam({ name: 'hid', description: 'Household ID' })
+  async listInvites(
+    @CurrentHousehold() ctx: HouseholdContext,
+    @Param('hid', ParseUUIDPipe) hid: string,
+  ): Promise<InviteListItemDto[]> {
+    this.householdService.assertOwner(ctx);
+    return this.householdService.listInvites(hid);
+  }
+
+  @Delete(':hid/invites/:id')
+  @UseGuards(HouseholdMemberGuard)
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({
-    summary: 'Accept a household invite. Caller joins the household.',
+    summary:
+      'Revoke a pending invite (owner only). Revoking twice is a no-op; an accepted invite answers 409.',
   })
-  @ApiParam({
-    name: 'token',
-    description: 'Raw invite token from the invite URL',
+  @ApiParam({ name: 'hid', description: 'Household ID' })
+  @ApiParam({ name: 'id', description: 'Invite ID' })
+  async revokeInvite(
+    @CurrentHousehold() ctx: HouseholdContext,
+    @Param('hid', ParseUUIDPipe) hid: string,
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<void> {
+    this.householdService.assertOwner(ctx);
+    return this.householdService.revokeInvite(hid, id);
+  }
+
+  @Post('invites/accept')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({
+    summary:
+      'Accept a household invite. Only the user whose email the invite was issued to can accept it (403 otherwise); 409 if already a member, 410 if the invite is unknown, revoked, expired or used.',
   })
   async acceptInvite(
     @CurrentUser() user: AuthenticatedUser,
-    @Param('token') token: string,
+    @Body() dto: AcceptInviteDto,
   ): Promise<void> {
-    return this.householdService.acceptInvite(token, user.id);
+    return this.householdService.acceptInvite(dto.token, user);
   }
 
   @Delete(':hid/members/:uid')

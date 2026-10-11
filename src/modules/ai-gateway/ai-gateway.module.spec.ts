@@ -61,14 +61,14 @@ describe('AiGatewayBootstrapper (boot-time capability check)', () => {
       makeProvider('deepseek', ['text', 'json']),
     ];
     const discovery = makeDiscovery([new VisionTask(), new TextTask()]);
-    const bootstrapper = new AiGatewayBootstrapper(discovery, providers);
+    const bootstrapper = new AiGatewayBootstrapper(discovery, providers, true);
     expect(() => bootstrapper.onApplicationBootstrap()).not.toThrow();
   });
 
   it('fails to boot when a task cannot be served by any configured provider', () => {
     const providers = [makeProvider('deepseek', ['text', 'json'])];
     const discovery = makeDiscovery([new VisionTask(), new TextTask()]);
-    const bootstrapper = new AiGatewayBootstrapper(discovery, providers);
+    const bootstrapper = new AiGatewayBootstrapper(discovery, providers, true);
     expect(() => bootstrapper.onApplicationBootstrap()).toThrow(
       /test\.vision.*vision/,
     );
@@ -82,7 +82,7 @@ describe('AiGatewayBootstrapper (boot-time capability check)', () => {
       makeProvider('deepseek', ['text', 'json']),
     ];
     const discovery = makeDiscovery([new TextTask()]);
-    const bootstrapper = new AiGatewayBootstrapper(discovery, providers);
+    const bootstrapper = new AiGatewayBootstrapper(discovery, providers, true);
     expect(() => bootstrapper.onApplicationBootstrap()).not.toThrow();
   });
 
@@ -93,8 +93,44 @@ describe('AiGatewayBootstrapper (boot-time capability check)', () => {
       }),
     ];
     const discovery = makeDiscovery([new VisionTask()]);
-    const bootstrapper = new AiGatewayBootstrapper(discovery, providers);
+    const bootstrapper = new AiGatewayBootstrapper(discovery, providers, true);
     expect(() => bootstrapper.onApplicationBootstrap()).toThrow(/test\.vision/);
+  });
+
+  describe('with AI_REQUIRED=false', () => {
+    let warn: jest.SpyInstance;
+    beforeEach(() => {
+      warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => {});
+    });
+    afterEach(() => warn.mockRestore());
+
+    it('boots and warns when a task has no capable provider', () => {
+      const providers = [makeProvider('deepseek', ['text', 'json'])];
+      const discovery = makeDiscovery([new VisionTask(), new TextTask()]);
+      const bootstrapper = new AiGatewayBootstrapper(
+        discovery,
+        providers,
+        false,
+      );
+
+      expect(() => bootstrapper.onApplicationBootstrap()).not.toThrow();
+      const msgs = warn.mock.calls.map((c: unknown[]) => String(c[0]));
+      expect(msgs.some((m) => /test\.vision.*503/.test(m))).toBe(true);
+    });
+
+    it('boots without any configured provider', () => {
+      const providers = [
+        makeProvider('anthropic', ['text', 'vision', 'json'], {
+          configured: false,
+        }),
+      ];
+      const bootstrapper = new AiGatewayBootstrapper(
+        makeDiscovery([new VisionTask()]),
+        providers,
+        false,
+      );
+      expect(() => bootstrapper.onApplicationBootstrap()).not.toThrow();
+    });
   });
 
   it('ignores non-AiTask providers discovered by DiscoveryService', () => {
@@ -106,7 +142,7 @@ describe('AiGatewayBootstrapper (boot-time capability check)', () => {
       null,
       undefined,
     ]);
-    const bootstrapper = new AiGatewayBootstrapper(discovery, providers);
+    const bootstrapper = new AiGatewayBootstrapper(discovery, providers, true);
     expect(() => bootstrapper.onApplicationBootstrap()).not.toThrow();
   });
 });
@@ -142,6 +178,7 @@ describe('AiGatewayBootstrapper (boot-time pricing check)', () => {
     new AiGatewayBootstrapper(
       makeDiscovery(tasks),
       providers,
+      true,
     ).onApplicationBootstrap();
   }
 

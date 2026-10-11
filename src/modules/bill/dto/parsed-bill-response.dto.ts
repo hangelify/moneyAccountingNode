@@ -62,3 +62,32 @@ export class ParsedBillResponseDto {
   @ApiProperty({ type: [ParsedBillItemResponseDto] })
   items!: ParsedBillItemResponseDto[];
 }
+
+export class ParsePhotoResponseDto extends ParsedBillResponseDto {
+  @ApiProperty({
+    format: 'uuid',
+    description: 'Id of the audited AI request, for support and audit lookup',
+  })
+  request_id!: string;
+}
+
+/** Error body of the AI endpoints (see `aiErrorBody`); some add fields, e.g. `parsed`. */
+export class AiErrorResponseDto {
+  @ApiProperty({ example: 503 })
+  statusCode!: number;
+
+  @ApiProperty({ example: 'Service Unavailable' })
+  error!: string;
+
+  @ApiProperty({ example: 'AI providers are unavailable, try again later' })
+  message!: string;
+
+  @ApiProperty({
+    type: String,
+    format: 'uuid',
+    nullable: true,
+    description:
+      'Id of the audited AI request; null when the request failed before the AI call was audited (auth, upload checks, limits)',
+  })
+  request_id!: string | null;
+}

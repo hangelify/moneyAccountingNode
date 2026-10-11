@@ -24,8 +24,10 @@ describe('AiUsageLimitFilter', () => {
     expect(status).toHaveBeenCalledWith(429);
     expect(json).toHaveBeenCalledWith({
       statusCode: 429,
+      error: 'Too Many Requests',
       message:
         'Daily AI budget exceeded: spent $1.20 of $1.00 in the last 24 hours',
+      request_id: null,
     });
   });
 
@@ -38,7 +40,9 @@ describe('AiUsageLimitFilter', () => {
     expect(status).toHaveBeenCalledWith(503);
     expect(json).toHaveBeenCalledWith({
       statusCode: 503,
+      error: 'Service Unavailable',
       message: 'AI service is busy, try again later',
+      request_id: null,
     });
   });
 });

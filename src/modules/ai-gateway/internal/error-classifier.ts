@@ -91,3 +91,36 @@ export function classifyError(err: unknown): ClassifiedError {
   }
   return { code: AiAttemptErrorCode.UNKNOWN, message: messageOf(err) };
 }
+
+/**
+ * Why a provider attempt failed, from the client's point of view:
+ * - `rejected`: the provider refused the request itself (e.g. the image);
+ * - `unavailable`: rate limit, 5xx, timeout or no connection — worth a retry;
+ * - `other`: anything else (bad key, unusable answer, unknown error).
+ */
+export type FailureKind = 'rejected' | 'unavailable' | 'other';
+
+// 401/403/404 point at our key or model name, not at the request content.
+const REJECTED_STATUSES = new Set([400, 413, 415, 422]);
+
+export function failureKind(err: unknown): FailureKind {
+  if (err instanceof RetryExhaustedError) return failureKind(err.cause);
+  if (
+    err instanceof Anthropic.APIConnectionError ||
+    err instanceof OpenAI.APIConnectionError
+  ) {
+    // Includes the connection timeouts, which subclass these.
+    return 'unavailable';
+  }
+  const { code } = classifyError(err);
+  if (
+    code === AiAttemptErrorCode.TIMEOUT ||
+    code === AiAttemptErrorCode.RATE_LIMIT ||
+    code === AiAttemptErrorCode.SERVER_ERROR
+  ) {
+    return 'unavailable';
+  }
+  const status = statusOf(err);
+  if (status !== undefined && REJECTED_STATUSES.has(status)) return 'rejected';
+  return 'other';
+}

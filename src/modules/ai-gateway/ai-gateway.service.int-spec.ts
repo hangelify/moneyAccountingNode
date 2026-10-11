@@ -21,6 +21,8 @@ import {
   AiBudgetExceededError,
   AiCapacityExceededError,
   AiGatewayExhaustedError,
+  AiImageStorageError,
+  AiInputInvalidError,
   NoCapableProviderError,
 } from './errors';
 import { STORAGE_SERVICE, StorageService } from '../storage/storage.service';
@@ -421,6 +423,8 @@ describe('AiGatewayService', () => {
     expect(caught).toBeInstanceOf(AiGatewayExhaustedError);
     const exhausted = caught as AiGatewayExhaustedError;
     expect(exhausted.parentId).toBeTruthy();
+    // A 5xx, then an answer that misses the schema.
+    expect(exhausted.failures).toEqual(['unavailable', 'other']);
 
     const parents = await findOwnedParents();
     expect(parents).toHaveLength(1);
@@ -432,6 +436,39 @@ describe('AiGatewayService', () => {
     expect(attempts.every((a) => a.status === AiAttemptStatus.FAILED)).toBe(
       true,
     );
+  });
+
+  it('reports every attempt as rejected when all providers refuse the request', async () => {
+    const p1 = new FakeLlmProvider(
+      'openai',
+      new Set<Capability>(['text', 'json']),
+      [errResponse({ status: 400, message: 'invalid image' })],
+    );
+    const p2 = new FakeLlmProvider(
+      'deepseek',
+      new Set<Capability>(['text', 'json']),
+      [errResponse({ status: 422, message: 'unprocessable' })],
+    );
+    const svc = await boot([p1, p2]);
+    await cleanupOwnedRows();
+    const warn = jest
+      .spyOn(Logger.prototype, 'warn')
+      .mockImplementation(() => undefined);
+
+    const err = await svc
+      .run(new PingTask(), { n: 1 })
+      .catch((e: unknown) => e);
+
+    expect(err).toBeInstanceOf(AiGatewayExhaustedError);
+    expect((err as AiGatewayExhaustedError).failures).toEqual([
+      'rejected',
+      'rejected',
+    ]);
+    // A bug of ours rejected by every provider must stand out in the logs.
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining('failures: rejected, rejected'),
+    );
+    warn.mockRestore();
   });
 
   describe('task deadline', () => {
@@ -531,6 +568,11 @@ describe('AiGatewayService', () => {
         .run(new PingTask(), { n: 1 })
         .catch((e: unknown) => e);
       expect(err).toBeInstanceOf(AiGatewayExhaustedError);
+      // The skipped provider ran out of time rather than failing.
+      expect((err as AiGatewayExhaustedError).failures).toEqual([
+        'other',
+        'unavailable',
+      ]);
       expect(p2Step).not.toHaveBeenCalled();
       const attempts = await findOwnedAttempts();
       expect(attempts).toHaveLength(1);
@@ -632,7 +674,7 @@ describe('AiGatewayService', () => {
     await expect(
       // Invalid: `n` is not a number
       svc.run(new PingTask(), { n: 'nope' } as unknown as PingIn),
-    ).rejects.toBeDefined();
+    ).rejects.toBeInstanceOf(AiInputInvalidError);
 
     expect(completeSpy).not.toHaveBeenCalled();
     const parents = await findOwnedParents();
@@ -650,14 +692,18 @@ describe('AiGatewayService', () => {
     await cleanupOwnedRows();
 
     const buf = Buffer.from([9, 9, 9]);
-    await expect(
-      svc.run(new VisionPingTask(), { data: buf }),
-    ).rejects.toBeInstanceOf(NoCapableProviderError);
+    const err = await svc
+      .run(new VisionPingTask(), { data: buf })
+      .catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(NoCapableProviderError);
 
     const parents = await findOwnedParents();
     expect(parents).toHaveLength(1);
+    expect((err as NoCapableProviderError).requestId).toBe(parents[0].id);
     expect(parents[0].status).toBe(AiRequestStatus.FAILED);
     expect(parents[0].error_message).toMatch(/no capable provider/i);
+    // The image is not stored when no provider could ever read it.
+    expect(putSpy).not.toHaveBeenCalled();
 
     const attempts = await findOwnedAttempts();
     expect(attempts).toHaveLength(0);
@@ -844,13 +890,16 @@ describe('AiGatewayService', () => {
       await cleanupOwnedRows();
       putSpy.mockRejectedValueOnce(new Error('s3 down'));
 
-      await expect(
-        svc.run(new VisionPingTask(), { data: Buffer.from([1]) }),
-      ).rejects.toThrow('s3 down');
+      const err = await svc
+        .run(new VisionPingTask(), { data: Buffer.from([1]) })
+        .catch((e: unknown) => e);
 
+      expect(err).toBeInstanceOf(AiImageStorageError);
+      expect((err as AiImageStorageError).cause).toEqual(new Error('s3 down'));
       expect(step).not.toHaveBeenCalled();
       const parents = await findOwnedParents();
       expect(parents).toHaveLength(1);
+      expect((err as AiImageStorageError).requestId).toBe(parents[0].id);
       expect(parents[0].status).toBe(AiRequestStatus.FAILED);
       expect(parents[0].error_message).toMatch(/s3 down/);
     });

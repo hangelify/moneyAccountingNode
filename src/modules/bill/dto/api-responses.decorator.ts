@@ -3,6 +3,7 @@ import {
   ApiOkResponse,
   ApiBadRequestResponse,
   ApiUnauthorizedResponse,
+  ApiForbiddenResponse,
   ApiBadGatewayResponse,
   ApiTooManyRequestsResponse,
   ApiServiceUnavailableResponse,
@@ -11,7 +12,10 @@ import {
   ApiUnsupportedMediaTypeResponse,
   ApiResponse,
 } from '@nestjs/swagger';
-import { ParsedBillResponseDto } from './parsed-bill-response.dto';
+import {
+  AiErrorResponseDto,
+  ParsePhotoResponseDto,
+} from './parsed-bill-response.dto';
 import { BillResponseDto } from './bill-response.dto';
 import { BillDetailResponseDto } from './bill-detail-response.dto';
 import { BillDashboardResponseDto } from './bill-dashboard.dto';
@@ -19,35 +23,64 @@ import { BillListResponseDto } from './bill-list-response.dto';
 
 export function ApiParsePhotoResponses(): MethodDecorator & ClassDecorator {
   return applyDecorators(
-    ApiOkResponse({ type: ParsedBillResponseDto }),
+    ApiOkResponse({
+      type: ParsePhotoResponseDto,
+      description:
+        'The recognized bill, saved as a draft; request_id identifies the AI request.',
+    }),
+    // Every error of this endpoint has the AiErrorResponseDto body.
     ApiBadRequestResponse({
+      type: AiErrorResponseDto,
       description:
         'Missing image, or a multipart body with more than one file or with extra fields.',
     }),
-    ApiUnauthorizedResponse({ description: 'Missing or invalid JWT.' }),
+    ApiUnauthorizedResponse({
+      type: AiErrorResponseDto,
+      description: 'Missing or invalid JWT.',
+    }),
+    ApiForbiddenResponse({
+      type: AiErrorResponseDto,
+      description: 'The user is not a member of the household.',
+    }),
     ApiPayloadTooLargeResponse({
+      type: AiErrorResponseDto,
       description:
         'The file exceeds 10 MB, or the image has more than 100 megapixels.',
     }),
     ApiUnsupportedMediaTypeResponse({
+      type: AiErrorResponseDto,
       description:
         'The file content is not a JPEG, PNG or WebP image (HEIC included); the client-sent Content-Type is ignored.',
     }),
     ApiUnprocessableEntityResponse({
+      type: AiErrorResponseDto,
       description:
-        'The image could not be decoded; or the bill was recognized but saving the draft failed (Body: { statusCode, message, request_id, parsed } — parsed has the shape of the 200 response with an empty draft_id, so the bill can be created manually).',
-    }),
-    ApiBadGatewayResponse({
-      description:
-        'All AI providers failed. Response body includes requestId for audit lookup.',
+        'One of: the image could not be decoded (request_id: null); every AI provider rejected the image — retake the photo; ' +
+        'or the bill was recognized but saving the draft failed — the body then also has `parsed`, shaped like the 200 response ' +
+        'with an empty draft_id, so the bill can be created manually.',
     }),
     ApiTooManyRequestsResponse({
+      type: AiErrorResponseDto,
       description:
         'Per-user AI limit (per minute / per 24 h) or daily AI budget exceeded.',
     }),
-    ApiServiceUnavailableResponse({
+    ApiBadGatewayResponse({
+      type: AiErrorResponseDto,
       description:
-        'All AI call slots of this instance are busy; see Retry-After.',
+        'The AI providers failed for mixed reasons (e.g. an unusable answer); retrying may help.',
+    }),
+    ApiServiceUnavailableResponse({
+      type: AiErrorResponseDto,
+      headers: {
+        'Retry-After': {
+          description:
+            'Seconds to wait; absent when photo recognition is not configured',
+          schema: { type: 'integer' },
+        },
+      },
+      description:
+        'AI providers are rate-limited, failing or timing out; all AI call slots of this instance are busy; ' +
+        'the photo could not be stored; or photo recognition is not configured (no Retry-After).',
     }),
   );
 }

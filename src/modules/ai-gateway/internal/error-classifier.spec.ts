@@ -2,6 +2,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import OpenAI from 'openai';
 import {
   classifyError,
+  failureKind,
   InvalidResponseError,
   RefusalError,
   TruncatedResponseError,
@@ -86,5 +87,46 @@ describe('classifyError', () => {
   it('captures a message string for the DB column', () => {
     const r = classifyError(new Error('boom'));
     expect(r.message).toContain('boom');
+  });
+});
+
+describe('failureKind', () => {
+  it.each([400, 413, 415, 422])(
+    'treats a %i answer as the provider rejecting the request',
+    (status) => {
+      expect(failureKind({ status })).toBe('rejected');
+    },
+  );
+
+  it.each([401, 403, 404])(
+    'does not blame the image for a %i answer (a configuration problem)',
+    (status) => {
+      expect(failureKind({ status })).toBe('other');
+    },
+  );
+
+  it('treats rate limits, 5xx and timeouts as unavailability', () => {
+    expect(failureKind({ status: 429 })).toBe('unavailable');
+    expect(failureKind({ status: 503 })).toBe('unavailable');
+    expect(failureKind(new TimeoutError(100))).toBe('unavailable');
+    expect(failureKind(new DeadlineExceededError(100))).toBe('unavailable');
+    expect(failureKind(new RetryExhaustedError({ status: 500 }))).toBe(
+      'unavailable',
+    );
+  });
+
+  it('treats connection errors as unavailability', () => {
+    expect(
+      failureKind(new Anthropic.APIConnectionError({ message: 'reset' })),
+    ).toBe('unavailable');
+    expect(
+      failureKind(new OpenAI.APIConnectionError({ message: 'reset' })),
+    ).toBe('unavailable');
+  });
+
+  it('treats unusable answers and unknown errors as other', () => {
+    expect(failureKind(new InvalidResponseError('bad json'))).toBe('other');
+    expect(failureKind(new RefusalError('refused'))).toBe('other');
+    expect(failureKind(new Error('boom'))).toBe('other');
   });
 });

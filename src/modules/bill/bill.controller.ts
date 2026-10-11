@@ -36,7 +36,7 @@ import { CurrentHousehold } from '../household/decorators/current-household.deco
 import { BillPhotoService } from './bill-photo.service';
 import { BillCrudService } from './bill-crud.service';
 import { BillDashboardService } from './bill-dashboard.service';
-import { ParsedBillResponseDto } from './dto/parsed-bill-response.dto';
+import { ParsePhotoResponseDto } from './dto/parsed-bill-response.dto';
 import { CreateBillDto } from './dto/create-bill.dto';
 import { UpdateBillDto } from './dto/update-bill.dto';
 import { BillResponseDto } from './dto/bill-response.dto';
@@ -59,8 +59,10 @@ import {
 } from './dto/api-responses.decorator';
 import { ListBillsQueryDto } from './dto/list-bills-query.dto';
 import { ConfirmBillDto } from './dto/confirm-bill.dto';
-import { AiGatewayExhaustedFilter } from './filters/ai-gateway-exhausted.filter';
+import { AiGatewayErrorFilter } from './filters/ai-gateway-error.filter';
 import { AiUsageLimitFilter } from './filters/ai-usage-limit.filter';
+import { AiHttpExceptionFilter } from './filters/ai-http-exception.filter';
+import { aiErrorBody } from './filters/ai-error-body';
 import { UserThrottlerGuard } from '../ai-gateway/guards/user-throttler.guard';
 import { MAX_UPLOAD_BYTES, prepareReceiptImage } from './receipt-image';
 
@@ -88,7 +90,8 @@ export class BillController {
       limits: { fileSize: MAX_UPLOAD_BYTES, files: 1, fields: 0 },
     }),
   )
-  @UseFilters(AiGatewayExhaustedFilter, AiUsageLimitFilter)
+  // One error body for the whole endpoint: { statusCode, error, message, request_id }.
+  @UseFilters(AiGatewayErrorFilter, AiUsageLimitFilter, AiHttpExceptionFilter)
   @ApiOperation({
     summary:
       'Upload a grocery receipt photo; return parsed + categorized items. Image is stored to S3; the AI request is audited.',
@@ -106,7 +109,7 @@ export class BillController {
     @CurrentUser() user: AuthenticatedUser,
     @CurrentHousehold() ctx: HouseholdContext,
     @UploadedFile(new ParseFilePipe()) file: Express.Multer.File,
-  ): Promise<ParsedBillResponseDto> {
+  ): Promise<ParsePhotoResponseDto> {
     // The client's Content-Type is never trusted: the type is detected from
     // the bytes and the image re-encoded as a metadata-free JPEG.
     const image = await prepareReceiptImage(file.buffer);
@@ -131,14 +134,15 @@ export class BillController {
         err instanceof Error ? err.stack : String(err),
       );
       throw new UnprocessableEntityException({
-        statusCode: HttpStatus.UNPROCESSABLE_ENTITY,
-        message:
+        ...aiErrorBody(
+          HttpStatus.UNPROCESSABLE_ENTITY,
           'The bill was recognized but the draft could not be saved; create it manually',
-        request_id: requestId,
+          requestId,
+        ),
         parsed,
       });
     }
-    return { ...parsed, draft_id: draftId };
+    return { ...parsed, draft_id: draftId, request_id: requestId };
   }
 
   @Post()

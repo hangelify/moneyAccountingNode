@@ -1,7 +1,8 @@
 // Env for the e2e/integration run. Applied in the Jest main process (global
 // setup) and in every worker before the first spec import, so no external
 // .env is needed. Only the Postgres server may come from outside (CI service,
-// docker compose); the database itself is always a throw-away one.
+// docker compose); the database itself is always a throw-away one. Redis
+// (REDIS_HOST/PORT) is used only by login-attempt-store.int-spec.ts.
 
 export const DEFAULT_TEST_DB_NAME = 'accounting_e2e';
 

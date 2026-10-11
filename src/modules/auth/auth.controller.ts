@@ -140,6 +140,11 @@ export class AuthController {
     type: TokenResponseDto,
   })
   @ApiResponse({ status: 401, description: 'Invalid credentials' })
+  @ApiResponse({
+    status: 429,
+    description:
+      'Too many requests from this IP, or too many failed logins for this email; see Retry-After',
+  })
   @ApiBody({ type: LoginDto })
   @ApiClientMode()
   async login(

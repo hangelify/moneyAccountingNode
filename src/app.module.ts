@@ -5,6 +5,7 @@ import { ScheduleModule } from '@nestjs/schedule';
 import { ThrottlerStorageRedisService } from '@nest-lab/throttler-storage-redis';
 import { MikroOrmModule } from '@mikro-orm/nestjs';
 import { createMikroOrmConfig } from './mikro-orm.config';
+import { redisConnectionOptions } from './config/redis';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthModule } from './modules/auth/auth.module';
@@ -42,13 +43,7 @@ export const APP_THROTTLERS = [{ name: 'default', ttl: 60_000, limit: 100 }];
     ThrottlerModule.forRootAsync({
       useFactory: () => ({
         throttlers: APP_THROTTLERS,
-        storage: new ThrottlerStorageRedisService({
-          host: process.env.REDIS_HOST ?? 'localhost',
-          port: parseInt(process.env.REDIS_PORT ?? '6379', 10),
-          ...(process.env.REDIS_PASSWORD
-            ? { password: process.env.REDIS_PASSWORD }
-            : {}),
-        }),
+        storage: new ThrottlerStorageRedisService(redisConnectionOptions()),
       }),
     }),
   ],

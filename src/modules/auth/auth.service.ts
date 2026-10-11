@@ -3,11 +3,17 @@ import {
   UnauthorizedException,
   Logger,
   BadRequestException,
+  NotFoundException,
   OnModuleInit,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@mikro-orm/nestjs';
-import { EntityRepository, EntityManager, sql } from '@mikro-orm/core';
+import {
+  EntityRepository,
+  EntityManager,
+  QueryOrder,
+  sql,
+} from '@mikro-orm/core';
 import { createHash, randomUUID } from 'crypto';
 import * as bcrypt from 'bcrypt';
 import { PASSWORD_HASH_ROUNDS, User } from '../../entities/user.entity';
@@ -20,7 +26,8 @@ import { Currency } from '../../types/currency.enum';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { TokenResponseDto } from './dto/token-response.dto';
-import { JwtPayload } from './types/jwt-payload.interface';
+import { SessionDto } from './dto/session.dto';
+import { AuthenticatedUser, JwtPayload } from './types/jwt-payload.interface';
 import {
   ACCESS_TOKEN_TYP,
   JWT_ALGORITHM,
@@ -361,38 +368,141 @@ export class AuthService implements OnModuleInit {
     return issued.tokens;
   }
 
-  async logout(
-    userId: string,
-    sid: string,
-    refreshToken?: string,
+  // RFC 7009: the token itself is the credential, and an unknown or already
+  // revoked token is not an error for the caller. Expired and rotated tokens
+  // still identify their session, so they end it too.
+  async revokeRefreshToken(
+    refreshToken: string,
     ipAddress?: string,
     userAgent?: string,
   ): Promise<void> {
-    let targetSessionId = sid;
+    const tokenEntity = await this.refreshTokenRepository.findOne(
+      { token_hash: this.hashToken(refreshToken) },
+      { populate: ['user'] },
+    );
 
-    if (refreshToken) {
-      const hash = this.hashToken(refreshToken);
-      const tokenEntity = await this.refreshTokenRepository.findOne(
-        { token_hash: hash },
-        { populate: ['session'] },
-      );
-      if (tokenEntity && tokenEntity.user.id === userId) {
-        targetSessionId = tokenEntity.session.id;
-      }
-    }
-
-    await this.revokeSession(targetSessionId);
-
-    const user = await this.userRepository.findOne({ id: userId });
-    if (user) {
+    if (!tokenEntity) {
       await this.logAuthAttempt(
-        user.email,
-        true,
-        'User logged out',
+        'unknown',
+        false,
+        'Token revocation - token not recognized',
         ipAddress,
         userAgent,
       );
+      return;
     }
+
+    await this.revokeSession(tokenEntity.session.id);
+    await this.logAuthAttempt(
+      tokenEntity.user.email,
+      true,
+      'Session revoked by refresh token',
+      ipAddress,
+      userAgent,
+      { session_id: tokenEntity.session.id },
+    );
+  }
+
+  async logout(
+    user: AuthenticatedUser,
+    ipAddress?: string,
+    userAgent?: string,
+  ): Promise<void> {
+    await this.revokeSession(user.sid);
+    await this.logAuthAttempt(
+      user.email,
+      true,
+      'User logged out',
+      ipAddress,
+      userAgent,
+      { session_id: user.sid },
+    );
+  }
+
+  async logoutAll(
+    user: AuthenticatedUser,
+    ipAddress?: string,
+    userAgent?: string,
+  ): Promise<void> {
+    const now = new Date();
+    // Tokens before sessions: refresh locks a token row and then the session
+    // row, so the same order here cannot deadlock against it.
+    const revokedSessions = await this.em.transactional(async (txEm) => {
+      await txEm.nativeUpdate(
+        RefreshToken,
+        { user: { id: user.id }, is_revoked: false },
+        { is_revoked: true, revoked_at: now },
+      );
+      return txEm.nativeUpdate(
+        Session,
+        { user: { id: user.id }, is_active: true },
+        { is_active: false },
+      );
+    });
+
+    await this.logAuthAttempt(
+      user.email,
+      true,
+      'User logged out of all sessions',
+      ipAddress,
+      userAgent,
+      { revoked_sessions: revokedSessions },
+    );
+  }
+
+  async listSessions(user: AuthenticatedUser): Promise<SessionDto[]> {
+    const sessions = await this.sessionRepository.find(
+      {
+        user: { id: user.id },
+        is_active: true,
+        absolute_expires_at: { $gt: new Date() },
+      },
+      {
+        orderBy: {
+          last_activity_at: QueryOrder.DESC_NULLS_LAST,
+          created_at: QueryOrder.DESC,
+        },
+      },
+    );
+
+    return sessions.map((session) => ({
+      id: session.id,
+      created_at: session.created_at,
+      last_activity_at: session.last_activity_at ?? null,
+      ip: session.ip_address ?? null,
+      user_agent: session.user_agent ?? null,
+      current: session.id === user.sid,
+    }));
+  }
+
+  // Only an active session of the user counts; anything else is a 404, so
+  // the endpoint does not reveal which session ids exist.
+  async revokeOwnSession(
+    user: AuthenticatedUser,
+    sessionId: string,
+    ipAddress?: string,
+    userAgent?: string,
+  ): Promise<void> {
+    const ended = await this.sessionRepository.nativeUpdate(
+      { id: sessionId, user: { id: user.id }, is_active: true },
+      { is_active: false },
+    );
+    if (ended === 0) {
+      throw new NotFoundException('Session not found');
+    }
+    await this.refreshTokenRepository.nativeUpdate(
+      { session: { id: sessionId }, is_revoked: false },
+      { is_revoked: true, revoked_at: new Date() },
+    );
+
+    await this.logAuthAttempt(
+      user.email,
+      true,
+      'Session revoked by user',
+      ipAddress,
+      userAgent,
+      { session_id: sessionId },
+    );
   }
 
   private async startSession(
@@ -546,13 +656,14 @@ export class AuthService implements OnModuleInit {
     message: string,
     ipAddress?: string,
     userAgent?: string,
+    details?: Record<string, unknown>,
   ): Promise<void> {
     const log = this.logRepository.create({
       level: success ? LogLevel.INFO : LogLevel.WARN,
       source: LogSource.AUTH,
       context: 'Authentication',
       message: `Auth attempt: ${message} - ${email}`,
-      metadata: { email, success },
+      metadata: { ...details, email, success },
       ip_address: sanitizeIp(ipAddress),
       user_agent: userAgent,
       created_at: new Date(),

@@ -13,6 +13,7 @@ describe('AuthController – @Throttle metadata', () => {
     ['login', 'login' as const],
     ['register', 'register' as const],
     ['refresh', 'refresh' as const],
+    ['revoke', 'revoke' as const],
   ])('%s has throttle limit of 10 req/60s', (_name, methodName) => {
     const method = AuthController.prototype[methodName];
     const limit: unknown = Reflect.getMetadata(
@@ -26,6 +27,7 @@ describe('AuthController – @Throttle metadata', () => {
     ['login', 'login' as const],
     ['register', 'register' as const],
     ['refresh', 'refresh' as const],
+    ['revoke', 'revoke' as const],
   ])('%s has throttle ttl of 60s', (_name, methodName) => {
     const method = AuthController.prototype[methodName];
     const ttl: unknown = Reflect.getMetadata(

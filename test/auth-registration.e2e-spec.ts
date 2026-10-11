@@ -56,6 +56,25 @@ describe('Auth Registration (e2e)', () => {
     await register(body).expect(400);
   });
 
+  it('logs in with the registered email in a different case', async () => {
+    await register({
+      email: ' Case-Login@Example.COM ',
+      password: 'password123',
+      first_name: 'Case',
+    }).expect(201);
+
+    await request(app.getHttpServer())
+      .post('/auth/login')
+      .send({ email: 'case-login@example.com', password: 'password123' })
+      .expect(200);
+  });
+
+  it('rejects a second registration with the same email in another case', async () => {
+    const body = { password: 'password123', first_name: 'Dup' };
+    await register({ ...body, email: 'Case-Dup@Example.com' }).expect(201);
+    await register({ ...body, email: 'case-dup@example.COM' }).expect(400);
+  });
+
   it.each([
     [
       'an invalid email',

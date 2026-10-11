@@ -6,13 +6,21 @@ import { HouseholdInvite } from '../../entities/household-invite.entity';
 import { HouseholdService } from './household.service';
 import { HouseholdController } from './household.controller';
 import { HouseholdMemberGuard } from './guards/household-member.guard';
+import {
+  MAX_ACTIVE_INVITES,
+  readMaxActiveInvites,
+} from './household-invites.env';
 
 @Module({
   imports: [
     MikroOrmModule.forFeature([Household, HouseholdMember, HouseholdInvite]),
   ],
   controllers: [HouseholdController],
-  providers: [HouseholdService, HouseholdMemberGuard],
+  providers: [
+    HouseholdService,
+    HouseholdMemberGuard,
+    { provide: MAX_ACTIVE_INVITES, useFactory: readMaxActiveInvites },
+  ],
   exports: [HouseholdMemberGuard],
 })
 export class HouseholdModule {}

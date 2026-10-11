@@ -91,6 +91,8 @@ describe('Household isolation (e2e)', () => {
       ['put', h],
       ['delete', h],
       ['post', `${h}/invites`],
+      ['get', `${h}/invites`],
+      ['delete', `${h}/invites/${randomUUID()}`],
       ['delete', `${h}/members/${uid}`],
       ...crud('budgets', r.budget),
       ...crud('planing-horizons', r.horizon),

@@ -1,4 +1,5 @@
 import {
+  Inject,
   Injectable,
   ForbiddenException,
   NotFoundException,
@@ -20,8 +21,11 @@ import {
   HouseholdResponseDto,
   HouseholdDetailResponseDto,
   HouseholdMemberDto,
+  InviteListItemDto,
   InviteResponseDto,
 } from './dto/household-response.dto';
+import { normalizeEmail } from '../../common/transforms/normalize-email';
+import { MAX_ACTIVE_INVITES } from './household-invites.env';
 
 @Injectable()
 export class HouseholdService {
@@ -33,6 +37,7 @@ export class HouseholdService {
     @InjectRepository(HouseholdMember)
     private readonly memberRepo: EntityRepository<HouseholdMember>,
     private readonly em: EntityManager,
+    @Inject(MAX_ACTIVE_INVITES) private readonly maxActiveInvites: number,
   ) {
     const url = process.env.FRONTEND_URL;
     if (!url)
@@ -133,15 +138,35 @@ export class HouseholdService {
     const tokenHash = createHash('sha256').update(rawToken).digest('hex');
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
 
-    const invite = new HouseholdInvite();
-    invite.household = this.em.getReference(Household, hid);
-    invite.invited_by = this.em.getReference(User, inviterId);
-    invite.invitee_email = dto.email;
-    invite.token_hash = tokenHash;
-    invite.expires_at = expiresAt;
+    await this.em.transactional(async (txEm) => {
+      // Locking the household serializes invite creation, so concurrent
+      // requests cannot overshoot the active invite limit.
+      const household = await txEm.findOne(
+        Household,
+        { id: hid, deleted_at: null },
+        { lockMode: LockMode.PESSIMISTIC_WRITE },
+      );
+      if (!household) throw new NotFoundException(`Household ${hid} not found`);
 
-    this.em.persist(invite);
-    await this.em.flush();
+      const active = await txEm.count(HouseholdInvite, {
+        household: { id: hid },
+        status: 'pending',
+        expires_at: { $gt: new Date() },
+      });
+      if (active >= this.maxActiveInvites) {
+        throw new ConflictException(
+          `A household can have at most ${this.maxActiveInvites} active invites; revoke one first`,
+        );
+      }
+
+      const invite = new HouseholdInvite();
+      invite.household = household;
+      invite.invited_by = txEm.getReference(User, inviterId);
+      invite.invitee_email = normalizeEmail(dto.email);
+      invite.token_hash = tokenHash;
+      invite.expires_at = expiresAt;
+      txEm.persist(invite);
+    });
 
     return {
       token: rawToken,
@@ -150,38 +175,103 @@ export class HouseholdService {
     };
   }
 
-  async acceptInvite(rawToken: string, userId: string): Promise<void> {
+  async listInvites(hid: string): Promise<InviteListItemDto[]> {
+    const invites = await this.em.find(
+      HouseholdInvite,
+      { household: { id: hid } },
+      { orderBy: { created_at: 'desc', id: 'desc' } },
+    );
+    const now = new Date();
+    return invites.map((i) => ({
+      id: i.id,
+      invitee_email: i.invitee_email,
+      status:
+        i.status === 'pending' && i.expires_at <= now ? 'expired' : i.status,
+      expires_at: i.expires_at,
+      created_at: i.created_at,
+    }));
+  }
+
+  /** Revokes a pending invite. Revoking a revoked invite is a no-op. */
+  async revokeInvite(hid: string, inviteId: string): Promise<void> {
+    // A concurrent accept holds the row lock; this update waits for it and
+    // then no longer matches, so an accepted invite is never revoked.
+    const revoked = await this.em.nativeUpdate(
+      HouseholdInvite,
+      { id: inviteId, household: { id: hid }, status: 'pending' },
+      { status: 'revoked' },
+    );
+    if (revoked > 0) return;
+
+    const invite = await this.em.findOne(HouseholdInvite, {
+      id: inviteId,
+      household: { id: hid },
+    });
+    if (!invite) throw new NotFoundException(`Invite ${inviteId} not found`);
+    if (invite.status === 'accepted') {
+      throw new ConflictException('An accepted invite cannot be revoked');
+    }
+  }
+
+  async acceptInvite(
+    rawToken: string,
+    user: Pick<User, 'id' | 'email'>,
+  ): Promise<void> {
     const tokenHash = createHash('sha256').update(rawToken).digest('hex');
 
     await this.em.transactional(async (txEm) => {
       const lockedInvite = await txEm.findOne(
         HouseholdInvite,
         { token_hash: tokenHash },
-        { lockMode: LockMode.PESSIMISTIC_WRITE, populate: ['household'] },
+        // Locks the invite row only: populating the household here would join
+        // it into the FOR UPDATE and block every write into that household.
+        { lockMode: LockMode.PESSIMISTIC_WRITE },
       );
       if (!lockedInvite) throw new GoneException({ reason: 'not_found' });
+      // Checked first: a holder of someone else's link learns nothing more.
+      if (lockedInvite.invitee_email !== normalizeEmail(user.email)) {
+        throw new ForbiddenException(
+          'This invite was issued to a different email address',
+        );
+      }
+      await txEm.populate(lockedInvite, ['household']);
       if (lockedInvite.household.deleted_at)
         throw new GoneException({ reason: 'household_deleted' });
-      if (lockedInvite.expires_at < new Date())
-        throw new GoneException({ reason: 'expired' });
-      if (lockedInvite.status === 'accepted')
-        throw new GoneException({ reason: 'already_accepted' });
       if (lockedInvite.status === 'revoked')
         throw new GoneException({ reason: 'revoked' });
 
       const existing = await txEm.findOne(HouseholdMember, {
         household: { id: lockedInvite.household.id },
-        user: { id: userId },
+        user: { id: user.id },
       });
-      if (!existing) {
-        const member = new HouseholdMember();
-        member.household = lockedInvite.household;
-        member.user = txEm.getReference(User, userId);
-        member.role = 'member';
-        txEm.persist(member);
-      }
+      if (existing) throw this.alreadyMember();
+
+      if (lockedInvite.status === 'accepted')
+        throw new GoneException({ reason: 'already_accepted' });
+      if (lockedInvite.expires_at <= new Date())
+        throw new GoneException({ reason: 'expired' });
+
+      // Another invite of this user to the same household may be accepted
+      // concurrently: the loser inserts nothing and leaves its invite unspent.
+      const inserted = await (txEm
+        .getConnection()
+        .execute(
+          'insert into "household_members" ("household_id", "user_id", "role") values (?, ?, ?) on conflict do nothing returning 1',
+          [lockedInvite.household.id, user.id, 'member'],
+          'all',
+          txEm.getTransactionContext(),
+        ) as Promise<unknown[]>);
+      if (inserted.length === 0) throw this.alreadyMember();
+
       lockedInvite.status = 'accepted';
       txEm.persist(lockedInvite);
+    });
+  }
+
+  private alreadyMember(): ConflictException {
+    return new ConflictException({
+      message: 'You are already a member of this household',
+      reason: 'already_member',
     });
   }
 

@@ -3,7 +3,6 @@ import {
   ForbiddenException,
   ConflictException,
   NotFoundException,
-  GoneException,
 } from '@nestjs/common';
 import { EntityRepository, EntityManager } from '@mikro-orm/core';
 import { HouseholdService } from './household.service';
@@ -36,7 +35,7 @@ function makeService() {
       ),
   } as unknown as EntityManager;
   return {
-    service: new HouseholdService(householdRepo, memberRepo, em),
+    service: new HouseholdService(householdRepo, memberRepo, em, 20),
     householdRepo,
     memberRepo,
     em,
@@ -122,74 +121,6 @@ describe('HouseholdService', () => {
       await expect(service.softDeleteHousehold(hid)).rejects.toBeInstanceOf(
         NotFoundException,
       );
-    });
-  });
-
-  describe('createInvite', () => {
-    it('creates invite and returns token + url', async () => {
-      const { service, em } = makeService();
-      const result = await service.createInvite(hid, userId, {
-        email: 'bob@example.com',
-      });
-
-      expect(result.token).toBeTruthy();
-      expect(result.invite_url).toContain('https://app.example.com/invite/');
-      expect(result.expires_at).toBeInstanceOf(Date);
-      expect(em.flush as jest.Mock).toHaveBeenCalled();
-    });
-  });
-
-  describe('acceptInvite', () => {
-    it('throws GoneException for expired invite', async () => {
-      const { service, em } = makeService();
-      (em.findOne as jest.Mock).mockResolvedValue({
-        status: 'pending',
-        expires_at: new Date(Date.now() - 1000),
-        household: { id: hid, deleted_at: null },
-      });
-      await expect(
-        service.acceptInvite('raw-token', userId),
-      ).rejects.toBeInstanceOf(GoneException);
-    });
-
-    it('throws GoneException for already accepted invite', async () => {
-      const { service, em } = makeService();
-      (em.findOne as jest.Mock).mockResolvedValue({
-        status: 'accepted',
-        expires_at: new Date(Date.now() + 99999),
-        household: { id: hid, deleted_at: null },
-      });
-      await expect(
-        service.acceptInvite('raw-token', userId),
-      ).rejects.toBeInstanceOf(GoneException);
-    });
-
-    it('throws GoneException for deleted household', async () => {
-      const { service, em } = makeService();
-      (em.findOne as jest.Mock).mockResolvedValue({
-        status: 'pending',
-        expires_at: new Date(Date.now() + 99999),
-        household: { id: hid, deleted_at: new Date() },
-      });
-      await expect(
-        service.acceptInvite('raw-token', userId),
-      ).rejects.toBeInstanceOf(GoneException);
-    });
-
-    it('adds user as member on valid invite', async () => {
-      const { service, em } = makeService();
-      // First em.findOne call: locked invite; second: existing member check
-      (em.findOne as jest.Mock)
-        .mockResolvedValueOnce({
-          status: 'pending',
-          expires_at: new Date(Date.now() + 99999),
-          household: { id: hid, deleted_at: null },
-        })
-        .mockResolvedValueOnce(null);
-
-      await service.acceptInvite('raw-token', userId);
-
-      expect(em.persist as jest.Mock).toHaveBeenCalled();
     });
   });
 

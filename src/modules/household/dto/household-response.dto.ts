@@ -49,3 +49,23 @@ export class InviteResponseDto {
   @ApiProperty({ type: Date })
   expires_at!: Date;
 }
+
+export class InviteListItemDto {
+  @ApiProperty({ format: 'uuid' })
+  id!: string;
+
+  @ApiProperty({ example: 'jane@example.com' })
+  invitee_email!: string;
+
+  @ApiProperty({
+    enum: ['pending', 'accepted', 'revoked', 'expired'],
+    description: '"expired" is a pending invite past its expires_at',
+  })
+  status!: 'pending' | 'accepted' | 'revoked' | 'expired';
+
+  @ApiProperty({ type: Date })
+  expires_at!: Date;
+
+  @ApiProperty({ type: Date })
+  created_at!: Date;
+}

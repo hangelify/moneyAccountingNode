@@ -61,6 +61,10 @@ describe('parse-photo upload handling (e2e)', () => {
     });
 
     expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({
+      draft_id: expect.any(String) as string,
+      request_id: '00000000-0000-4000-8000-000000000000',
+    });
     expect(parseAndCategorize).toHaveBeenCalledWith(
       expect.any(Buffer),
       'image/jpeg',
@@ -76,6 +80,12 @@ describe('parse-photo upload handling (e2e)', () => {
     });
 
     expect(res.status).toBe(415);
+    expect(res.body).toEqual({
+      statusCode: 415,
+      error: 'Unsupported Media Type',
+      message: expect.any(String) as string,
+      request_id: null,
+    });
     expect(parseAndCategorize).not.toHaveBeenCalled();
   });
 
@@ -88,6 +98,7 @@ describe('parse-photo upload handling (e2e)', () => {
     });
 
     expect(res.status).toBe(413);
+    expect(res.body).toMatchObject({ statusCode: 413, request_id: null });
     expect(parseAndCategorize).not.toHaveBeenCalled();
   });
 
@@ -103,6 +114,20 @@ describe('parse-photo upload handling (e2e)', () => {
       .attach('image', png, { filename: 'bill.png', contentType: 'image/png' });
 
     expect(res.status).toBe(400);
+    expect(res.body).toMatchObject({ statusCode: 400, request_id: null });
     expect(parseAndCategorize).not.toHaveBeenCalled();
+  });
+
+  it('answers 401 without a token in the same error shape', async () => {
+    const res = await request(app.getHttpServer()).post(
+      `/households/${hid}/bills/parse-photo`,
+    );
+
+    expect(res.status).toBe(401);
+    expect(res.body).toMatchObject({
+      statusCode: 401,
+      error: 'Unauthorized',
+      request_id: null,
+    });
   });
 });

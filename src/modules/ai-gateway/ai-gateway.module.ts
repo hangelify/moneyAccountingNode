@@ -20,6 +20,7 @@ import { LLM_PROVIDERS, LlmProvider } from './types/llm-provider';
 import { AiTask } from './types/ai-task';
 import { AI_CALL_CONFIG, loadAiCallConfig } from './internal/ai-call-config';
 import { AI_USAGE_LIMITS, loadAiUsageLimits } from './internal/ai-usage-limits';
+import { AI_REQUIRED, loadAiRequired } from './internal/ai-required';
 import { findModelPricing } from './pricing';
 
 export interface AiGatewayOptions {
@@ -33,6 +34,7 @@ export class AiGatewayBootstrapper implements OnApplicationBootstrap {
   constructor(
     private readonly discovery: DiscoveryService,
     @Inject(LLM_PROVIDERS) private readonly providers: LlmProvider[],
+    @Inject(AI_REQUIRED) private readonly aiRequired: boolean,
   ) {}
 
   onApplicationBootstrap(): void {
@@ -63,11 +65,14 @@ export class AiGatewayBootstrapper implements OnApplicationBootstrap {
         return true;
       });
       if (capable.length === 0) {
-        throw new Error(
-          `No configured AI provider satisfies task '${task.name}' (required: ${Array.from(
-            task.requiredCapabilities,
-          ).join(', ')})`,
+        const problem = `No configured AI provider satisfies task '${task.name}' (required: ${Array.from(
+          task.requiredCapabilities,
+        ).join(', ')})`;
+        if (this.aiRequired) throw new Error(problem);
+        this.log.warn(
+          `${problem}; AI_REQUIRED=false, so its endpoints will answer 503`,
         );
+        continue;
       }
       this.log.log(
         `Task '${task.name}' can run on: ${capable.map((p) => p.name).join(', ')}`,
@@ -112,6 +117,7 @@ export class AiGatewayModule {
       // Parsed once at boot: an invalid AI_* value fails startup.
       { provide: AI_CALL_CONFIG, useFactory: () => loadAiCallConfig() },
       { provide: AI_USAGE_LIMITS, useFactory: () => loadAiUsageLimits() },
+      { provide: AI_REQUIRED, useFactory: () => loadAiRequired() },
       ...providerClasses,
       {
         provide: LLM_PROVIDERS,

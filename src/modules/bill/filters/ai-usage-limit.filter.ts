@@ -9,6 +9,7 @@ import {
   AiBudgetExceededError,
   AiCapacityExceededError,
 } from '../../ai-gateway/errors';
+import { aiErrorBody } from './ai-error-body';
 
 @Catch(AiBudgetExceededError, AiCapacityExceededError)
 export class AiUsageLimitFilter implements ExceptionFilter<
@@ -19,17 +20,24 @@ export class AiUsageLimitFilter implements ExceptionFilter<
     host: ArgumentsHost,
   ): void {
     const res = host.switchToHttp().getResponse<Response>();
+    // Both are refused before the AI request is audited: no request id yet.
     if (exception instanceof AiBudgetExceededError) {
-      res.status(HttpStatus.TOO_MANY_REQUESTS).json({
-        statusCode: HttpStatus.TOO_MANY_REQUESTS,
-        message: exception.message,
-      });
+      res
+        .status(HttpStatus.TOO_MANY_REQUESTS)
+        .json(
+          aiErrorBody(HttpStatus.TOO_MANY_REQUESTS, exception.message, null),
+        );
       return;
     }
     res.header('Retry-After', String(exception.retryAfterSec));
-    res.status(HttpStatus.SERVICE_UNAVAILABLE).json({
-      statusCode: HttpStatus.SERVICE_UNAVAILABLE,
-      message: 'AI service is busy, try again later',
-    });
+    res
+      .status(HttpStatus.SERVICE_UNAVAILABLE)
+      .json(
+        aiErrorBody(
+          HttpStatus.SERVICE_UNAVAILABLE,
+          'AI service is busy, try again later',
+          null,
+        ),
+      );
   }
 }

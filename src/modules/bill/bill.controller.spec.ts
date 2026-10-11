@@ -17,7 +17,7 @@ import { BillDashboardService } from './bill-dashboard.service';
 import { BillDashboardQueryDto } from './dto/bill-dashboard.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { HouseholdMemberGuard } from '../household/guards/household-member.guard';
-import { AiGatewayExhaustedFilter } from './filters/ai-gateway-exhausted.filter';
+import { AiGatewayErrorFilter } from './filters/ai-gateway-error.filter';
 import { AiUsageLimitFilter } from './filters/ai-usage-limit.filter';
 import { UserThrottlerGuard } from '../ai-gateway/guards/user-throttler.guard';
 
@@ -57,7 +57,7 @@ describe('BillController', () => {
           provide: BillDashboardService,
           useValue: { getDashboard: jest.fn() },
         },
-        { provide: APP_FILTER, useClass: AiGatewayExhaustedFilter },
+        { provide: APP_FILTER, useClass: AiGatewayErrorFilter },
       ],
     })
       .overrideGuard(JwtAuthGuard)
@@ -105,7 +105,7 @@ describe('BillController', () => {
       'user-xyz',
       dto,
     );
-    expect(res).toEqual({ ...dto, draft_id: draftId });
+    expect(res).toEqual({ ...dto, draft_id: draftId, request_id: 'req-1' });
   });
 
   it('answers 422 with the request id and parsed bill when the draft cannot be saved', async () => {
@@ -136,6 +136,7 @@ describe('BillController', () => {
     expect(err).toBeInstanceOf(UnprocessableEntityException);
     expect((err as UnprocessableEntityException).getResponse()).toEqual({
       statusCode: 422,
+      error: 'Unprocessable Entity',
       message: expect.any(String) as string,
       request_id: 'req-9',
       parsed: dto,
@@ -195,10 +196,13 @@ describe('BillController', () => {
       ]);
     });
 
-    it('maps AI usage-limit errors to HTTP', () => {
-      expect(
-        Reflect.getMetadata(EXCEPTION_FILTERS_METADATA, handler),
-      ).toContain(AiUsageLimitFilter);
+    it('maps AI usage-limit and gateway errors to HTTP', () => {
+      const filters = Reflect.getMetadata(
+        EXCEPTION_FILTERS_METADATA,
+        handler,
+      ) as unknown[];
+      expect(filters).toContain(AiUsageLimitFilter);
+      expect(filters).toContain(AiGatewayErrorFilter);
     });
   });
 

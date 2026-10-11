@@ -16,12 +16,16 @@ import {
   AiBudgetExceededError,
   AiCapacityExceededError,
   AiGatewayExhaustedError,
+  AiImageStorageError,
+  AiInputInvalidError,
   NoCapableProviderError,
 } from './errors';
 import {
   classifyError,
+  failureKind,
   InvalidResponseError,
 } from './internal/error-classifier';
+import type { FailureKind } from './internal/error-classifier';
 import { STORAGE_SERVICE } from '../storage/storage.service';
 import type { StorageService } from '../storage/storage.service';
 import { AI_CALL_CONFIG } from './internal/ai-call-config';
@@ -132,7 +136,10 @@ export class AiGatewayService {
     deadline: Deadline,
   ): Promise<AiTaskResult<Out>> {
     // 1. Input validation
-    task.inputSchema.parse(input);
+    const checked = task.inputSchema.safeParse(input);
+    if (!checked.success) {
+      throw new AiInputInvalidError(task.name, checked.error);
+    }
 
     // 2. Build normalized request
     const baseReq = await task.buildRequest(input);
@@ -151,7 +158,20 @@ export class AiGatewayService {
       prompt: promptForLog,
     });
 
-    // 4. Upload any user-message images to S3
+    // 4. Resolve candidates before storing images no provider could read.
+    const candidates = this.resolver.candidates(task.requiredCapabilities);
+    if (candidates.length === 0) {
+      await this.audit('finish', () =>
+        this.logger.finish({
+          parentId,
+          status: AiRequestStatus.FAILED,
+          errorMessage: 'No capable provider configured',
+        }),
+      );
+      throw new NoCapableProviderError(task.name, parentId);
+    }
+
+    // 5. Upload any user-message images to S3
     const s3Keys: string[] = [];
     try {
       for (const m of baseReq.messages) {
@@ -171,32 +191,21 @@ export class AiGatewayService {
           errorMessage: `Image upload failed: ${errorText(err)}`,
         }),
       );
-      throw err;
+      throw new AiImageStorageError(parentId, err);
     }
     if (s3Keys.length) await this.recordImages(parentId, s3Keys);
-
-    // 5. Resolve candidates
-    const candidates = this.resolver.candidates(task.requiredCapabilities);
-    if (candidates.length === 0) {
-      await this.audit('finish', () =>
-        this.logger.finish({
-          parentId,
-          status: AiRequestStatus.FAILED,
-          errorMessage: 'No capable provider configured',
-        }),
-      );
-      throw new NoCapableProviderError(task.name);
-    }
 
     // 6. Loop providers with per-attempt logging and failover
     let lastError: unknown;
     let outOfTime = false;
+    const failures: FailureKind[] = [];
     for (let i = 0; i < candidates.length; i++) {
       const provider = candidates[i];
       // The first provider always gets a go; later ones only with enough budget.
       if (i > 0 && deadline.remainingMs() < this.config.minAttemptBudgetMs) {
         outOfTime = true;
         lastError ??= new DeadlineExceededError(this.config.taskDeadlineMs);
+        failures.push('unavailable');
         break;
       }
       const model =
@@ -259,6 +268,7 @@ export class AiGatewayService {
           latencyMs: Date.now() - t0,
         });
         lastError = err;
+        failures.push(failureKind(err));
         continue;
       }
 
@@ -275,6 +285,7 @@ export class AiGatewayService {
           latencyMs,
         });
         lastError = parsed.error;
+        failures.push('other');
         continue;
       }
 
@@ -310,9 +321,9 @@ export class AiGatewayService {
     this.log.warn(
       outOfTime
         ? `AI task '${task.name}' ran out of its ${this.config.taskDeadlineMs}ms deadline (parentId=${parentId})`
-        : `AI gateway exhausted all ${candidates.length} candidate provider(s) for task '${task.name}' (parentId=${parentId})`,
+        : `AI gateway exhausted all ${candidates.length} candidate provider(s) for task '${task.name}' (parentId=${parentId}, failures: ${failures.join(', ')})`,
     );
-    throw new AiGatewayExhaustedError(parentId, lastError);
+    throw new AiGatewayExhaustedError(parentId, lastError, failures);
   }
 
   private async recordImages(parentId: string, keys: string[]): Promise<void> {

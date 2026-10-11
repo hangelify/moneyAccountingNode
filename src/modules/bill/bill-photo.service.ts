@@ -25,7 +25,10 @@ export class BillPhotoService {
     userId: string,
   ): Promise<{ parsed: ParsedBillResponseDto; requestId: string }> {
     const subs = await this.subCategoryRepo.find(
-      { deleted_at: null, category: { household: { id: householdId } } },
+      {
+        deleted_at: null,
+        category: { household: { id: householdId }, deleted_at: null },
+      },
       { populate: ['category'] },
     );
 

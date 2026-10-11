@@ -1,7 +1,7 @@
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import request from 'supertest';
 import sharp from 'sharp';
-import { createTestApp, registerUser } from './utils/app';
+import { createTestApp, registerUser, seedAiRequest } from './utils/app';
 import { BillPhotoService } from '../src/modules/bill/bill-photo.service';
 import { MAX_UPLOAD_BYTES } from '../src/modules/bill/receipt-image';
 
@@ -24,6 +24,7 @@ describe('parse-photo upload handling (e2e)', () => {
           .overrideProvider(BillPhotoService)
           .useValue({ parseAndCategorize }),
     });
+    await seedAiRequest(app, '00000000-0000-4000-8000-000000000000');
     ({ accessToken: token, householdId: hid } = await registerUser(
       app,
       'upload',
@@ -41,6 +42,7 @@ describe('parse-photo upload handling (e2e)', () => {
         items: [],
       },
       requestId: '00000000-0000-4000-8000-000000000000',
+      isReceipt: true,
     });
   });
 

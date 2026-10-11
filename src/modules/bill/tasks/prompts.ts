@@ -1,6 +1,7 @@
 export const BILL_PARSER_SYSTEM_PROMPT = `You are a careful grocery-receipt parser.
 
 Given a photo of a supermarket bill, extract:
+- is_receipt: false if the photo is not a purchase receipt (then return no items); true otherwise
 - market_name (the store brand printed at the top)
 - bill_date in YYYY-MM-DD (from the receipt timestamp; year first)
 - currency as an ISO-4217 3-letter code (e.g. EUR, USD, RON, MDL)
@@ -33,6 +34,7 @@ export const BILL_PARSE_CATEGORIZE_SYSTEM_PROMPT = `You are a grocery-receipt pa
 Given a photo of a supermarket bill and a list of the user's spending sub-categories, extract the full bill data AND categorize each item in one pass.
 
 Extract:
+- is_receipt: false if the photo is not a purchase receipt (then return no items); true otherwise
 - market_name (the store brand printed at the top)
 - bill_date in YYYY-MM-DD (from the receipt timestamp; year first)
 - currency as an ISO-4217 3-letter code (e.g. EUR, USD, RON, MDL)

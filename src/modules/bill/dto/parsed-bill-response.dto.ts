@@ -66,9 +66,17 @@ export class ParsedBillResponseDto {
 export class ParsePhotoResponseDto extends ParsedBillResponseDto {
   @ApiProperty({
     format: 'uuid',
-    description: 'Id of the audited AI request, for support and audit lookup',
+    nullable: true,
+    description:
+      'Id of the audited AI request, for support and audit lookup; null for a re-uploaded photo whose AI request was purged',
   })
-  request_id!: string;
+  request_id!: string | null;
+
+  @ApiProperty({
+    description:
+      'True when this photo already had an open draft: that draft is returned and no AI call is made',
+  })
+  duplicate!: boolean;
 }
 
 /** Error body of the AI endpoints (see `aiErrorBody`); some add fields, e.g. `parsed`. */

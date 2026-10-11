@@ -17,7 +17,11 @@ import {
   ParsePhotoResponseDto,
 } from './parsed-bill-response.dto';
 import { BillResponseDto } from './bill-response.dto';
-import { BillDetailResponseDto } from './bill-detail-response.dto';
+import {
+  BillDetailResponseDto,
+  DraftImageResponseDto,
+  DraftListResponseDto,
+} from './bill-detail-response.dto';
 import { BillDashboardResponseDto } from './bill-dashboard.dto';
 import { BillListResponseDto } from './bill-list-response.dto';
 
@@ -26,7 +30,8 @@ export function ApiParsePhotoResponses(): MethodDecorator & ClassDecorator {
     ApiOkResponse({
       type: ParsePhotoResponseDto,
       description:
-        'The recognized bill, saved as a draft; request_id identifies the AI request.',
+        'The recognized bill, saved as a draft; request_id identifies the AI request. ' +
+        'If this photo already has an open draft, that draft is returned with duplicate: true and no AI call is made.',
     }),
     // Every error of this endpoint has the AiErrorResponseDto body.
     ApiBadRequestResponse({
@@ -56,6 +61,7 @@ export function ApiParsePhotoResponses(): MethodDecorator & ClassDecorator {
       type: AiErrorResponseDto,
       description:
         'One of: the image could not be decoded (request_id: null); every AI provider rejected the image — retake the photo; ' +
+        'the photo is not a receipt or no items were recognized on it (no draft is saved); ' +
         'or the bill was recognized but saving the draft failed — the body then also has `parsed`, shaped like the 200 response ' +
         'with an empty draft_id, so the bill can be created manually.',
     }),
@@ -147,10 +153,27 @@ export const ApiListDraftsResponses = () =>
   applyDecorators(
     ApiResponse({
       status: 200,
-      type: [BillResponseDto],
-      description: 'Draft bills listed',
+      type: DraftListResponseDto,
+      description: 'Draft bills listed with their items, newest first',
     }),
+    ApiResponse({ status: 400, description: 'Invalid page or limit' }),
     ApiResponse({ status: 401, description: 'Unauthorized' }),
+  );
+
+export const ApiDraftImageResponses = () =>
+  applyDecorators(
+    ApiResponse({
+      status: 200,
+      type: DraftImageResponseDto,
+      description: 'Presigned URL of the draft receipt photo',
+    }),
+    ApiResponse({ status: 400, description: 'Invalid draft id' }),
+    ApiResponse({ status: 401, description: 'Unauthorized' }),
+    ApiResponse({ status: 403, description: 'Not a member of the household' }),
+    ApiResponse({
+      status: 404,
+      description: 'No draft with an image under this id in the household',
+    }),
   );
 
 export const ApiConfirmBillResponses = () =>

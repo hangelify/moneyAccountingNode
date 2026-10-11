@@ -216,6 +216,61 @@ describe('BillPhotoService', () => {
     },
   );
 
+  describe.each([
+    ['categorizing', makeSubs()],
+    ['parse-only', []],
+  ])('receipt verdict (%s)', (_mode, subs) => {
+    const item = {
+      name: 'BREAD',
+      quantity: 1,
+      unit: 'piece',
+      weight_kg: null,
+      price_per_kg: null,
+      final_price: 1.2,
+      sub_category_id: null,
+      category_confidence: null,
+      category_reasoning: null,
+    };
+    const base = {
+      market_name: 'Lidl',
+      bill_date: null,
+      currency: null,
+      total_amount: 1.2,
+    };
+
+    async function verdict(bill: unknown) {
+      const svc = new BillPhotoService(
+        makeOrchestrator({ bill, parseOnlyResult: bill }),
+        makeRepo(subs),
+      );
+      const res = await svc.parseAndCategorize(
+        Buffer.from('x'),
+        'image/png',
+        HOUSEHOLD_ID,
+        USER_ID,
+      );
+      return res.isReceipt;
+    }
+
+    it('accepts a receipt with items', async () => {
+      await expect(
+        verdict({ ...base, is_receipt: true, items: [item] }),
+      ).resolves.toBe(true);
+    });
+
+    it('rejects a photo the model says is not a receipt', async () => {
+      await expect(
+        verdict({ ...base, is_receipt: false, items: [item] }),
+      ).resolves.toBe(false);
+    });
+
+    it('rejects a receipt with no recognized items', async () => {
+      await expect(
+        verdict({ ...base, is_receipt: true, items: [] }),
+      ).resolves.toBe(false);
+    });
+  });
+
   it('short-circuits: when user has zero subcategories, skips categorizer call and returns null sub_category for every item', async () => {
     const parseOnlyResult = {
       market_name: null,

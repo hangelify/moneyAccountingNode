@@ -15,6 +15,12 @@ import { BillPhotoService } from './bill-photo.service';
 import { BillCrudService } from './bill-crud.service';
 import { BillDashboardService } from './bill-dashboard.service';
 import { BillController } from './bill.controller';
+import { StorageModule } from '../storage/storage.module';
+import { DraftCleanupService } from './draft-cleanup.service';
+import {
+  DRAFT_RETENTION_DAYS,
+  readDraftRetentionDays,
+} from './draft-cleanup.env';
 
 @Module({
   imports: [
@@ -28,6 +34,7 @@ import { BillController } from './bill.controller';
       Household,
       HouseholdMember,
     ]),
+    StorageModule,
   ],
   controllers: [BillController],
   providers: [
@@ -37,6 +44,8 @@ import { BillController } from './bill.controller';
     BillPhotoService,
     BillCrudService,
     BillDashboardService,
+    DraftCleanupService,
+    { provide: DRAFT_RETENTION_DAYS, useFactory: readDraftRetentionDays },
   ],
   exports: [BillAiOrchestrator],
 })

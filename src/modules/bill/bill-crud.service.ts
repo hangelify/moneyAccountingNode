@@ -5,13 +5,19 @@ import {
   ConflictException,
 } from '@nestjs/common';
 import { InjectRepository } from '@mikro-orm/nestjs';
-import { EntityRepository, EntityManager, LockMode } from '@mikro-orm/core';
+import {
+  EntityRepository,
+  EntityManager,
+  LockMode,
+  UniqueConstraintViolationException,
+} from '@mikro-orm/core';
 import { Bill } from '../../entities/bill.entity';
 import { BillSubCategory } from '../../entities/bill-sub-category.entity';
 import { Market } from '../../entities/market.entity';
 import { SubCategory } from '../../entities/sub-category.entity';
 import { User } from '../../entities/user.entity';
 import { Household } from '../../entities/household.entity';
+import { AiRequest } from '../../entities/ai-request.entity';
 import { BillStatus } from '../../types/bill-status.enum';
 import { Currency } from '../../types/currency.enum';
 import { ListBillsQueryDto } from './dto/list-bills-query.dto';
@@ -34,7 +40,9 @@ import { BillResponseDto, BillMarketRefDto } from './dto/bill-response.dto';
 import {
   BillDetailResponseDto,
   BillItemResponseDto,
+  DraftListResponseDto,
 } from './dto/bill-detail-response.dto';
+import { ListDraftsQueryDto } from './dto/list-drafts-query.dto';
 import {
   BillListResponseDto,
   PaginationMetaDto,
@@ -56,14 +64,33 @@ function toCurrency(v: string | null): Currency | undefined {
   return code && CURRENCIES.has(code) ? (code as Currency) : undefined;
 }
 
-/** A real `YYYY-MM-DD` date, or today. */
-function toDraftDate(v: string | null): Date {
+/** A real `YYYY-MM-DD` date, or today flagged as inferred. */
+function toDraftDate(v: string | null): { date: Date; inferred: boolean } {
   if (v && /^\d{4}-\d{2}-\d{2}$/.test(v) && v >= '0001-01-01') {
     const d = new Date(v);
     // Rejects roll-overs such as 2026-02-30 -> 2026-03-02.
-    if (!Number.isNaN(d.getTime()) && d.toISOString().startsWith(v)) return d;
+    if (!Number.isNaN(d.getTime()) && d.toISOString().startsWith(v)) {
+      return { date: d, inferred: false };
+    }
   }
-  return new Date();
+  return { date: new Date(), inferred: true };
+}
+
+/** A `date` column value as `YYYY-MM-DD` (read in the server's timezone). */
+function toIsoDate(v: Date | string): string {
+  if (typeof v === 'string') return v.slice(0, 10);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${v.getFullYear()}-${pad(v.getMonth() + 1)}-${pad(v.getDate())}`;
+}
+
+function numberOrNull(v: number | string | null | undefined): number | null {
+  return v === null || v === undefined ? null : Number(v);
+}
+
+/** Where an AI draft came from: the stored receipt image and its AI request. */
+export interface DraftSource {
+  imageSha256: string;
+  aiRequestId: string;
 }
 
 function toDraftItem(it: ParsedBillItemResponseDto) {
@@ -284,7 +311,10 @@ export class BillCrudService {
       }
       bill.market = market;
     }
-    if (dto.bill_date !== undefined) bill.bill_date = new Date(dto.bill_date);
+    if (dto.bill_date !== undefined) {
+      bill.bill_date = new Date(dto.bill_date);
+      bill.bill_date_inferred = false;
+    }
     if (dto.currency !== undefined) bill.currency = dto.currency;
     if (dto.total_amount !== undefined) bill.amount = dto.total_amount;
     if (dto.description !== undefined) bill.description = dto.description;
@@ -308,13 +338,20 @@ export class BillCrudService {
     householdId: string,
     userId: string,
     dto: ParsedBillResponseDto,
-  ): Promise<string> {
+    source?: DraftSource,
+  ): Promise<{ id: string; duplicate: boolean }> {
     const bill = new Bill();
     bill.household = this.em.getReference(Household, householdId);
     bill.created_by = this.em.getReference(User, userId);
     bill.status = BillStatus.DRAFT;
     bill.market_name_raw = dto.market_name ?? undefined;
-    bill.bill_date = toDraftDate(dto.bill_date);
+    const billDate = toDraftDate(dto.bill_date);
+    bill.bill_date = billDate.date;
+    bill.bill_date_inferred = billDate.inferred;
+    if (source) {
+      bill.image_sha256 = source.imageSha256;
+      bill.ai_request = this.em.getReference(AiRequest, source.aiRequestId);
+    }
     bill.amount = inRange(dto.total_amount, MAX_AMOUNT) ?? 0;
     bill.currency = toCurrency(dto.currency);
     this.em.persist(bill);
@@ -396,20 +433,121 @@ export class BillCrudService {
       this.em.persist(bsc);
     }
 
-    await this.em.flush();
-    return bill.id;
+    try {
+      await this.em.flush();
+    } catch (err) {
+      // The same image was uploaded concurrently and its draft won the
+      // unique index: answer with that draft.
+      if (source && err instanceof UniqueConstraintViolationException) {
+        this.em.clear();
+        const existing = await this.billRepository.findOne(
+          this.openDraftOfImage(householdId, source.imageSha256),
+          { fields: ['id'] },
+        );
+        if (existing) return { id: existing.id, duplicate: true };
+      }
+      throw err;
+    }
+    return { id: bill.id, duplicate: false };
   }
 
-  async listDrafts(householdId: string): Promise<BillResponseDto[]> {
-    const bills = await this.billRepository.find(
+  /** The open draft saved from this image, shaped like a fresh parse. */
+  async findDraftByImageHash(
+    householdId: string,
+    imageSha256: string,
+  ): Promise<{
+    parsed: ParsedBillResponseDto;
+    requestId: string | null;
+  } | null> {
+    const bill = await this.billRepository.findOne(
+      this.openDraftOfImage(householdId, imageSha256),
+      { populate: ['billSubCategories.sub_category.category'] },
+    );
+    if (!bill) return null;
+    return {
+      requestId: bill.ai_request?.id ?? null,
+      parsed: {
+        draft_id: bill.id,
+        market_name: bill.market_name_raw ?? null,
+        bill_date: bill.bill_date_inferred ? null : toIsoDate(bill.bill_date),
+        currency: bill.currency ?? null,
+        total_amount: Number(bill.amount),
+        items: bill.billSubCategories.getItems().map(
+          (bsc): ParsedBillItemResponseDto => ({
+            name: bsc.raw_name,
+            // A weight-priced line is saved with a count of 1.
+            quantity: bsc.product_weight == null ? bsc.product_count : null,
+            unit: (bsc.unit ?? null) as ParsedBillItemResponseDto['unit'],
+            weight_kg: numberOrNull(bsc.product_weight),
+            price_per_kg: numberOrNull(bsc.price_per_unit),
+            final_price: Number(bsc.amount),
+            sub_category: bsc.sub_category
+              ? {
+                  id: bsc.sub_category.id,
+                  name: bsc.sub_category.name,
+                  category_name: bsc.sub_category.category?.name ?? '',
+                }
+              : null,
+            category_confidence: Number(bsc.category_confidence ?? 0),
+            category_reasoning: bsc.category_reasoning ?? undefined,
+          }),
+        ),
+      },
+    };
+  }
+
+  /** S3 key of the receipt photo a draft of this household was parsed from. */
+  async getDraftImageKey(id: string, householdId: string): Promise<string> {
+    const bill = await this.billRepository.findOne(
+      {
+        id,
+        household: { id: householdId },
+        status: BillStatus.DRAFT,
+        deleted_at: null,
+      },
+      { populate: ['ai_request'] },
+    );
+    const key = bill?.ai_request?.image_s3_keys?.[0];
+    if (!key) {
+      throw new NotFoundException(`No image for draft bill with ID ${id}`);
+    }
+    return key;
+  }
+
+  private openDraftOfImage(householdId: string, imageSha256: string) {
+    return {
+      household: { id: householdId },
+      image_sha256: imageSha256,
+      status: BillStatus.DRAFT,
+      deleted_at: null,
+    };
+  }
+
+  async listDrafts(
+    householdId: string,
+    query: ListDraftsQueryDto,
+  ): Promise<DraftListResponseDto> {
+    const page = query.page ?? 1;
+    const limit = query.limit ?? 20;
+    const [bills, total] = await this.billRepository.findAndCount(
       {
         household: { id: householdId },
         status: BillStatus.DRAFT,
         deleted_at: null,
       },
-      { populate: ['market'] },
+      {
+        populate: ['market', 'billSubCategories.sub_category.category'],
+        orderBy: { created_at: 'desc', id: 'desc' },
+        limit,
+        offset: (page - 1) * limit,
+      },
     );
-    return bills.map((b) => this.toListDto(b));
+    return {
+      data: bills.map((b) =>
+        this.toDetailDto(b, b.billSubCategories.getItems()),
+      ),
+      meta: { total, page, limit, total_pages: Math.ceil(total / limit) },
+    };
   }
 
   async confirmBill(
@@ -461,7 +599,10 @@ export class BillCrudService {
       }
 
       // Apply overrides
-      if (dto.bill_date !== undefined) bill.bill_date = new Date(dto.bill_date);
+      if (dto.bill_date !== undefined) {
+        bill.bill_date = new Date(dto.bill_date);
+        bill.bill_date_inferred = false;
+      }
       if (dto.currency !== undefined) bill.currency = dto.currency;
       if (dto.total_amount !== undefined) bill.amount = dto.total_amount;
       if (dto.description !== undefined) bill.description = dto.description;
@@ -566,7 +707,7 @@ export class BillCrudService {
       id: bill.id,
       bill_date: bill.bill_date,
       currency: bill.currency,
-      total_amount: bill.amount,
+      total_amount: Number(bill.amount),
       description: bill.description,
       market: this.toMarketRef(bill.market),
       created_at: bill.created_at,
@@ -579,8 +720,17 @@ export class BillCrudService {
   ): BillDetailResponseDto {
     return {
       ...this.toListDto(bill),
+      status: bill.status,
+      market_name_raw: bill.market_name_raw ?? undefined,
+      bill_date_inferred: bill.bill_date_inferred,
       items: items.map(
         (bsc): BillItemResponseDto => ({
+          raw_name: bsc.raw_name,
+          unit: bsc.unit ?? undefined,
+          price_per_unit: numberOrNull(bsc.price_per_unit) ?? undefined,
+          category_confidence:
+            numberOrNull(bsc.category_confidence) ?? undefined,
+          category_reasoning: bsc.category_reasoning ?? undefined,
           sub_category: bsc.sub_category
             ? {
                 id: bsc.sub_category.id,
@@ -589,8 +739,9 @@ export class BillCrudService {
               }
             : null,
           product_count: bsc.product_count,
-          amount: bsc.amount,
-          product_weight: bsc.product_weight,
+          // decimal columns are read back as strings.
+          amount: Number(bsc.amount),
+          product_weight: numberOrNull(bsc.product_weight) ?? undefined,
         }),
       ),
     };

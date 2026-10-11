@@ -1,13 +1,22 @@
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import request from 'supertest';
-import { createTestApp, registerUser } from './utils/app';
+import sharp from 'sharp';
+import { createTestApp, registerUser, seedAiRequest } from './utils/app';
 import { BillPhotoService } from '../src/modules/bill/bill-photo.service';
 
-// 1×1 transparent PNG: passes the endpoint's magic-number file type check.
-const PNG = Buffer.from(
-  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==',
-  'base64',
-);
+// A distinct photo per call: a re-uploaded photo is answered from its draft
+// without an AI call.
+const png = (i: number): Promise<Buffer> =>
+  sharp({
+    create: {
+      width: 2,
+      height: 2,
+      channels: 3,
+      background: { r: i * 20, g: 0, b: 0 },
+    },
+  })
+    .png()
+    .toBuffer();
 
 describe('parse-photo per-user AI limit (e2e)', () => {
   let app: NestExpressApplication;
@@ -22,6 +31,7 @@ describe('parse-photo per-user AI limit (e2e)', () => {
       items: [],
     },
     requestId: '00000000-0000-4000-8000-000000000000',
+    isReceipt: true,
   });
 
   beforeAll(async () => {
@@ -33,6 +43,7 @@ describe('parse-photo per-user AI limit (e2e)', () => {
           .overrideProvider(BillPhotoService)
           .useValue({ parseAndCategorize }),
     });
+    await seedAiRequest(app, '00000000-0000-4000-8000-000000000000');
   });
 
   afterAll(async () => {
@@ -52,7 +63,7 @@ describe('parse-photo per-user AI limit (e2e)', () => {
         .post(`/households/${hid}/bills/parse-photo`)
         .set('Authorization', `Bearer ${token}`)
         .set('X-Forwarded-For', `203.0.113.${i + 1}`)
-        .attach('image', PNG, {
+        .attach('image', await png(i), {
           filename: 'bill.png',
           contentType: 'image/png',
         });

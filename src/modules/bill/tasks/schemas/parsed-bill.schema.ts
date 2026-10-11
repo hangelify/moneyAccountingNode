@@ -47,6 +47,12 @@ export const ParsedBillItemSchema = z.object({
 });
 
 export const ParsedBillSchema = z.object({
+  // A malformed verdict counts as a receipt: an empty item list still
+  // rejects a non-receipt, and a real receipt's paid parse is not lost.
+  is_receipt: z
+    .boolean()
+    .catch(true)
+    .describe('false when the photo is not a purchase receipt'),
   market_name: z.string().nullable(),
   bill_date: z.iso
     .date()

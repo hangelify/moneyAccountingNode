@@ -15,8 +15,7 @@ import {
   sql,
 } from '@mikro-orm/core';
 import { createHash, randomUUID } from 'crypto';
-import * as bcrypt from 'bcrypt';
-import { PASSWORD_HASH_ROUNDS, User } from '../../entities/user.entity';
+import { User } from '../../entities/user.entity';
 import { RefreshToken } from '../../entities/refresh-token.entity';
 import { Session } from '../../entities/session.entity';
 import { Log, LogLevel, LogSource } from '../../entities/log.entity';
@@ -25,6 +24,7 @@ import { HouseholdMember } from '../../entities/household-member.entity';
 import { Currency } from '../../types/currency.enum';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
+import { ChangePasswordDto } from './dto/change-password.dto';
 import { TokenResponseDto } from './dto/token-response.dto';
 import { SessionDto } from './dto/session.dto';
 import { AuthenticatedUser, JwtPayload } from './types/jwt-payload.interface';
@@ -44,10 +44,7 @@ import {
 import { CategoryDefaultsService } from '../category/category-defaults.service';
 import { sanitizeIp } from '../../common/utils/ip.util';
 import { normalizeEmail } from '../../common/transforms/normalize-email';
-
-// Compared against when the email is unknown, so that path costs one bcrypt
-// round like a real password check and does not reveal which emails exist.
-const DUMMY_PASSWORD_HASH = bcrypt.hashSync(randomUUID(), PASSWORD_HASH_ROUNDS);
+import { PasswordService } from './password.service';
 
 interface IssuedTokens {
   tokens: TokenResponseDto;
@@ -73,6 +70,7 @@ export class AuthService implements OnModuleInit {
     private readonly em: EntityManager,
     private readonly jwtService: JwtService,
     private readonly categoryDefaults: CategoryDefaultsService,
+    private readonly passwordService: PasswordService,
   ) {}
 
   // Read lazily, an invalid value would only surface on the reuse path and
@@ -90,7 +88,7 @@ export class AuthService implements OnModuleInit {
 
     const user = await this.userRepository.findOne(
       // lower(email) matches the users_email_lower_unique index.
-      { [sql.lower('email')]: normalizeEmail(email) },
+      { [sql.lower('email')]: normalizeEmail(email), deleted_at: null },
       {
         fields: [
           'id',
@@ -106,18 +104,43 @@ export class AuthService implements OnModuleInit {
     );
 
     if (!user) {
-      await bcrypt.compare(password, DUMMY_PASSWORD_HASH);
+      await this.passwordService.verifyAgainstDummy(password);
       await this.logAuthAttempt(email, false, 'User not found');
       return null;
     }
 
-    const isPasswordValid = await user.validatePassword(password);
-    if (!isPasswordValid) {
+    const check = await this.passwordService.verify(password, user.password);
+    if (!check.valid) {
       await this.logAuthAttempt(email, false, 'Invalid password');
       return null;
     }
 
+    if (check.needsRehash) {
+      await this.rehashPassword(user.id, user.password, password);
+    }
+
     return user as User;
+  }
+
+  // Upgrades a hash made at a lower cost. Only the hash that was checked is
+  // replaced, so a password changed in the meantime is not overwritten with
+  // the old one. Best effort: the user has already proven the password, so a
+  // failed write must not fail the login.
+  private async rehashPassword(
+    userId: string,
+    checkedHash: string,
+    password: string,
+  ): Promise<void> {
+    try {
+      await this.userRepository.nativeUpdate(
+        { id: userId, password: checkedHash },
+        { password: await this.passwordService.hash(password) },
+      );
+    } catch (err) {
+      this.logger.warn(
+        `Failed to rehash password for user ${userId}: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
   }
 
   async login(
@@ -166,7 +189,7 @@ export class AuthService implements OnModuleInit {
 
     const user = new User();
     user.email = normalizeEmail(registerDto.email);
-    user.password = registerDto.password;
+    user.password = await this.passwordService.hash(registerDto.password);
     user.first_name = registerDto.first_name;
     user.last_name = registerDto.last_name;
     user.username = registerDto.username;
@@ -270,6 +293,18 @@ export class AuthService implements OnModuleInit {
       throw new UnauthorizedException('Invalid refresh token');
     }
 
+    if (tokenEntity.user.deleted_at) {
+      await this.revokeSession(tokenEntity.session.id);
+      await this.logAuthAttempt(
+        tokenEntity.user.email,
+        false,
+        'Token refresh failed - user deleted, session revoked',
+        ipAddress,
+        userAgent,
+      );
+      throw new UnauthorizedException('Invalid refresh token');
+    }
+
     if (tokenEntity.is_revoked) {
       // A client retrying after a lost response presents the token it just
       // rotated. Inside the grace window that is refused without treating it
@@ -333,9 +368,13 @@ export class AuthService implements OnModuleInit {
           throw new UnauthorizedException('Refresh token already used');
         }
 
-        const user = await txEm.findOneOrFail(User, {
+        const user = await txEm.findOne(User, {
           id: tokenEntity.user.id,
+          deleted_at: null,
         });
+        if (!user) {
+          throw new UnauthorizedException('Invalid refresh token');
+        }
         const freshSession = await txEm.findOneOrFail(Session, {
           id: session.id,
         });
@@ -447,6 +486,73 @@ export class AuthService implements OnModuleInit {
       ipAddress,
       userAgent,
       { revoked_sessions: revokedSessions },
+    );
+  }
+
+  // The current session stays; every other one ends, so a device that knew
+  // the old password (or a stolen token) loses access.
+  async changePassword(
+    user: AuthenticatedUser,
+    dto: ChangePasswordDto,
+    ipAddress?: string,
+    userAgent?: string,
+  ): Promise<void> {
+    const stored = await this.userRepository.findOne(
+      { id: user.id, deleted_at: null },
+      { fields: ['id', 'password'] },
+    );
+    if (!stored) {
+      throw new UnauthorizedException('User not found');
+    }
+
+    const check = await this.passwordService.verify(
+      dto.current_password,
+      stored.password,
+    );
+    if (!check.valid) {
+      await this.logAuthAttempt(
+        user.email,
+        false,
+        'Password change failed - wrong current password',
+        ipAddress,
+        userAgent,
+        { session_id: user.sid },
+      );
+      throw new BadRequestException('Current password is incorrect');
+    }
+
+    const newHash = await this.passwordService.hash(dto.new_password);
+    const now = new Date();
+    // Tokens before sessions, in the lock order of refresh (see logoutAll).
+    const revokedSessions = await this.em.transactional(async (txEm) => {
+      await txEm.nativeUpdate(
+        User,
+        { id: user.id },
+        { password: newHash, updated_at: now },
+      );
+      await txEm.nativeUpdate(
+        RefreshToken,
+        {
+          user: { id: user.id },
+          session: { $ne: user.sid },
+          is_revoked: false,
+        },
+        { is_revoked: true, revoked_at: now },
+      );
+      return txEm.nativeUpdate(
+        Session,
+        { user: { id: user.id }, id: { $ne: user.sid }, is_active: true },
+        { is_active: false },
+      );
+    });
+
+    await this.logAuthAttempt(
+      user.email,
+      true,
+      'Password changed, other sessions revoked',
+      ipAddress,
+      userAgent,
+      { session_id: user.sid, revoked_sessions: revokedSessions },
     );
   }
 

@@ -4,6 +4,7 @@ import { PassportModule } from '@nestjs/passport';
 import { MikroOrmModule } from '@mikro-orm/nestjs';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
+import { PasswordService } from './password.service';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { UserModule } from '../user/user.module';
 import { CategoryModule } from '../category/category.module';
@@ -42,7 +43,7 @@ import { assertJwtSecrets, requireEnv, requireIntEnv } from './auth.env';
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtStrategy],
+  providers: [AuthService, PasswordService, JwtStrategy],
   exports: [AuthService],
 })
 export class AuthModule {}

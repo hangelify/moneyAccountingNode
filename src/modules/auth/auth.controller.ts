@@ -31,6 +31,7 @@ import { AuthService } from './auth.service';
 import { UserService } from '../user/user.service';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
+import { ChangePasswordDto } from './dto/change-password.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { RevokeTokenDto } from './dto/revoke-token.dto';
 import { SessionDto } from './dto/session.dto';
@@ -68,6 +69,8 @@ const ApiClientMode = () =>
     }),
   );
 
+const USER_AGENT_MAX_LENGTH = 512;
+
 @ApiTags('auth')
 @Controller('auth')
 export class AuthController {
@@ -78,6 +81,12 @@ export class AuthController {
 
   private extractIpAddress(req: Request): string {
     return req.ip ?? req.socket?.remoteAddress ?? 'unknown';
+  }
+
+  // Stored with every session, refresh token and auth log row; the header is
+  // client-controlled, so only a bounded prefix is kept.
+  private extractUserAgent(req: Request): string | undefined {
+    return req.get('user-agent')?.slice(0, USER_AGENT_MAX_LENGTH);
   }
 
   // Web clients get the refresh token only as an HttpOnly cookie; mobile
@@ -119,7 +128,7 @@ export class AuthController {
   ): Promise<ClientTokenResponse> {
     const mode = resolveClientMode(req);
     const ipAddress = this.extractIpAddress(req);
-    const userAgent = req.get('user-agent');
+    const userAgent = this.extractUserAgent(req);
     const tokens = await this.authService.register(
       registerDto,
       ipAddress,
@@ -149,7 +158,7 @@ export class AuthController {
   ): Promise<ClientTokenResponse> {
     const mode = resolveClientMode(req);
     const ipAddress = this.extractIpAddress(req);
-    const userAgent = req.get('user-agent');
+    const userAgent = this.extractUserAgent(req);
     const tokens = await this.authService.login(loginDto, ipAddress, userAgent);
     return this.deliverTokens(mode, tokens, res);
   }
@@ -184,7 +193,7 @@ export class AuthController {
         : new BadRequestException('refresh_token is required');
     }
     const ipAddress = this.extractIpAddress(req);
-    const userAgent = req.get('user-agent');
+    const userAgent = this.extractUserAgent(req);
     const tokens = await this.authService.refreshToken(
       refreshToken,
       ipAddress,
@@ -234,7 +243,7 @@ export class AuthController {
       await this.authService.revokeRefreshToken(
         refreshToken,
         this.extractIpAddress(req),
-        req.get('user-agent'),
+        this.extractUserAgent(req),
       );
     }
   }
@@ -270,7 +279,7 @@ export class AuthController {
     await this.authService.logout(
       user,
       this.extractIpAddress(req),
-      req.get('user-agent'),
+      this.extractUserAgent(req),
     );
     if (mode === 'web') {
       clearRefreshCookie(res);
@@ -307,12 +316,42 @@ export class AuthController {
     await this.authService.logoutAll(
       user,
       this.extractIpAddress(req),
-      req.get('user-agent'),
+      this.extractUserAgent(req),
     );
     if (mode === 'web') {
       clearRefreshCookie(res);
     }
     return { message: 'Logged out of all sessions' };
+  }
+
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  @UseGuards(JwtAuthGuard)
+  @Post('change-password')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({
+    summary: 'Change the password',
+    description:
+      'Every other session of the user ends; the calling session stays.',
+  })
+  @ApiBody({ type: ChangePasswordDto })
+  @ApiResponse({ status: 204, description: 'Password changed' })
+  @ApiResponse({
+    status: 400,
+    description: 'Current password is incorrect, or the new one is invalid',
+  })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  async changePassword(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: ChangePasswordDto,
+    @Req() req: Request,
+  ): Promise<void> {
+    await this.authService.changePassword(
+      user,
+      dto,
+      this.extractIpAddress(req),
+      this.extractUserAgent(req),
+    );
   }
 
   @UseGuards(JwtAuthGuard)
@@ -353,7 +392,7 @@ export class AuthController {
       user,
       id,
       this.extractIpAddress(req),
-      req.get('user-agent'),
+      this.extractUserAgent(req),
     );
   }
 

@@ -30,6 +30,8 @@ export function applyTestEnv(env: NodeJS.ProcessEnv = process.env): void {
   env.JWT_REFRESH_SECRET = 'e2e-refresh-secret-at-least-32-characters-long';
   env.JWT_EXPIRES_IN_MS = '900000';
   env.JWT_REFRESH_EXPIRES_IN_MS = '604800000';
+  env.JWT_ISSUER = 'https://api.e2e.test';
+  env.JWT_AUDIENCE = 'e2e-clients';
   delete env.TRUST_PROXY;
 
   // Configured, never contacted: specs stub S3 and the AI calls they need.

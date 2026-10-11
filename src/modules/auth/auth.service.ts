@@ -22,6 +22,14 @@ import { RegisterDto } from './dto/register.dto';
 import { TokenResponseDto } from './dto/token-response.dto';
 import { JwtPayload } from './types/jwt-payload.interface';
 import {
+  ACCESS_TOKEN_TYP,
+  JWT_ALGORITHM,
+  REFRESH_TOKEN_TYP,
+  hasTyp,
+  jwtAudience,
+  jwtIssuer,
+} from './token-format';
+import {
   optionalNonNegativeIntEnv,
   requireEnv,
   requireIntEnv,
@@ -201,9 +209,20 @@ export class AuthService implements OnModuleInit {
   ): Promise<TokenResponseDto> {
     let payload: JwtPayload;
     try {
-      payload = this.jwtService.verify<JwtPayload>(refreshToken, {
+      const decoded = this.jwtService.verify<{
+        header: { typ?: string };
+        payload: JwtPayload;
+      }>(refreshToken, {
         secret: requireEnv('JWT_REFRESH_SECRET'),
+        algorithms: [JWT_ALGORITHM],
+        issuer: jwtIssuer(),
+        audience: jwtAudience(),
+        complete: true,
       });
+      if (!hasTyp(decoded.header.typ, REFRESH_TOKEN_TYP)) {
+        throw new Error('Unexpected token typ');
+      }
+      payload = decoded.payload;
     } catch {
       await this.logAuthAttempt(
         'unknown',
@@ -217,7 +236,7 @@ export class AuthService implements OnModuleInit {
 
     if (payload.type !== 'refresh') {
       await this.logAuthAttempt(
-        payload.email ?? 'unknown',
+        `user:${payload.sub}`,
         false,
         'Token refresh failed - wrong token type',
         ipAddress,
@@ -235,7 +254,7 @@ export class AuthService implements OnModuleInit {
 
     if (!tokenEntity) {
       await this.logAuthAttempt(
-        payload.email ?? 'unknown',
+        `user:${payload.sub}`,
         false,
         'Token refresh failed - token not recognized',
         ipAddress,
@@ -430,8 +449,6 @@ export class AuthService implements OnModuleInit {
 
     const accessPayload: Omit<JwtPayload, 'iat' | 'exp'> = {
       sub: user.id,
-      email: user.email,
-      first_name: user.first_name,
       type: 'access',
       jti: accessJti,
       sid: session.id,
@@ -439,21 +456,29 @@ export class AuthService implements OnModuleInit {
 
     const refreshPayload: Omit<JwtPayload, 'iat' | 'exp'> = {
       sub: user.id,
-      email: user.email,
-      first_name: user.first_name,
       type: 'refresh',
       jti: refreshJti,
       sid: session.id,
     };
 
+    const signOptions = {
+      algorithm: JWT_ALGORITHM,
+      issuer: jwtIssuer(),
+      audience: jwtAudience(),
+    } as const;
+
     const [accessToken, refreshToken] = await Promise.all([
       this.jwtService.signAsync(accessPayload, {
+        ...signOptions,
         secret: requireEnv('JWT_SECRET'),
         expiresIn: accessTokenExpiresInSeconds,
+        header: { alg: JWT_ALGORITHM, typ: ACCESS_TOKEN_TYP },
       }),
       this.jwtService.signAsync(refreshPayload, {
+        ...signOptions,
         secret: requireEnv('JWT_REFRESH_SECRET'),
         expiresIn: refreshTokenExpiresInSeconds,
+        header: { alg: JWT_ALGORITHM, typ: REFRESH_TOKEN_TYP },
       }),
     ]);
 

@@ -239,35 +239,38 @@ describe('Auth session flow (e2e)', () => {
       await me(tokens.refresh_token).expect(401);
     });
 
-    it('rejects an expired access token', async () => {
+    // Re-signs a real access token with all its claims and header kept, so
+    // only the changed option can make the token fail.
+    async function resignAccess(options: object): Promise<string> {
       const tokens = await login();
-      const payload = app
-        .get(JwtService)
-        .decode<JwtPayload>(tokens.access_token);
-      const expired = app.get(JwtService).sign(
-        {
-          sub: payload.sub,
-          email: payload.email,
-          type: 'access',
-          sid: payload.sid,
-        },
-        { secret: process.env.JWT_SECRET, expiresIn: -60 },
-      );
-      await me(expired).expect(401);
+      const { header, payload } = app.get(JwtService).decode<{
+        header: { typ: string };
+        payload: Record<string, unknown>;
+      }>(tokens.access_token, { complete: true });
+      const claims = { ...payload };
+      delete claims.exp;
+      return app.get(JwtService).sign(claims, {
+        secret: process.env.JWT_SECRET,
+        expiresIn: 300,
+        header: { alg: 'HS256', typ: header.typ },
+        ...options,
+      });
+    }
+
+    it('accepts a re-signed access token with unchanged claims', async () => {
+      await me(await resignAccess({})).expect(200);
+    });
+
+    it('rejects an expired access token', async () => {
+      await me(await resignAccess({ expiresIn: -60 })).expect(401);
     });
 
     it('rejects a token signed with another secret', async () => {
-      const tokens = await login();
-      const payload = app
-        .get(JwtService)
-        .decode<JwtPayload>(tokens.access_token);
-      const forged = app
-        .get(JwtService)
-        .sign(
-          { sub: payload.sub, type: 'access', sid: payload.sid },
-          { secret: 'another-secret-at-least-32-characters-long' },
-        );
-      await me(forged).expect(401);
+      await me(
+        await resignAccess({
+          secret: 'another-secret-at-least-32-characters-long',
+        }),
+      ).expect(401);
     });
 
     it('rejects a request without a token', async () => {

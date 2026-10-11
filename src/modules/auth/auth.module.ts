@@ -13,7 +13,7 @@ import { Session } from '../../entities/session.entity';
 import { Log } from '../../entities/log.entity';
 import { Household } from '../../entities/household.entity';
 import { HouseholdMember } from '../../entities/household-member.entity';
-import { requireEnv, requireIntEnv } from './auth.env';
+import { assertJwtSecrets, requireEnv, requireIntEnv } from './auth.env';
 
 @Module({
   imports: [
@@ -30,12 +30,15 @@ import { requireEnv, requireIntEnv } from './auth.env';
     CategoryModule,
     // Env is read at bootstrap, not when this file is imported.
     JwtModule.registerAsync({
-      useFactory: () => ({
-        secret: requireEnv('JWT_SECRET'),
-        signOptions: {
-          expiresIn: Math.floor(requireIntEnv('JWT_EXPIRES_IN_MS') / 1000),
-        },
-      }),
+      useFactory: () => {
+        assertJwtSecrets();
+        return {
+          secret: requireEnv('JWT_SECRET'),
+          signOptions: {
+            expiresIn: Math.floor(requireIntEnv('JWT_EXPIRES_IN_MS') / 1000),
+          },
+        };
+      },
     }),
   ],
   controllers: [AuthController],

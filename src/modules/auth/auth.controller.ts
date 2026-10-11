@@ -7,6 +7,7 @@ import {
   UseGuards,
   Req,
   Get,
+  Header,
 } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import {
@@ -43,6 +44,8 @@ export class AuthController {
 
   @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @Post('register')
+  @Header('Cache-Control', 'no-store')
+  @Header('Pragma', 'no-cache')
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Register a new user' })
   @ApiResponse({
@@ -66,6 +69,8 @@ export class AuthController {
 
   @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @Post('login')
+  @Header('Cache-Control', 'no-store')
+  @Header('Pragma', 'no-cache')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Login with email and password' })
   @ApiResponse({
@@ -86,6 +91,8 @@ export class AuthController {
 
   @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @Post('refresh')
+  @Header('Cache-Control', 'no-store')
+  @Header('Pragma', 'no-cache')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Refresh access token' })
   @ApiResponse({

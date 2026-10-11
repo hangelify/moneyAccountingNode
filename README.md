@@ -30,7 +30,7 @@ The application is organized into feature modules under `src/modules/`:
 
 | Module | Responsibility |
 |---|---|
-| `auth` | Registration, login, logout, JWT access/refresh tokens, sessions |
+| `auth` | Session-based authentication with JWT: registration, login, logout, access/refresh tokens backed by server-side sessions |
 | `user` | User profile management |
 | `household` | Multi-user households, member invites, household-scoped data access |
 | `budget` | Budget creation and management |
@@ -239,7 +239,7 @@ Every call routed through the AI gateway is persisted for auditing and cost trac
 |---|---|
 | Framework | NestJS 11 (Node 24, TypeScript 5) |
 | ORM | MikroORM 6 with PostgreSQL driver |
-| Auth | Passport.js + JWT (access + refresh token rotation) |
+| Auth | Session-based authentication with JWT (Passport.js; access + refresh token rotation). Not OAuth: there is no authorization server, clients or scopes |
 | Validation | `class-validator` + `class-transformer` |
 | Rate limiting | `@nestjs/throttler` + Redis storage |
 | AI providers | Anthropic Claude, OpenAI, DeepSeek (pluggable gateway) |
@@ -291,7 +291,9 @@ cp .env.example .env
 
 ### JWT
 
-Both secrets must be at least 32 characters. Generate with `openssl rand -base64 32`.
+Both secrets must be at least 32 bytes long and must differ, otherwise the app refuses to start. Generate with `openssl rand -base64 32`.
+
+Tokens are signed with HS256 only and carry `iss`, `aud` and an explicit `typ` header (`at+jwt` for access, `rt+jwt` for refresh); verification pins all three. The claims hold no personal data, only `sub`, `sid`, `jti` and `type`. Changing `JWT_ISSUER` or `JWT_AUDIENCE` invalidates every issued token. Token responses are sent with `Cache-Control: no-store`, and a `401` from a protected endpoint carries `WWW-Authenticate: Bearer realm="api"` (plus `error="invalid_token"` when a token was sent but refused).
 
 | Variable | Required | Description |
 |---|---|---|
@@ -299,6 +301,8 @@ Both secrets must be at least 32 characters. Generate with `openssl rand -base64
 | `JWT_EXPIRES_IN_MS` | yes | Access token TTL in milliseconds (e.g. `900000` = 15 min) |
 | `JWT_REFRESH_SECRET` | yes | Secret for signing refresh tokens |
 | `JWT_REFRESH_EXPIRES_IN_MS` | yes | Refresh token TTL in milliseconds (e.g. `604800000` = 7 days) |
+| `JWT_ISSUER` | no | `iss` claim of issued tokens, required on verification. Default `accounting-api` |
+| `JWT_AUDIENCE` | no | `aud` claim of issued tokens, required on verification. Default `accounting-api` |
 | `REFRESH_REUSE_GRACE_SECONDS` | no | Seconds after a rotation during which reusing the old refresh token gets `401` without revoking the session (for clients retrying after a timeout). Default `0`: any reuse revokes the session |
 
 ### AI Gateway

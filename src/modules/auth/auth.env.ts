@@ -32,3 +32,26 @@ export function optionalNonNegativeIntEnv(
   }
   return parseInt(raw, 10);
 }
+
+const MIN_JWT_SECRET_BYTES = 32;
+
+// HS256 keys shorter than the hash output weaken the signature (RFC 7518
+// §3.2); one secret for both token kinds would let a refresh token pass as an
+// access token if the type checks ever regressed.
+export function assertJwtSecrets(): void {
+  const access = requireEnv('JWT_SECRET');
+  const refresh = requireEnv('JWT_REFRESH_SECRET');
+  for (const [name, value] of [
+    ['JWT_SECRET', access],
+    ['JWT_REFRESH_SECRET', refresh],
+  ]) {
+    if (Buffer.byteLength(value, 'utf8') < MIN_JWT_SECRET_BYTES) {
+      throw new Error(
+        `Environment variable ${name} must be at least ${MIN_JWT_SECRET_BYTES} bytes long`,
+      );
+    }
+  }
+  if (access === refresh) {
+    throw new Error('JWT_SECRET and JWT_REFRESH_SECRET must differ');
+  }
+}

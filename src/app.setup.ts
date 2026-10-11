@@ -41,7 +41,11 @@ export function configureApp(
   // Swagger configuration
   const swaggerConfig = new DocumentBuilder()
     .setTitle('Accounting API')
-    .setDescription('Family Accounting Application API Documentation')
+    .setDescription(
+      'Family Accounting Application API Documentation. Authentication is ' +
+        'session-based with JWT: log in for an access token and send it as ' +
+        'a Bearer token.',
+    )
     .setVersion('1.0')
     .addTag('auth', 'Authentication endpoints')
     .addTag('app', 'Application endpoints')
@@ -51,7 +55,7 @@ export function configureApp(
         scheme: 'bearer',
         bearerFormat: 'JWT',
         name: 'JWT',
-        description: 'Enter JWT token',
+        description: 'Access token from /auth/login or /auth/refresh',
         in: 'header',
       },
       'JWT-auth', // This name here is important for matching up with @ApiBearerAuth() in your controller!

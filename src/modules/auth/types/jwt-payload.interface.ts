@@ -2,10 +2,9 @@ import { User } from '../../../entities/user.entity';
 
 export type TokenType = 'access' | 'refresh';
 
+// No personal data: the claims are readable by anyone holding the token.
 export interface JwtPayload {
   sub: string;
-  email: string;
-  first_name: string;
   type: TokenType;
   jti: string;
   sid?: string;

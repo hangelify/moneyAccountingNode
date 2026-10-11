@@ -14,7 +14,10 @@ import { Currency } from '../../types/currency.enum';
 import { BillCrudService } from './bill-crud.service';
 import { BillDashboardService } from './bill-dashboard.service';
 import type { ListBillsQueryDto } from './dto/list-bills-query.dto';
-import type { BillDashboardQueryDto } from './dto/bill-dashboard.dto';
+import type {
+  BillDashboardQueryDto,
+  DashboardCurrencySeriesDto,
+} from './dto/bill-dashboard.dto';
 
 // The raw SQL of the bill list and the dashboard, run against the real
 // schema: filters, household scoping, drafts and soft deletes, aggregation.
@@ -23,6 +26,7 @@ describe('bill list and dashboard SQL (PostgreSQL)', () => {
   let crud: BillCrudService;
   let dashboard: BillDashboardService;
   let householdId: string;
+  let mixedHouseholdId: string;
   const ids: Record<'march5' | 'march20' | 'april2', string> = {
     march5: '',
     march20: '',
@@ -142,8 +146,22 @@ describe('bill list and dashboard SQL (PostgreSQL)', () => {
       [bread, 777],
     ]);
 
+    // A household mixing MDL, EUR and bills without a currency on one day.
+    const mixed = em.create(Household, {
+      name: 'Sql mixed',
+      created_by: user,
+    } as never);
+    const may10 = { bill_date: new Date('2026-05-10'), household: mixed };
+    bill({ ...may10, amount: 200, currency: Currency.MDL }, [
+      [bread, 150],
+      [soap, 50],
+    ]);
+    bill({ ...may10, amount: 20, currency: Currency.EUR }, [[soap, 20]]);
+    bill({ ...may10, amount: 30, currency: null }, [[bread, 30]]);
+
     await em.flush();
     householdId = household.id;
+    mixedHouseholdId = mixed.id;
     ids.march5 = march5.id;
     ids.march20 = march20.id;
     ids.april2 = april2.id;
@@ -212,17 +230,23 @@ describe('bill list and dashboard SQL (PostgreSQL)', () => {
   });
 
   describe('getDashboard', () => {
-    const get = (query: BillDashboardQueryDto) =>
-      dashboard.getDashboard(householdId, query);
+    const get = (query: BillDashboardQueryDto, hid = householdId) =>
+      dashboard.getDashboard(hid, query);
+    const nonZero = (s: DashboardCurrencySeriesDto) =>
+      s.period_totals.filter((p) => p.total !== 0);
 
-    it('totals a month by day, with its bills and category shares', async () => {
+    it('totals a month by day and currency, with its bills and category shares', async () => {
       const res = await get({ type: 'month', year: 2026, month: 3 });
 
-      expect(res.period_totals).toHaveLength(31);
-      expect(res.period_totals.filter((p) => p.total !== 0)).toEqual([
-        { period: '2026-03-05', total: 10.5 },
-        { period: '2026-03-20', total: 100 },
+      expect(res.by_currency.map((s) => s.currency)).toEqual([
+        Currency.EUR,
+        Currency.USD,
       ]);
+      const [eur, usd] = res.by_currency;
+      expect(eur.period_totals).toHaveLength(31);
+      expect(usd.period_totals).toHaveLength(31);
+      expect(nonZero(eur)).toEqual([{ period: '2026-03-05', total: 10.5 }]);
+      expect(nonZero(usd)).toEqual([{ period: '2026-03-20', total: 100 }]);
 
       expect(res.bills).toEqual([
         {
@@ -243,39 +267,65 @@ describe('bill list and dashboard SQL (PostgreSQL)', () => {
         },
       ]);
 
-      // Uncategorised items (sub_category NULL) are left out of the shares.
-      expect(res.category_stats).toEqual([
-        {
-          category_id: expect.any(String) as string,
-          category_name: 'Food',
-          total_amount: 104.5,
-          percentage: 94.57,
-        },
+      // Shares are computed within a currency; uncategorised items
+      // (sub_category NULL) are left out of them.
+      expect(eur.category_stats).toEqual([
         {
           category_id: expect.any(String) as string,
           category_name: 'Home',
           total_amount: 6,
-          percentage: 5.43,
+          percentage: 57.14,
+        },
+        {
+          category_id: expect.any(String) as string,
+          category_name: 'Food',
+          total_amount: 4.5,
+          percentage: 42.86,
+        },
+      ]);
+      expect(usd.category_stats).toEqual([
+        {
+          category_id: expect.any(String) as string,
+          category_name: 'Food',
+          total_amount: 100,
+          percentage: 100,
         },
       ]);
     });
 
-    it('totals a quarter by month', async () => {
+    it('totals a quarter by month and currency', async () => {
       const res = await get({ type: 'quarter', year: 2026, quarter: 1 });
-      expect(res.period_totals).toEqual([
-        { period: '2026-01', total: 0 },
-        { period: '2026-02', total: 0 },
-        { period: '2026-03', total: 110.5 },
-      ]);
+      expect(res.by_currency.map((s) => [s.currency, s.period_totals])).toEqual(
+        [
+          [
+            Currency.EUR,
+            [
+              { period: '2026-01', total: 0 },
+              { period: '2026-02', total: 0 },
+              { period: '2026-03', total: 10.5 },
+            ],
+          ],
+          [
+            Currency.USD,
+            [
+              { period: '2026-01', total: 0 },
+              { period: '2026-02', total: 0 },
+              { period: '2026-03', total: 100 },
+            ],
+          ],
+        ],
+      );
     });
 
-    it('totals a year by month', async () => {
+    it('totals a year by month and currency', async () => {
       const res = await get({ type: 'year', year: 2026 });
-      expect(res.period_totals).toHaveLength(12);
-      expect(res.period_totals.filter((p) => p.total !== 0)).toEqual([
-        { period: '2026-03', total: 110.5 },
+      const [eur, usd] = res.by_currency;
+      expect(eur.period_totals).toHaveLength(12);
+      expect(nonZero(eur)).toEqual([
+        { period: '2026-03', total: 10.5 },
         { period: '2026-04', total: 7 },
       ]);
+      expect(nonZero(usd)).toEqual([{ period: '2026-03', total: 100 }]);
       expect(res.bills.map((b) => b.id)).toEqual([
         ids.april2,
         ids.march20,
@@ -283,12 +333,46 @@ describe('bill list and dashboard SQL (PostgreSQL)', () => {
       ]);
     });
 
-    it('returns empty results for a period without bills', async () => {
+    it('never mixes currencies; bills without a currency form a null series, last', async () => {
+      const res = await get(
+        { type: 'month', year: 2026, month: 5 },
+        mixedHouseholdId,
+      );
+
+      expect(res.by_currency.map((s) => s.currency)).toEqual([
+        Currency.EUR,
+        Currency.MDL,
+        null,
+      ]);
+      const [eur, mdl, none] = res.by_currency;
+
+      expect(nonZero(eur)).toEqual([{ period: '2026-05-10', total: 20 }]);
+      expect(nonZero(mdl)).toEqual([{ period: '2026-05-10', total: 200 }]);
+      expect(nonZero(none)).toEqual([{ period: '2026-05-10', total: 30 }]);
+
+      const shares = (s: DashboardCurrencySeriesDto) =>
+        s.category_stats.map((c) => [
+          c.category_name,
+          c.total_amount,
+          c.percentage,
+        ]);
+      expect(shares(eur)).toEqual([['Home', 20, 100]]);
+      expect(shares(mdl)).toEqual([
+        ['Food', 150, 75],
+        ['Home', 50, 25],
+      ]);
+      expect(shares(none)).toEqual([['Food', 30, 100]]);
+
+      expect(res.bills.map((b) => b.currency)).toHaveLength(3);
+      expect(res.bills.map((b) => b.currency)).toEqual(
+        expect.arrayContaining([Currency.EUR, Currency.MDL, null]),
+      );
+    });
+
+    it('returns no series for a period without bills', async () => {
       const res = await get({ type: 'month', year: 2025, month: 2 });
-      expect(res.period_totals).toHaveLength(28);
-      expect(res.period_totals.every((p) => p.total === 0)).toBe(true);
+      expect(res.by_currency).toEqual([]);
       expect(res.bills).toEqual([]);
-      expect(res.category_stats).toEqual([]);
     });
   });
 });

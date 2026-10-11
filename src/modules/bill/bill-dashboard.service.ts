@@ -5,10 +5,19 @@ import {
   BillDashboardResponseDto,
   DashboardBillSummaryDto,
   DashboardCategoryStatDto,
+  DashboardCurrencySeriesDto,
   DashboardPeriodTotalDto,
 } from './dto/bill-dashboard.dto';
+import { Currency } from '../../types/currency.enum';
 
 type DbConn = ReturnType<EntityManager['getConnection']>;
+type PeriodRow = { currency: Currency | null; period: string; total: string };
+type CategoryRow = {
+  currency: Currency | null;
+  category_id: string;
+  category_name: string;
+  total_amount: string;
+};
 
 @Injectable()
 export class BillDashboardService {
@@ -29,10 +38,43 @@ export class BillDashboardService {
     ]);
 
     return {
-      period_totals: this.fillGaps(periodRows, start, end, dto.type),
+      by_currency: this.buildCurrencySeries(
+        periodRows,
+        categoryRows,
+        start,
+        end,
+        dto.type,
+      ),
       bills: this.mapBills(billRows),
-      category_stats: this.computePercentages(categoryRows),
     };
+  }
+
+  // Amounts in different currencies are never summed: every currency (and
+  // bills without one, as the null series) gets its own totals and shares.
+  private buildCurrencySeries(
+    periodRows: PeriodRow[],
+    categoryRows: CategoryRow[],
+    start: string,
+    end: string,
+    type: 'month' | 'quarter' | 'year',
+  ): DashboardCurrencySeriesDto[] {
+    const currencies = [
+      ...new Set([...periodRows, ...categoryRows].map((r) => r.currency)),
+    ].sort((a, b) =>
+      a === null ? 1 : b === null ? -1 : a < b ? -1 : a > b ? 1 : 0,
+    );
+    return currencies.map((currency) => ({
+      currency,
+      period_totals: this.fillGaps(
+        periodRows.filter((r) => r.currency === currency),
+        start,
+        end,
+        type,
+      ),
+      category_stats: this.computePercentages(
+        categoryRows.filter((r) => r.currency === currency),
+      ),
+    }));
   }
 
   private computeDateRange(dto: BillDashboardQueryDto): {
@@ -66,23 +108,24 @@ export class BillDashboardService {
     start: string,
     end: string,
     granularity: 'day' | 'month',
-  ): Promise<Array<{ period: string; total: string }>> {
+  ): Promise<PeriodRow[]> {
     const SAFE_GRANULARITIES = new Set<string>(['day', 'month']);
     if (!SAFE_GRANULARITIES.has(granularity)) {
       throw new Error(`Invalid granularity: ${granularity}`);
     }
     const fmt = granularity === 'day' ? 'YYYY-MM-DD' : 'YYYY-MM';
     return conn.execute(
-      `SELECT TO_CHAR(DATE_TRUNC('${granularity}', bill_date), '${fmt}') AS period,
+      `SELECT currency,
+              TO_CHAR(DATE_TRUNC('${granularity}', bill_date), '${fmt}') AS period,
               SUM(amount)::text AS total
        FROM bills
        WHERE household_id = ? AND status = 'confirmed'
          AND bill_date >= ? AND bill_date < ?
          AND deleted_at IS NULL
-       GROUP BY DATE_TRUNC('${granularity}', bill_date)
+       GROUP BY currency, DATE_TRUNC('${granularity}', bill_date)
        ORDER BY period`,
       [householdId, start, end],
-    ) as Promise<Array<{ period: string; total: string }>>;
+    ) as Promise<PeriodRow[]>;
   }
 
   private async fetchBills(
@@ -95,7 +138,7 @@ export class BillDashboardService {
       id: string;
       bill_date: string;
       total_amount: string;
-      currency: string;
+      currency: Currency | null;
       market_name: string | null;
       items_count: string;
     }>
@@ -122,7 +165,7 @@ export class BillDashboardService {
         id: string;
         bill_date: string;
         total_amount: string;
-        currency: string;
+        currency: Currency | null;
         market_name: string | null;
         items_count: string;
       }>
@@ -134,11 +177,9 @@ export class BillDashboardService {
     householdId: string,
     start: string,
     end: string,
-  ): Promise<
-    Array<{ category_id: string; category_name: string; total_amount: string }>
-  > {
+  ): Promise<CategoryRow[]> {
     return conn.execute(
-      `SELECT c.id AS category_id, c.name AS category_name,
+      `SELECT b.currency, c.id AS category_id, c.name AS category_name,
               SUM(bsc.amount)::text AS total_amount
        FROM bill_sub_categories bsc
        JOIN bills b ON b.id = bsc.bill_id
@@ -148,20 +189,14 @@ export class BillDashboardService {
          AND b.bill_date >= ? AND b.bill_date < ?
          AND b.deleted_at IS NULL
          AND bsc.sub_category_id IS NOT NULL
-       GROUP BY c.id, c.name
-       ORDER BY SUM(bsc.amount) DESC`,
+       GROUP BY b.currency, c.id, c.name
+       ORDER BY SUM(bsc.amount) DESC, c.name`,
       [householdId, start, end],
-    ) as Promise<
-      Array<{
-        category_id: string;
-        category_name: string;
-        total_amount: string;
-      }>
-    >;
+    ) as Promise<CategoryRow[]>;
   }
 
   private fillGaps(
-    rows: Array<{ period: string; total: string }>,
+    rows: PeriodRow[],
     start: string,
     end: string,
     type: 'month' | 'quarter' | 'year',
@@ -210,7 +245,7 @@ export class BillDashboardService {
       id: string;
       bill_date: string;
       total_amount: string;
-      currency: string;
+      currency: Currency | null;
       market_name: string | null;
       items_count: string;
     }>,
@@ -225,13 +260,7 @@ export class BillDashboardService {
     }));
   }
 
-  private computePercentages(
-    rows: Array<{
-      category_id: string;
-      category_name: string;
-      total_amount: string;
-    }>,
-  ): DashboardCategoryStatDto[] {
+  private computePercentages(rows: CategoryRow[]): DashboardCategoryStatDto[] {
     if (rows.length === 0) return [];
     const totals = rows.map((r) => Number(r.total_amount));
     const sum = totals.reduce((a, v) => a + v, 0);

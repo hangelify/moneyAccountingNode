@@ -1,4 +1,4 @@
-FROM node:20-alpine AS builder
+FROM node:24-alpine AS builder
 
 WORKDIR /app
 
@@ -18,7 +18,7 @@ COPY scripts ./scripts
 RUN npm run build
 
 # Production stage
-FROM node:20-alpine
+FROM node:24-alpine
 
 WORKDIR /app
 
@@ -30,15 +30,13 @@ COPY package*.json ./
 COPY tsconfig*.json ./
 COPY nest-cli.json ./
 
-# Install dependencies (including dev for migrations)
-RUN npm ci
+# Production dependencies only: the MikroORM CLI (migration:up in
+# docker-entrypoint.sh) loads the compiled dist/mikro-orm.config.js and
+# dist/migrations, so ts-node and the TypeScript sources are not needed.
+RUN npm ci --omit=dev && npm cache clean --force
 
 # Copy built application from builder
 COPY --from=builder /app/dist ./dist
-# The MikroORM CLI (migration:up in docker-entrypoint.sh) runs under ts-node,
-# so it loads src/mikro-orm.config.ts and discovers entities via entitiesTs
-# (src/**/*.entity.ts); migrations are .ts too. Ship the whole src tree.
-COPY --from=builder /app/src ./src
 
 # Copy entrypoint script
 COPY docker-entrypoint.sh ./

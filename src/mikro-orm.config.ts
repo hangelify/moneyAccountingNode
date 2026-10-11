@@ -16,7 +16,7 @@ export function createMikroOrmConfig() {
     entities: ['./dist/**/*.entity.js'],
     entitiesTs: ['./src/**/*.entity.ts'],
     migrations: {
-      path: './src/migrations',
+      path: './dist/migrations',
       pathTs: './src/migrations',
       glob: '!(*.d).{js,ts}',
     },

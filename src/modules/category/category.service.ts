@@ -207,13 +207,13 @@ export class CategoryService {
   /**
    * Soft delete a category by setting deleted_at timestamp
    * Only deletes category if it belongs to the household
+   * Its live sub-categories are soft deleted in the same flush
    */
   async deleteCategory(id: string, householdId: string): Promise<void> {
-    const category = await this.categoryRepository.findOne({
-      id,
-      household: { id: householdId },
-      deleted_at: null,
-    });
+    const category = await this.categoryRepository.findOne(
+      { id, household: { id: householdId }, deleted_at: null },
+      { populate: ['subCategories'] },
+    );
     if (!category) {
       throw new NotFoundException(`Category with ID ${id} not found`);
     }
@@ -222,7 +222,11 @@ export class CategoryService {
         `Category with ID ${id} is already deleted`,
       );
     }
-    category.deleted_at = new Date();
+    const now = new Date();
+    category.deleted_at = now;
+    for (const sc of category.subCategories) {
+      sc.deleted_at ??= now;
+    }
     await this.em.persist(category).flush();
   }
 }

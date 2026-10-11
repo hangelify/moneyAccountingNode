@@ -122,7 +122,7 @@ export class SubCategoryService {
     const subCategory = await this.subCategoryRepository.findOne(
       {
         id,
-        category: { household: { id: householdId } },
+        category: { household: { id: householdId }, deleted_at: null },
         deleted_at: null,
       },
       {
@@ -185,7 +185,7 @@ export class SubCategoryService {
     const subCategory = await this.subCategoryRepository.findOne(
       {
         id,
-        category: { household: { id: householdId } },
+        category: { household: { id: householdId }, deleted_at: null },
         deleted_at: null,
       },
       {
@@ -227,7 +227,7 @@ export class SubCategoryService {
     const subCategory = await this.subCategoryRepository.findOne(
       {
         id,
-        category: { household: { id: householdId } },
+        category: { household: { id: householdId }, deleted_at: null },
         deleted_at: null,
       },
       {

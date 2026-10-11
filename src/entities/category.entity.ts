@@ -15,8 +15,9 @@ import { SubCategory } from './sub-category.entity';
 import { Household } from './household.entity';
 
 @Entity({ tableName: 'categories' })
-// Full, not partial on deleted_at: the parse-photo sub-category load does not
-// filter categories.deleted_at, so a partial index would not be used.
+// Full, not partial on deleted_at. Chosen when the parse-photo sub-category
+// load did not filter categories.deleted_at; it does now, so a partial index
+// would also be used, but switching needs a migration.
 @Index({ name: 'categories_household_id_index', properties: ['household'] })
 export class Category extends BaseEntity {
   @Property({ type: 'varchar', length: 255, nullable: false })

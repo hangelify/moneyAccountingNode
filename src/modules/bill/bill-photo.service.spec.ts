@@ -190,6 +190,32 @@ describe('BillPhotoService', () => {
   });
 
   it.each([
+    ['categorizing', makeSubs(), 'parseAndCategorize'],
+    ['parse-only', [], 'parseOnly'],
+  ] as const)(
+    'runs the AI call on behalf of the user and household (%s)',
+    async (_mode, subs, method) => {
+      const empty = { market_name: null, bill_date: null, items: [] };
+      const orchestrator = makeOrchestrator({
+        bill: empty,
+        parseOnlyResult: empty,
+      });
+      const svc = new BillPhotoService(orchestrator, makeRepo([...subs]));
+      await svc.parseAndCategorize(
+        Buffer.from('x'),
+        'image/png',
+        HOUSEHOLD_ID,
+        USER_ID,
+      );
+      const call = jest.mocked(orchestrator[method]).mock.calls[0];
+      expect(call[2]).toEqual({
+        userId: USER_ID,
+        householdId: HOUSEHOLD_ID,
+      });
+    },
+  );
+
+  it.each([
     ['categorizing', makeSubs(), 'req-cat'],
     ['parse-only', [], 'req-p'],
   ])(
@@ -345,9 +371,14 @@ describe('BillPhotoService', () => {
     expect(
       (orchestrator as unknown as { parseAndCategorize: jest.Mock })
         .parseAndCategorize,
-    ).toHaveBeenCalledWith(expect.any(Buffer), 'image/png', USER_ID, [
-      { id: 'sub-a', category_name: 'Bread', sub_category_name: 'bun' },
-      { id: 'sub-b', category_name: 'Dairy', sub_category_name: 'milk' },
-    ]);
+    ).toHaveBeenCalledWith(
+      expect.any(Buffer),
+      'image/png',
+      { userId: USER_ID, householdId: HOUSEHOLD_ID },
+      [
+        { id: 'sub-a', category_name: 'Bread', sub_category_name: 'bun' },
+        { id: 'sub-b', category_name: 'Dairy', sub_category_name: 'milk' },
+      ],
+    );
   });
 });

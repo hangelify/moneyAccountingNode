@@ -5073,6 +5073,23 @@
           "enumItems": [],
           "mappedType": "uuid"
         },
+        "household_id": {
+          "name": "household_id",
+          "type": "uuid",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "unique": false,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "uuid"
+        },
         "status": {
           "name": "status",
           "type": "ai_request_status_enum",
@@ -5132,7 +5149,7 @@
           "unsigned": false,
           "autoincrement": false,
           "primary": false,
-          "nullable": false,
+          "nullable": true,
           "unique": false,
           "length": null,
           "precision": null,
@@ -5297,6 +5314,27 @@
           "constraint": true,
           "primary": true,
           "unique": true
+        },
+        {
+          "columnNames": [
+            "household_id"
+          ],
+          "composite": false,
+          "constraint": false,
+          "keyName": "ai_requests_household_id_index",
+          "primary": false,
+          "unique": false
+        },
+        {
+          "columnNames": [
+            "created_at"
+          ],
+          "composite": false,
+          "constraint": false,
+          "keyName": "ai_requests_unscrubbed_created_index",
+          "primary": false,
+          "unique": false,
+          "where": "prompt IS NOT NULL"
         }
       ],
       "checks": [],
@@ -5313,6 +5351,19 @@
           "referencedTableName": "public.users",
           "deleteRule": "set null",
           "updateRule": "cascade"
+        },
+        "ai_requests_household_id_foreign": {
+          "columnNames": [
+            "household_id"
+          ],
+          "constraintName": "ai_requests_household_id_foreign",
+          "localTableName": "public.ai_requests",
+          "referencedColumnNames": [
+            "id"
+          ],
+          "referencedTableName": "public.households",
+          "updateRule": "cascade",
+          "deleteRule": "set null"
         }
       },
       "nativeEnums": {

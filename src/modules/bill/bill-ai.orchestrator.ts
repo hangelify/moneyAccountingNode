@@ -12,6 +12,12 @@ export interface SubCategoryInfo {
   sub_category_name: string;
 }
 
+/** Who the AI call is made for: budget user and data-owning household. */
+export interface AiCallOwner {
+  userId: string;
+  householdId: string;
+}
+
 @Injectable()
 export class BillAiOrchestrator {
   constructor(
@@ -23,21 +29,21 @@ export class BillAiOrchestrator {
   async parseAndCategorize(
     image: Buffer,
     mediaType: 'image/png' | 'image/jpeg' | 'image/webp',
-    userId: string,
+    owner: AiCallOwner,
     subcategories: SubCategoryInfo[],
   ): Promise<AiTaskResult<ParsedAndCategorizedBill>> {
     return this.gateway.run(
       this.parseCategorize,
       { image, mediaType, subcategories },
-      { userId },
+      owner,
     );
   }
 
   async parseOnly(
     image: Buffer,
     mediaType: 'image/png' | 'image/jpeg' | 'image/webp',
-    userId: string,
+    owner: AiCallOwner,
   ): Promise<AiTaskResult<ParsedBill>> {
-    return this.gateway.run(this.parser, { image, mediaType }, { userId });
+    return this.gateway.run(this.parser, { image, mediaType }, owner);
   }
 }

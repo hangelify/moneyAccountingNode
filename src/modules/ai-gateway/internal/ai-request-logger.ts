@@ -10,11 +10,13 @@ import {
   AiAttemptErrorCode,
 } from '../../../entities/ai-request-attempt.entity';
 import { User } from '../../../entities/user.entity';
+import { Household } from '../../../entities/household.entity';
 import { computeCostUsd } from '../pricing';
 
 export interface BeginArgs {
   taskName: string;
   userId?: string;
+  householdId?: string;
   requiredCapabilities: string[];
   imageS3Keys?: string[];
   prompt: { messages: Array<{ role: string; text: string }> };
@@ -71,6 +73,9 @@ export class AiRequestLogger {
     const req = em.create(AiRequest, {
       task_name: args.taskName,
       user: args.userId ? em.getReference(User, args.userId) : undefined,
+      household: args.householdId
+        ? em.getReference(Household, args.householdId)
+        : undefined,
       status: AiRequestStatus.PENDING,
       required_capabilities: args.requiredCapabilities,
       image_s3_keys: args.imageS3Keys,

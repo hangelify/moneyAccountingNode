@@ -11,6 +11,7 @@ import {
 } from '@mikro-orm/decorators/legacy';
 import { BaseEntity } from './base.entity';
 import { User } from './user.entity';
+import { Household } from './household.entity';
 import { AiRequestAttempt } from './ai-request-attempt.entity';
 
 export enum AiRequestStatus {
@@ -28,12 +29,21 @@ export enum AiRequestStatus {
   name: 'ai_requests_pending_index',
   expression: `create index "ai_requests_pending_index" on "ai_requests" ("created_at") where "status" = 'PENDING'`,
 })
+// Retention scrub: requests still holding raw payloads, by age.
+@Index({
+  name: 'ai_requests_unscrubbed_created_index',
+  expression: `create index "ai_requests_unscrubbed_created_index" on "ai_requests" ("created_at") where "prompt" is not null`,
+})
 export class AiRequest extends BaseEntity {
   @Property({ type: 'varchar', length: 128, nullable: false })
   task_name!: string;
 
   @ManyToOne(() => User, { nullable: true, deleteRule: 'set null' })
   user?: Rel<User>;
+
+  @ManyToOne(() => Household, { nullable: true, deleteRule: 'set null' })
+  @Index()
+  household?: Rel<Household>;
 
   @Enum({
     items: () => AiRequestStatus,
@@ -49,8 +59,9 @@ export class AiRequest extends BaseEntity {
   @Property({ type: 'jsonb', nullable: true })
   image_s3_keys?: string[];
 
-  @Property({ type: 'jsonb', nullable: false })
-  prompt!: { messages: Array<{ role: string; text: string }> };
+  // Null once the retention job has scrubbed the raw payloads.
+  @Property({ type: 'jsonb', nullable: true })
+  prompt?: { messages: Array<{ role: string; text: string }> } | null;
 
   @Property({ type: 'jsonb', nullable: true })
   final_output?: unknown;

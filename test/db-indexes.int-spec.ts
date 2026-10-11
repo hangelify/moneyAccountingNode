@@ -98,6 +98,22 @@ describe('database indexes (PostgreSQL)', () => {
       'bills_ai_request_id_index',
       'ON public.bills USING btree (ai_request_id)',
     ],
+    [
+      'ai_requests_household_id_index',
+      'ON public.ai_requests USING btree (household_id)',
+    ],
+    [
+      'ai_requests_unscrubbed_created_index',
+      'ON public.ai_requests USING btree (created_at) WHERE (prompt IS NOT NULL)',
+    ],
+    [
+      'refresh_tokens_expires_at_index',
+      'ON public.refresh_tokens USING btree (expires_at)',
+    ],
+    [
+      'sessions_absolute_expires_at_index',
+      'ON public.sessions USING btree (absolute_expires_at)',
+    ],
   ])('has %s', async (name, def) => {
     expect((await indexDefs()).get(name)).toContain(def);
   });
@@ -111,6 +127,16 @@ describe('database indexes (PostgreSQL)', () => {
     'users_email_unique',
   ])('no longer has the write-only %s', async (name) => {
     expect((await indexDefs()).has(name)).toBe(false);
+  });
+
+  it('retention: the AI audit scrub uses ai_requests_unscrubbed_created_index', async () => {
+    // Shape of RetentionService.scrubAiAudit's batch selection.
+    const p = await plan(
+      `select id from ai_requests
+        where prompt is not null and created_at < now() and status <> 'PENDING'
+        order by created_at limit 100`,
+    );
+    expect(p).toContain('ai_requests_unscrubbed_created_index');
   });
 
   it('parse-photo: household sub-categories use categories_household_id_index without a categories.deleted_at filter', async () => {

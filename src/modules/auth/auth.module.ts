@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Logger, Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
 import { MikroOrmModule } from '@mikro-orm/nestjs';
@@ -14,7 +14,14 @@ import { Session } from '../../entities/session.entity';
 import { Log } from '../../entities/log.entity';
 import { Household } from '../../entities/household.entity';
 import { HouseholdMember } from '../../entities/household-member.entity';
+import Redis from 'ioredis';
 import { assertJwtSecrets, requireEnv, requireIntEnv } from './auth.env';
+import { redisConnectionOptions } from '../../config/redis';
+import {
+  LOGIN_ATTEMPT_STORE,
+  RedisLoginAttemptStore,
+} from './login-lockout/login-attempt.store';
+import { LoginLockoutService } from './login-lockout/login-lockout.service';
 
 @Module({
   imports: [
@@ -43,7 +50,29 @@ import { assertJwtSecrets, requireEnv, requireIntEnv } from './auth.env';
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, PasswordService, JwtStrategy],
+  providers: [
+    AuthService,
+    PasswordService,
+    JwtStrategy,
+    LoginLockoutService,
+    {
+      provide: LOGIN_ATTEMPT_STORE,
+      // Lazy: an app that never handles a login (tests, tools) opens no
+      // connection. Short timeouts: with Redis down a login fails fast
+      // instead of hanging.
+      useFactory: () => {
+        const redis = new Redis({
+          ...redisConnectionOptions(),
+          lazyConnect: true,
+          maxRetriesPerRequest: 1,
+          commandTimeout: 1000,
+        });
+        const logger = new Logger('LoginAttemptStore');
+        redis.on('error', (err: Error) => logger.warn(err.message));
+        return new RedisLoginAttemptStore(redis);
+      },
+    },
+  ],
   exports: [AuthService],
 })
 export class AuthModule {}

@@ -305,6 +305,10 @@ Tokens are signed with HS256 only and carry `iss`, `aud` and an explicit `typ` h
 | `JWT_ISSUER` | no | `iss` claim of issued tokens, required on verification. Default `accounting-api` |
 | `JWT_AUDIENCE` | no | `aud` claim of issued tokens, required on verification. Default `accounting-api` |
 | `REFRESH_REUSE_GRACE_SECONDS` | no | Seconds after a rotation during which reusing the old refresh token gets `401` without revoking the session (for clients retrying after a timeout). Default `0`: any reuse revokes the session |
+| `LOGIN_MAX_FAILURES` | no | Failed logins for one email (from any IP) after which its logins get `429` with `Retry-After`. Default `5` |
+| `LOGIN_FAILURE_WINDOW_SECONDS` | no | Window in which failures are counted; a successful login resets the count. Default `900` |
+| `LOGIN_LOCKOUT_SECONDS` | no | First lock; each further failure doubles it. Default `60` |
+| `LOGIN_LOCKOUT_MAX_SECONDS` | no | Upper bound of the lock. Default `900` |
 
 ### AI Gateway
 

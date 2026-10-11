@@ -9,6 +9,8 @@ import { RefreshToken } from '../../entities/refresh-token.entity';
 import { Session } from '../../entities/session.entity';
 import { Log } from '../../entities/log.entity';
 import { PasswordService } from './password.service';
+import { LoginLockoutService } from './login-lockout/login-lockout.service';
+import { InMemoryLoginAttemptStore } from './login-lockout/login-attempt.store';
 
 // Wrap the real bcrypt so calls can be counted (its exports are not spy-able).
 jest.mock('bcrypt', () => {
@@ -105,6 +107,7 @@ function makeService(opts?: Partial<Pick<Deps, 'seedForHousehold'>>): {
     jwtService,
     { seedForHousehold } as unknown as CategoryDefaultsService,
     new PasswordService(),
+    new LoginLockoutService(new InMemoryLoginAttemptStore()),
   );
   return {
     service,

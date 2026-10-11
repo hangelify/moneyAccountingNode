@@ -1,4 +1,5 @@
 import {
+  HttpException,
   Injectable,
   UnauthorizedException,
   Logger,
@@ -45,6 +46,11 @@ import { CategoryDefaultsService } from '../category/category-defaults.service';
 import { sanitizeIp } from '../../common/utils/ip.util';
 import { normalizeEmail } from '../../common/transforms/normalize-email';
 import { PasswordService } from './password.service';
+import { maskEmail } from '../../common/utils/mask-email';
+import { LoginLockoutService } from './login-lockout/login-lockout.service';
+
+// Whom an audit entry is about: a known user, or the email as typed.
+type AuthSubject = { userId: string } | { email: string } | null;
 
 interface IssuedTokens {
   tokens: TokenResponseDto;
@@ -71,6 +77,7 @@ export class AuthService implements OnModuleInit {
     private readonly jwtService: JwtService,
     private readonly categoryDefaults: CategoryDefaultsService,
     private readonly passwordService: PasswordService,
+    private readonly loginLockout: LoginLockoutService,
   ) {}
 
   // Read lazily, an invalid value would only surface on the reuse path and
@@ -79,7 +86,12 @@ export class AuthService implements OnModuleInit {
     this.reuseGraceSeconds();
   }
 
-  async validateUser(email: string, password: string): Promise<User | null> {
+  async validateUser(
+    email: string,
+    password: string,
+    ipAddress?: string,
+    userAgent?: string,
+  ): Promise<User | null> {
     // Callers may pass a raw request body; a non-string here would turn into
     // a MikroORM operator query ({ $like: ... }).
     if (typeof email !== 'string' || typeof password !== 'string') {
@@ -105,13 +117,25 @@ export class AuthService implements OnModuleInit {
 
     if (!user) {
       await this.passwordService.verifyAgainstDummy(password);
-      await this.logAuthAttempt(email, false, 'User not found');
+      await this.logAuthAttempt(
+        { email },
+        false,
+        'User not found',
+        ipAddress,
+        userAgent,
+      );
       return null;
     }
 
     const check = await this.passwordService.verify(password, user.password);
     if (!check.valid) {
-      await this.logAuthAttempt(email, false, 'Invalid password');
+      await this.logAuthAttempt(
+        { userId: user.id },
+        false,
+        'Invalid password',
+        ipAddress,
+        userAgent,
+      );
       return null;
     }
 
@@ -148,22 +172,45 @@ export class AuthService implements OnModuleInit {
     ipAddress?: string,
     userAgent?: string,
   ): Promise<TokenResponseDto> {
-    const user = await this.validateUser(loginDto.email, loginDto.password);
+    // Counted before the password is checked, so a locked account does not
+    // confirm a correct guess and parallel guesses cannot outrun the lock.
+    try {
+      await this.loginLockout.reserveAttempt(loginDto.email);
+    } catch (err) {
+      if (err instanceof HttpException) {
+        await this.logAuthAttempt(
+          { email: loginDto.email },
+          false,
+          'Login blocked - too many failed attempts',
+          ipAddress,
+          userAgent,
+        );
+      }
+      throw err;
+    }
+
+    const user = await this.validateUser(
+      loginDto.email,
+      loginDto.password,
+      ipAddress,
+      userAgent,
+    );
 
     if (!user) {
       throw new UnauthorizedException('Invalid credentials');
     }
 
+    await this.loginLockout.reset(loginDto.email);
     const issued = await this.startSession(user, ipAddress, userAgent);
     await this.logAuthAttempt(
-      loginDto.email,
+      { userId: user.id },
       true,
       'Login successful',
       ipAddress,
       userAgent,
     );
 
-    this.logger.log(`User logged in: ${user.email}`);
+    this.logger.log(`User logged in: ${user.id}`);
     return issued.tokens;
   }
 
@@ -178,12 +225,15 @@ export class AuthService implements OnModuleInit {
 
     if (existingUser) {
       await this.logAuthAttempt(
-        registerDto.email,
+        { userId: existingUser.id },
         false,
         'Registration failed - user already exists',
         ipAddress,
         userAgent,
       );
+      // Deliberately explicit: this reveals that the email is registered, an
+      // accepted UX trade-off. Registration stays behind the IP rate limit; a
+      // generic reply would need a "someone tried to sign up" email first.
       throw new BadRequestException('User already exists');
     }
 
@@ -222,7 +272,7 @@ export class AuthService implements OnModuleInit {
 
     const issued = await this.startSession(user, ipAddress, userAgent);
     await this.logAuthAttempt(
-      registerDto.email,
+      { userId: user.id },
       true,
       'Registration successful',
       ipAddress,
@@ -255,7 +305,7 @@ export class AuthService implements OnModuleInit {
       payload = decoded.payload;
     } catch {
       await this.logAuthAttempt(
-        'unknown',
+        null,
         false,
         'Token refresh failed - signature invalid or expired',
         ipAddress,
@@ -266,7 +316,7 @@ export class AuthService implements OnModuleInit {
 
     if (payload.type !== 'refresh') {
       await this.logAuthAttempt(
-        `user:${payload.sub}`,
+        { userId: payload.sub },
         false,
         'Token refresh failed - wrong token type',
         ipAddress,
@@ -284,7 +334,7 @@ export class AuthService implements OnModuleInit {
 
     if (!tokenEntity) {
       await this.logAuthAttempt(
-        `user:${payload.sub}`,
+        { userId: payload.sub },
         false,
         'Token refresh failed - token not recognized',
         ipAddress,
@@ -296,7 +346,7 @@ export class AuthService implements OnModuleInit {
     if (tokenEntity.user.deleted_at) {
       await this.revokeSession(tokenEntity.session.id);
       await this.logAuthAttempt(
-        tokenEntity.user.email,
+        { userId: tokenEntity.user.id },
         false,
         'Token refresh failed - user deleted, session revoked',
         ipAddress,
@@ -311,7 +361,7 @@ export class AuthService implements OnModuleInit {
       // as theft; the session and the newly issued pair stay valid.
       if (this.isWithinReuseGrace(tokenEntity.revoked_at)) {
         await this.logAuthAttempt(
-          tokenEntity.user.email,
+          { userId: tokenEntity.user.id },
           false,
           'Token refresh failed - token already rotated, within reuse grace window',
           ipAddress,
@@ -325,7 +375,7 @@ export class AuthService implements OnModuleInit {
       );
       await this.revokeSession(tokenEntity.session.id);
       await this.logAuthAttempt(
-        tokenEntity.user.email,
+        { userId: tokenEntity.user.id },
         false,
         'Token refresh failed - reuse detected, session revoked',
         ipAddress,
@@ -397,7 +447,7 @@ export class AuthService implements OnModuleInit {
     );
 
     await this.logAuthAttempt(
-      user.email,
+      { userId: user.id },
       true,
       'Token refreshed',
       ipAddress,
@@ -422,7 +472,7 @@ export class AuthService implements OnModuleInit {
 
     if (!tokenEntity) {
       await this.logAuthAttempt(
-        'unknown',
+        null,
         false,
         'Token revocation - token not recognized',
         ipAddress,
@@ -433,7 +483,7 @@ export class AuthService implements OnModuleInit {
 
     await this.revokeSession(tokenEntity.session.id);
     await this.logAuthAttempt(
-      tokenEntity.user.email,
+      { userId: tokenEntity.user.id },
       true,
       'Session revoked by refresh token',
       ipAddress,
@@ -449,7 +499,7 @@ export class AuthService implements OnModuleInit {
   ): Promise<void> {
     await this.revokeSession(user.sid);
     await this.logAuthAttempt(
-      user.email,
+      { userId: user.id },
       true,
       'User logged out',
       ipAddress,
@@ -480,7 +530,7 @@ export class AuthService implements OnModuleInit {
     });
 
     await this.logAuthAttempt(
-      user.email,
+      { userId: user.id },
       true,
       'User logged out of all sessions',
       ipAddress,
@@ -511,7 +561,7 @@ export class AuthService implements OnModuleInit {
     );
     if (!check.valid) {
       await this.logAuthAttempt(
-        user.email,
+        { userId: user.id },
         false,
         'Password change failed - wrong current password',
         ipAddress,
@@ -547,7 +597,7 @@ export class AuthService implements OnModuleInit {
     });
 
     await this.logAuthAttempt(
-      user.email,
+      { userId: user.id },
       true,
       'Password changed, other sessions revoked',
       ipAddress,
@@ -602,7 +652,7 @@ export class AuthService implements OnModuleInit {
     );
 
     await this.logAuthAttempt(
-      user.email,
+      { userId: user.id },
       true,
       'Session revoked by user',
       ipAddress,
@@ -756,20 +806,31 @@ export class AuthService implements OnModuleInit {
     return createHash('sha256').update(token).digest('hex');
   }
 
+  // The raw email is never written: it may be an address typed by an attacker.
   private async logAuthAttempt(
-    email: string,
+    subject: AuthSubject,
     success: boolean,
     message: string,
     ipAddress?: string,
     userAgent?: string,
     details?: Record<string, unknown>,
   ): Promise<void> {
+    let who = 'unknown';
+    let identity: Record<string, string> = {};
+    if (subject && 'userId' in subject) {
+      who = `user:${subject.userId}`;
+      identity = { user_id: subject.userId };
+    } else if (subject) {
+      who = maskEmail(subject.email);
+      identity = { email_masked: who };
+    }
+
     const log = this.logRepository.create({
       level: success ? LogLevel.INFO : LogLevel.WARN,
       source: LogSource.AUTH,
       context: 'Authentication',
-      message: `Auth attempt: ${message} - ${email}`,
-      metadata: { ...details, email, success },
+      message: `Auth attempt: ${message} - ${who}`,
+      metadata: { ...details, ...identity, success },
       ip_address: sanitizeIp(ipAddress),
       user_agent: userAgent,
       created_at: new Date(),

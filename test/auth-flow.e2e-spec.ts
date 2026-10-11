@@ -454,9 +454,11 @@ describe('Auth session flow (e2e)', () => {
         const [log] = await authLogs(agent);
         expect(log.message).toContain('User logged out of all sessions');
         expect(log.metadata).toMatchObject({
-          email: owner.email,
+          user_id: app.get(JwtService).decode<JwtPayload>(owner.accessToken)
+            .sub,
           revoked_sessions: 2,
         });
+        expect(log.metadata).not.toHaveProperty('email');
       });
 
       it('leaves the sessions of other users alive', async () => {

@@ -27,7 +27,8 @@ describe('Trust proxy & IP-based rate limiting (e2e)', () => {
         .post('/auth/login')
         .set('X-Client-Type', 'mobile')
         .set('X-Forwarded-For', `203.0.113.${i + 1}`)
-        .send({ email: 'nobody@example.com', password: 'wrong-password' });
+        // One email per request: the per-account lockout must not answer first.
+        .send({ email: `nobody-${i}@example.com`, password: 'wrong-password' });
       statuses.push(res.status);
     }
 
@@ -59,7 +60,9 @@ describe('Trust proxy & IP-based rate limiting (e2e)', () => {
     const refreshToken = await em.findOneOrFail(RefreshToken, {
       user: { email },
     });
-    const logs = await em.find(Log, { metadata: { email } });
+    const logs = await em.find(Log, {
+      metadata: { user_id: session.user.id },
+    });
 
     expect(session.ip_address ?? null).toBeNull();
     expect(refreshToken.ip_address ?? null).toBeNull();

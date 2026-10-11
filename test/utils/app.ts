@@ -10,6 +10,10 @@ import { MikroORM } from '@mikro-orm/core';
 import { APP_THROTTLERS, AppModule } from '../../src/app.module';
 import { configureApp } from '../../src/app.setup';
 import { parseTrustProxy } from '../../src/config/trust-proxy';
+import {
+  InMemoryLoginAttemptStore,
+  LOGIN_ATTEMPT_STORE,
+} from '../../src/modules/auth/login-lockout/login-attempt.store';
 import type { TokenResponseDto } from '../../src/modules/auth/dto/token-response.dto';
 import type { HouseholdResponseDto } from '../../src/modules/household/dto/household-response.dto';
 
@@ -21,8 +25,9 @@ export interface TestAppOptions {
 }
 
 /**
- * Builds AppModule configured exactly like main.ts. Rate-limit counters live
- * in memory, per app instance, instead of Redis: every app starts at zero and
+ * Builds AppModule configured exactly like main.ts. Rate-limit and
+ * login-failure counters live in memory, per app instance, instead of Redis:
+ * every app starts at zero and
  * no test needs a Redis server or leaves counters behind.
  */
 export async function createTestApp(
@@ -30,7 +35,9 @@ export async function createTestApp(
 ): Promise<NestExpressApplication> {
   let builder = Test.createTestingModule({ imports: [AppModule] })
     .overrideProvider(getOptionsToken())
-    .useValue({ throttlers: APP_THROTTLERS });
+    .useValue({ throttlers: APP_THROTTLERS })
+    .overrideProvider(LOGIN_ATTEMPT_STORE)
+    .useValue(new InMemoryLoginAttemptStore());
   if (options.override) builder = options.override(builder);
 
   const moduleFixture = await builder.compile();

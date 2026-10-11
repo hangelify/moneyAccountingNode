@@ -86,6 +86,18 @@ describe('database indexes (PostgreSQL)', () => {
       'ai_requests_pending_index',
       `ON public.ai_requests USING btree (created_at) WHERE (status = 'PENDING'::ai_request_status_enum)`,
     ],
+    [
+      'bills_household_drafts_created_index',
+      `ON public.bills USING btree (household_id, created_at DESC, id DESC) WHERE ((status = 'draft'::bill_status_enum) AND (deleted_at IS NULL))`,
+    ],
+    [
+      'bills_household_image_sha256_draft_unique',
+      `CREATE UNIQUE INDEX bills_household_image_sha256_draft_unique ON public.bills USING btree (household_id, image_sha256) WHERE ((status = 'draft'::bill_status_enum) AND (deleted_at IS NULL) AND (image_sha256 IS NOT NULL))`,
+    ],
+    [
+      'bills_ai_request_id_index',
+      'ON public.bills USING btree (ai_request_id)',
+    ],
   ])('has %s', async (name, def) => {
     expect((await indexDefs()).get(name)).toContain(def);
   });
@@ -112,13 +124,24 @@ describe('database indexes (PostgreSQL)', () => {
     expect(p).not.toMatch(/Seq Scan on categories/);
   });
 
-  it('listDrafts uses bills_household_status_date_index', async () => {
+  it('listDrafts pages drafts newest first from bills_household_drafts_created_index', async () => {
     const p = await plan(
       `select b0.* from bills b0
         where b0.household_id = '${hid}' and b0.status = 'draft'
+          and b0.deleted_at is null
+        order by b0.created_at desc, b0.id desc limit 20`,
+    );
+    expect(p).toContain('bills_household_drafts_created_index');
+    expect(p).not.toContain('Sort');
+  });
+
+  it('listDrafts counts drafts from bills_household_drafts_created_index', async () => {
+    const p = await plan(
+      `select count(*) from bills b0
+        where b0.household_id = '${hid}' and b0.status = 'draft'
           and b0.deleted_at is null`,
     );
-    expect(p).toContain('bills_household_status_date_index');
+    expect(p).toContain('bills_household_drafts_created_index');
   });
 
   it('dashboard bills use bills_household_status_date_index', async () => {

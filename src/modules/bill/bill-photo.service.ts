@@ -10,6 +10,10 @@ import type {
   ParsedBillItemResponseDto,
 } from './dto/parsed-bill-response.dto';
 
+function isReceipt(bill: ParsedBill | ParsedAndCategorizedBill): boolean {
+  return bill.is_receipt && bill.items.length > 0;
+}
+
 @Injectable()
 export class BillPhotoService {
   constructor(
@@ -23,7 +27,12 @@ export class BillPhotoService {
     mediaType: 'image/png' | 'image/jpeg' | 'image/webp',
     householdId: string,
     userId: string,
-  ): Promise<{ parsed: ParsedBillResponseDto; requestId: string }> {
+  ): Promise<{
+    parsed: ParsedBillResponseDto;
+    requestId: string;
+    /** False for a photo that is not a receipt or has no readable items. */
+    isReceipt: boolean;
+  }> {
     const subs = await this.subCategoryRepo.find(
       {
         deleted_at: null,
@@ -38,7 +47,11 @@ export class BillPhotoService {
         mediaType,
         userId,
       );
-      return { parsed: this.fromParsed(data), requestId };
+      return {
+        parsed: this.fromParsed(data),
+        requestId,
+        isReceipt: isReceipt(data),
+      };
     }
 
     const byId = new Map(subs.map((s) => [s.id, s]));
@@ -54,7 +67,11 @@ export class BillPhotoService {
       userId,
       subcategories,
     );
-    return { parsed: this.fromParsedAndCategorized(data, byId), requestId };
+    return {
+      parsed: this.fromParsedAndCategorized(data, byId),
+      requestId,
+      isReceipt: isReceipt(data),
+    };
   }
 
   private fromParsed(parsed: ParsedBill): ParsedBillResponseDto {

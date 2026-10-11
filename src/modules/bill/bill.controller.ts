@@ -17,7 +17,9 @@ import {
   ParseFilePipe,
   Logger,
   UnprocessableEntityException,
+  Inject,
 } from '@nestjs/common';
+import { createHash } from 'node:crypto';
 import { FileInterceptor } from '@nestjs/platform-express';
 import {
   ApiBearerAuth,
@@ -36,11 +38,19 @@ import { CurrentHousehold } from '../household/decorators/current-household.deco
 import { BillPhotoService } from './bill-photo.service';
 import { BillCrudService } from './bill-crud.service';
 import { BillDashboardService } from './bill-dashboard.service';
-import { ParsePhotoResponseDto } from './dto/parsed-bill-response.dto';
+import {
+  ParsePhotoResponseDto,
+  ParsedBillResponseDto,
+} from './dto/parsed-bill-response.dto';
 import { CreateBillDto } from './dto/create-bill.dto';
 import { UpdateBillDto } from './dto/update-bill.dto';
 import { BillResponseDto } from './dto/bill-response.dto';
-import { BillDetailResponseDto } from './dto/bill-detail-response.dto';
+import {
+  BillDetailResponseDto,
+  DraftImageResponseDto,
+  DraftListResponseDto,
+} from './dto/bill-detail-response.dto';
+import { ListDraftsQueryDto } from './dto/list-drafts-query.dto';
 import { BillListResponseDto } from './dto/bill-list-response.dto';
 import {
   BillDashboardResponseDto,
@@ -54,6 +64,7 @@ import {
   ApiUpdateBillResponses,
   ApiDeleteBillResponses,
   ApiListDraftsResponses,
+  ApiDraftImageResponses,
   ApiConfirmBillResponses,
   ApiDashboardResponses,
 } from './dto/api-responses.decorator';
@@ -65,6 +76,11 @@ import { AiHttpExceptionFilter } from './filters/ai-http-exception.filter';
 import { aiErrorBody } from './filters/ai-error-body';
 import { UserThrottlerGuard } from '../ai-gateway/guards/user-throttler.guard';
 import { MAX_UPLOAD_BYTES, prepareReceiptImage } from './receipt-image';
+import { STORAGE_SERVICE } from '../storage/storage.service';
+import type { StorageService } from '../storage/storage.service';
+
+/** Lifetime of a presigned draft-image URL. */
+const DRAFT_IMAGE_URL_TTL_SEC = 300;
 
 @ApiTags('bills')
 @Controller('households/:hid/bills')
@@ -77,6 +93,7 @@ export class BillController {
     private readonly billPhoto: BillPhotoService,
     private readonly billCrud: BillCrudService,
     private readonly billDashboard: BillDashboardService,
+    @Inject(STORAGE_SERVICE) private readonly storage: StorageService,
   ) {}
 
   @Post('parse-photo')
@@ -113,18 +130,39 @@ export class BillController {
     // The client's Content-Type is never trusted: the type is detected from
     // the bytes and the image re-encoded as a metadata-free JPEG.
     const image = await prepareReceiptImage(file.buffer);
-    const { parsed, requestId } = await this.billPhoto.parseAndCategorize(
-      image.buffer,
-      image.mediaType,
+    // The same photo again: answer with its open draft instead of paying
+    // for another AI call.
+    const imageSha256 = createHash('sha256').update(image.buffer).digest('hex');
+    const existing = await this.billCrud.findDraftByImageHash(
       ctx.householdId,
-      user.id,
+      imageSha256,
     );
-    let draftId: string;
+    if (existing) return this.duplicateResponse(existing);
+
+    const { parsed, requestId, isReceipt } =
+      await this.billPhoto.parseAndCategorize(
+        image.buffer,
+        image.mediaType,
+        ctx.householdId,
+        user.id,
+      );
+    if (!isReceipt) {
+      throw new UnprocessableEntityException(
+        aiErrorBody(
+          HttpStatus.UNPROCESSABLE_ENTITY,
+          'The photo is not a receipt or no items were recognized on it',
+          requestId,
+        ),
+      );
+    }
+
+    let draft: { id: string; duplicate: boolean };
     try {
-      draftId = await this.billCrud.createDraftFromParsed(
+      draft = await this.billCrud.createDraftFromParsed(
         ctx.householdId,
         user.id,
         parsed,
+        { imageSha256, aiRequestId: requestId },
       );
     } catch (err) {
       // The AI call is already paid for: hand back what it recognized so the
@@ -142,7 +180,33 @@ export class BillController {
         parsed,
       });
     }
-    return { ...parsed, draft_id: draftId, request_id: requestId };
+    // Answer with the draft as saved (items merged per sub-category, values
+    // clamped), so a re-upload of this photo gets the same answer.
+    const stored = await this.billCrud.findDraftByImageHash(
+      ctx.householdId,
+      imageSha256,
+    );
+    if (stored) {
+      return {
+        ...stored.parsed,
+        request_id: stored.requestId,
+        duplicate: draft.duplicate,
+      };
+    }
+    // Confirmed or deleted in the meantime.
+    return {
+      ...parsed,
+      draft_id: draft.id,
+      request_id: requestId,
+      duplicate: draft.duplicate,
+    };
+  }
+
+  private duplicateResponse(draft: {
+    parsed: ParsedBillResponseDto;
+    requestId: string | null;
+  }): ParsePhotoResponseDto {
+    return { ...draft.parsed, request_id: draft.requestId, duplicate: true };
   }
 
   @Post()
@@ -172,13 +236,37 @@ export class BillController {
   }
 
   @Get('drafts')
-  @ApiOperation({ summary: 'List all draft bills for the current household' })
+  @ApiOperation({
+    summary:
+      'List draft bills of the current household with their items, newest first',
+  })
   @ApiListDraftsResponses()
   async listDrafts(
     @CurrentUser() _user: AuthenticatedUser,
     @CurrentHousehold() ctx: HouseholdContext,
-  ): Promise<BillResponseDto[]> {
-    return this.billCrud.listDrafts(ctx.householdId);
+    @Query() query: ListDraftsQueryDto,
+  ): Promise<DraftListResponseDto> {
+    return this.billCrud.listDrafts(ctx.householdId, query);
+  }
+
+  @Get('drafts/:id/image')
+  @ApiOperation({
+    summary:
+      'Short-lived URL of the receipt photo a draft was parsed from, to review the draft against it',
+  })
+  @ApiParam({
+    name: 'id',
+    description: 'Draft bill unique identifier',
+    example: '123e4567-e89b-12d3-a456-426614174000',
+  })
+  @ApiDraftImageResponses()
+  async getDraftImage(
+    @CurrentHousehold() ctx: HouseholdContext,
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<DraftImageResponseDto> {
+    const key = await this.billCrud.getDraftImageKey(id, ctx.householdId);
+    const url = await this.storage.getSignedUrl(key, DRAFT_IMAGE_URL_TTL_SEC);
+    return { url, expires_in: DRAFT_IMAGE_URL_TTL_SEC };
   }
 
   @Get('dashboard')

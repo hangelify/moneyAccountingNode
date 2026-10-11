@@ -102,6 +102,7 @@ describe('Household isolation (e2e)', () => {
       ...crud('markets', r.market),
       ['post', `${h}/bills/parse-photo`],
       ['get', `${h}/bills/drafts`],
+      ['get', `${h}/bills/drafts/${r.bill}/image`],
       ['get', `${h}/bills/dashboard?type=year&year=2026`],
       ['post', `${h}/bills/${r.bill}/confirm`],
       ...crud('bills', r.bill),
@@ -186,6 +187,14 @@ describe('Household isolation (e2e)', () => {
         await expectBobsDataIntact();
       },
     );
+
+    it("bills: a foreign bill's image answers 404", async () => {
+      await call(
+        alice,
+        'get',
+        `${own()}/bills/drafts/${bobs.bill}/image`,
+      ).expect(404);
+    });
 
     it('bills: confirming a foreign bill answers 404', async () => {
       // Items refer to Alice's own sub-category: only the bill is foreign.

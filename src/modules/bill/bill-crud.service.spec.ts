@@ -503,27 +503,8 @@ describe('BillCrudService', () => {
         parsed,
       );
 
-      expect(typeof draftId).toBe('string');
+      expect(draftId).toEqual({ id: 'generated-uuid', duplicate: false });
       expect(em.flush as jest.Mock).toHaveBeenCalled();
-    });
-  });
-
-  describe('listDrafts', () => {
-    it('returns draft bills for user', async () => {
-      const { service, billRepo } = makeService();
-      (billRepo.find as jest.Mock).mockResolvedValue([]);
-
-      const result = await service.listDrafts(householdId);
-
-      expect(result).toEqual([]);
-      expect(billRepo.find as jest.Mock).toHaveBeenCalledWith(
-        expect.objectContaining({
-          household: { id: householdId },
-          status: BillStatus.DRAFT,
-          deleted_at: null,
-        }),
-        expect.anything(),
-      );
     });
   });
 

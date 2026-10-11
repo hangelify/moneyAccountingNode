@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
+import { ScheduleModule } from '@nestjs/schedule';
 import { ThrottlerStorageRedisService } from '@nest-lab/throttler-storage-redis';
 import { MikroOrmModule } from '@mikro-orm/nestjs';
 import { createMikroOrmConfig } from './mikro-orm.config';
@@ -25,6 +26,7 @@ export const APP_THROTTLERS = [{ name: 'default', ttl: 60_000, limit: 100 }];
 @Module({
   imports: [
     MikroOrmModule.forRootAsync({ useFactory: createMikroOrmConfig }),
+    ScheduleModule.forRoot(),
     AuthModule,
     BudgetModule,
     PlaningHorizonModule,

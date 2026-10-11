@@ -13,6 +13,7 @@ const item = {
 };
 
 const bill = {
+  is_receipt: true,
   market_name: 'Lidl',
   bill_date: '2026-05-07',
   currency: 'EUR',
@@ -46,6 +47,18 @@ describe('ParsedBillSchema', () => {
     expect(r.items).toHaveLength(2);
     expect(r.currency).toBe(Currency.EUR);
     expect(r.bill_date).toBe('2026-05-07');
+  });
+
+  describe('is_receipt', () => {
+    it('keeps the model verdict that the photo is not a receipt', () => {
+      const r = ParsedBillSchema.parse({ ...bill, is_receipt: false });
+      expect(r.is_receipt).toBe(false);
+    });
+
+    it('treats a malformed verdict as a receipt so a paid parse is kept', () => {
+      const r = ParsedBillSchema.parse({ ...bill, is_receipt: 'maybe' });
+      expect(r.is_receipt).toBe(true);
+    });
   });
 
   describe('currency', () => {
@@ -174,6 +187,11 @@ describe.each([
     };
     const currencies = json.properties.currency.anyOf.find((s) => s.enum);
     expect(currencies?.enum).toEqual(Object.values(Currency));
+  });
+
+  it('requires the is_receipt verdict', () => {
+    const json = toProviderJsonSchema(schema) as { required?: string[] };
+    expect(json.required).toContain('is_receipt');
   });
 
   it('does not ask the model for the full OCR text', () => {

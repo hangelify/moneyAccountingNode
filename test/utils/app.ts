@@ -6,6 +6,7 @@ import {
   ThrottlerStorageService,
 } from '@nestjs/throttler';
 import request from 'supertest';
+import { MikroORM } from '@mikro-orm/core';
 import { APP_THROTTLERS, AppModule } from '../../src/app.module';
 import { configureApp } from '../../src/app.setup';
 import { parseTrustProxy } from '../../src/config/trust-proxy';
@@ -39,6 +40,25 @@ export async function createTestApp(
   configureApp(app, { trustProxy: parseTrustProxy(options.trustProxy) });
   await app.init();
   return app;
+}
+
+/**
+ * Saves an audited AI request under this id, for specs that stand in for the
+ * AI call: a draft links to its AI request by foreign key.
+ */
+export async function seedAiRequest(
+  app: NestExpressApplication,
+  id: string,
+): Promise<void> {
+  await app
+    .get(MikroORM)
+    .em.getConnection()
+    .execute(
+      `insert into ai_requests (id, task_name, status, required_capabilities, prompt)
+       values (?, 'e2e-stub', 'SUCCESS', '[]', '{"messages":[]}')
+       on conflict (id) do nothing`,
+      [id],
+    );
 }
 
 /** Drops every rate-limit counter of the app. */

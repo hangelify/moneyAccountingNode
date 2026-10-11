@@ -2,9 +2,10 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  ConflictException,
 } from '@nestjs/common';
 import { InjectRepository } from '@mikro-orm/nestjs';
-import { EntityRepository, EntityManager } from '@mikro-orm/core';
+import { EntityRepository, EntityManager, sql } from '@mikro-orm/core';
 import { Budget } from '../../entities/budget.entity';
 import { Household } from '../../entities/household.entity';
 import { CreateBudgetDto } from './dto/create-budget.dto';
@@ -21,7 +22,9 @@ export class BudgetService {
 
   /**
    * Create a new budget for a household
-   * Name must be unique per household (excluding soft-deleted budgets)
+   * Name must be unique per household, case-insensitively (excluding
+   * soft-deleted budgets). A concurrent duplicate is caught by the unique
+   * index and also answered with 409.
    */
   async createBudget(
     householdId: string,
@@ -30,13 +33,13 @@ export class BudgetService {
     // Check if budget with same name already exists for this household (excluding soft-deleted)
     const existingBudget = await this.budgetRepository.findOne({
       household: { id: householdId },
-      name: createBudgetDto.name,
+      [sql.lower('name')]: createBudgetDto.name.toLowerCase(),
       deleted_at: null,
     });
 
     if (existingBudget) {
-      throw new BadRequestException(
-        `Budget with name "${createBudgetDto.name}" already exists for this user`,
+      throw new ConflictException(
+        `Budget with name "${createBudgetDto.name}" already exists in this household`,
       );
     }
 
@@ -109,14 +112,14 @@ export class BudgetService {
     ) {
       const existingBudget = await this.budgetRepository.findOne({
         household: { id: householdId },
-        name: updateBudgetDto.name,
+        [sql.lower('name')]: updateBudgetDto.name.toLowerCase(),
         deleted_at: null,
       });
 
       // If a budget with the same name exists and it's not the current budget
       if (existingBudget && existingBudget.id !== id) {
-        throw new BadRequestException(
-          `Budget with name "${updateBudgetDto.name}" already exists for this user`,
+        throw new ConflictException(
+          `Budget with name "${updateBudgetDto.name}" already exists in this household`,
         );
       }
     }

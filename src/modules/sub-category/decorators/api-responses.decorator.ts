@@ -23,6 +23,13 @@ export const ApiBadRequestResponse = (description?: string) =>
     description: description || 'Bad request - Invalid input',
   });
 
+export const ApiConflictResponse = () =>
+  ApiResponse({
+    status: 409,
+    description:
+      'A sub-category with this name (case-insensitive) already exists in the category',
+  });
+
 /**
  * Combined decorators for specific endpoints
  */
@@ -34,6 +41,7 @@ export const ApiCreateSubCategoryResponses = () =>
       type: SubCategoryResponseDto,
     }),
     ApiBadRequestResponse('Bad request - Invalid input or category not found'),
+    ApiConflictResponse(),
     ApiUnauthorizedResponse(),
   );
 
@@ -44,7 +52,10 @@ export const ApiBulkCreateSubCategoryResponses = () =>
       description: 'Sub-categories created successfully',
       type: [SubCategoryResponseDto],
     }),
-    ApiBadRequestResponse('Bad request - Invalid input or category not found'),
+    ApiBadRequestResponse(
+      'Bad request - Invalid input or category not found, or duplicate names within the request',
+    ),
+    ApiConflictResponse(),
     ApiUnauthorizedResponse(),
   );
 
@@ -78,6 +89,7 @@ export const ApiUpdateSubCategoryResponses = () =>
     }),
     ApiNotFoundResponse(),
     ApiBadRequestResponse('Bad request - Invalid input'),
+    ApiConflictResponse(),
     ApiUnauthorizedResponse(),
   );
 

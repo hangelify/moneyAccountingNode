@@ -19,6 +19,12 @@ import { Household } from './household.entity';
 // load did not filter categories.deleted_at; it does now, so a partial index
 // would also be used, but switching needs a migration.
 @Index({ name: 'categories_household_id_index', properties: ['household'] })
+// Case-insensitive unique name among a household's live categories.
+@Index({
+  name: 'categories_household_id_name_lower_unique',
+  expression:
+    'create unique index "categories_household_id_name_lower_unique" on "categories" ("household_id", lower("name")) where "deleted_at" is null',
+})
 export class Category extends BaseEntity {
   @Property({ type: 'varchar', length: 255, nullable: false })
   name!: string;

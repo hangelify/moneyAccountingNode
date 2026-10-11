@@ -3,7 +3,7 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class CreateBudgetDto {
   @ApiProperty({
-    description: 'Budget name (must be unique per user)',
+    description: 'Budget name (unique per household, case-insensitive)',
     example: 'Monthly Budget 2025',
     minLength: 1,
     maxLength: 255,

@@ -2,9 +2,10 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  ConflictException,
 } from '@nestjs/common';
 import { InjectRepository } from '@mikro-orm/nestjs';
-import { EntityRepository, EntityManager } from '@mikro-orm/core';
+import { EntityRepository, EntityManager, sql } from '@mikro-orm/core';
 import { PlaningHorizon } from '../../entities/planing-horizon.entity';
 import { Budget } from '../../entities/budget.entity';
 import { CreatePlaningHorizonDto } from './dto/create-planing-horizon.dto';
@@ -25,7 +26,7 @@ export class PlaningHorizonService {
 
   /**
    * Create a new planning horizon for a household
-   * Name must be unique per household (excluding archived planning horizons)
+   * Name must be unique per budget, case-insensitively (excluding archived planning horizons)
    * Budget must belong to the household
    */
   async createPlaningHorizon(
@@ -45,17 +46,18 @@ export class PlaningHorizonService {
       );
     }
 
-    // Check if planning horizon with same name already exists for this household (excluding archived)
+    // Names are unique per budget, case-insensitively, among active horizons
+    // (the unique index catches a concurrent duplicate as 409 too)
     const existingPlaningHorizon = await this.planingHorizonRepository.findOne({
-      budget: { household: { id: householdId }, deleted_at: null },
-      name: createPlaningHorizonDto.name,
+      budget,
+      [sql.lower('name')]: createPlaningHorizonDto.name.toLowerCase(),
       is_archived: false,
       deleted_at: null,
     });
 
     if (existingPlaningHorizon) {
-      throw new BadRequestException(
-        `Planning horizon with name "${createPlaningHorizonDto.name}" already exists for this household`,
+      throw new ConflictException(
+        `Planning horizon with name "${createPlaningHorizonDto.name}" already exists in this budget`,
       );
     }
 
@@ -176,23 +178,23 @@ export class PlaningHorizonService {
       throw new NotFoundException(`Planning horizon with ID ${id} not found`);
     }
 
-    // If name is being updated, check uniqueness per household
+    // If name is being updated, check uniqueness per budget
     if (
       updatePlaningHorizonDto.name !== undefined &&
       updatePlaningHorizonDto.name !== planingHorizon.name
     ) {
       const existingPlaningHorizon =
         await this.planingHorizonRepository.findOne({
-          budget: { household: { id: householdId }, deleted_at: null },
-          name: updatePlaningHorizonDto.name,
+          budget: planingHorizon.budget,
+          [sql.lower('name')]: updatePlaningHorizonDto.name.toLowerCase(),
           is_archived: false,
           deleted_at: null,
         });
 
       // If a planning horizon with the same name exists and it's not the current one
       if (existingPlaningHorizon && existingPlaningHorizon.id !== id) {
-        throw new BadRequestException(
-          `Planning horizon with name "${updatePlaningHorizonDto.name}" already exists for this household`,
+        throw new ConflictException(
+          `Planning horizon with name "${updatePlaningHorizonDto.name}" already exists in this budget`,
         );
       }
     }

@@ -6,12 +6,19 @@ import {
   BeforeUpdate,
   ManyToOne,
   OneToMany,
+  Index,
 } from '@mikro-orm/decorators/legacy';
 import { BaseEntity } from './base.entity';
 import { Category } from './category.entity';
 import { BillSubCategory } from './bill-sub-category.entity';
 
 @Entity({ tableName: 'sub_categories' })
+// Case-insensitive unique name among a category's live sub-categories.
+@Index({
+  name: 'sub_categories_category_id_name_lower_unique',
+  expression:
+    'create unique index "sub_categories_category_id_name_lower_unique" on "sub_categories" ("category_id", lower("name")) where "deleted_at" is null',
+})
 export class SubCategory extends BaseEntity {
   @Property({ type: 'varchar', length: 255, nullable: false })
   name!: string;

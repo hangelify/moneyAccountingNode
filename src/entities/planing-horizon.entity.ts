@@ -7,6 +7,7 @@ import {
   Enum,
   ManyToOne,
   ManyToMany,
+  Index,
 } from '@mikro-orm/decorators/legacy';
 import { BaseEntity } from './base.entity';
 import { Currency } from '../types/currency.enum';
@@ -15,6 +16,12 @@ import { Budget } from './budget.entity';
 import { Category } from './category.entity';
 
 @Entity({ tableName: 'planing_horizons' })
+// Case-insensitive unique name among a budget's active planning horizons.
+@Index({
+  name: 'planing_horizons_budget_id_name_lower_unique',
+  expression:
+    'create unique index "planing_horizons_budget_id_name_lower_unique" on "planing_horizons" ("budget_id", lower("name")) where "deleted_at" is null and not "is_archived"',
+})
 export class PlaningHorizon extends BaseEntity {
   @Property({ type: 'varchar', length: 255, nullable: false })
   name!: string;

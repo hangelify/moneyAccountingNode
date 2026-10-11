@@ -13,6 +13,7 @@ import { BulkCreateCategoryDto } from './dto/bulk-create-category.dto';
 import { UpdateCategoryDto } from './dto/update-category.dto';
 import { CategoryResponseDto } from './dto/category-response.dto';
 import { CategoryBaseResponseDto } from './dto/category-base-response.dto';
+import { assertUniqueNames } from '../../common/utils/unique-names.util';
 
 @Injectable()
 export class CategoryService {
@@ -86,6 +87,8 @@ export class CategoryService {
         `Planning horizon with ID ${bulkCreateCategoryDto.planing_horizon_id} not found or does not belong to this household`,
       );
     }
+
+    assertUniqueNames(bulkCreateCategoryDto.categories.map((c) => c.name));
 
     const categories: Category[] = [];
 

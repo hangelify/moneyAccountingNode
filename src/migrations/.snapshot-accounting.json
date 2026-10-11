@@ -2331,6 +2331,15 @@
       "schema": "public",
       "indexes": [
         {
+          "keyName": "categories_household_id_name_lower_unique",
+          "columnNames": [],
+          "composite": false,
+          "constraint": false,
+          "primary": false,
+          "unique": true,
+          "expression": "create unique index \"categories_household_id_name_lower_unique\" on \"categories\" (\"household_id\", lower(\"name\")) where \"deleted_at\" is null"
+        },
+        {
           "keyName": "categories_pkey",
           "columnNames": [
             "id"
@@ -2674,6 +2683,15 @@
       "schema": "public",
       "indexes": [
         {
+          "keyName": "sub_categories_category_id_name_lower_unique",
+          "columnNames": [],
+          "composite": false,
+          "constraint": false,
+          "primary": false,
+          "unique": true,
+          "expression": "create unique index \"sub_categories_category_id_name_lower_unique\" on \"sub_categories\" (\"category_id\", lower(\"name\")) where \"deleted_at\" is null"
+        },
+        {
           "keyName": "sub_categories_pkey",
           "columnNames": [
             "id"
@@ -2999,6 +3017,15 @@
       "name": "budgets",
       "schema": "public",
       "indexes": [
+        {
+          "keyName": "budgets_household_id_name_lower_unique",
+          "columnNames": [],
+          "composite": false,
+          "constraint": false,
+          "primary": false,
+          "unique": true,
+          "expression": "create unique index \"budgets_household_id_name_lower_unique\" on \"budgets\" (\"household_id\", lower(\"name\")) where \"deleted_at\" is null"
+        },
         {
           "keyName": "budgets_pkey",
           "columnNames": [
@@ -3522,6 +3549,15 @@
       "name": "planing_horizons",
       "schema": "public",
       "indexes": [
+        {
+          "keyName": "planing_horizons_budget_id_name_lower_unique",
+          "columnNames": [],
+          "composite": false,
+          "constraint": false,
+          "primary": false,
+          "unique": true,
+          "expression": "create unique index \"planing_horizons_budget_id_name_lower_unique\" on \"planing_horizons\" (\"budget_id\", lower(\"name\")) where \"deleted_at\" is null and not \"is_archived\""
+        },
         {
           "keyName": "planing_horizons_pkey",
           "columnNames": [

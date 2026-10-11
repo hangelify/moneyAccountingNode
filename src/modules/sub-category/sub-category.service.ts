@@ -11,6 +11,7 @@ import { CreateSubCategoryDto } from './dto/create-sub-category.dto';
 import { BulkCreateSubCategoryDto } from './dto/bulk-create-sub-category.dto';
 import { UpdateSubCategoryDto } from './dto/update-sub-category.dto';
 import { SubCategoryResponseDto } from './dto/sub-category-response.dto';
+import { assertUniqueNames } from '../../common/utils/unique-names.util';
 
 @Injectable()
 export class SubCategoryService {
@@ -86,6 +87,10 @@ export class SubCategoryService {
     const category = await this.verifyCategoryBelongsToHousehold(
       bulkCreateSubCategoryDto.category_id,
       householdId,
+    );
+
+    assertUniqueNames(
+      bulkCreateSubCategoryDto.sub_categories.map((s) => s.name),
     );
 
     const subCategories: SubCategory[] = [];

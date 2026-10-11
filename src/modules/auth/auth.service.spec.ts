@@ -55,9 +55,7 @@ function makeService(opts?: Partial<Pick<Deps, 'seedForHousehold'>>): {
   const userRepo = {
     findOne: findUser,
   } as unknown as EntityRepository<User>;
-  const refreshTokenRepo = {
-    create: createRefreshToken,
-  } as unknown as EntityRepository<RefreshToken>;
+  const refreshTokenRepo = {} as unknown as EntityRepository<RefreshToken>;
   const sessionRepo = {
     create: createSession,
   } as unknown as EntityRepository<Session>;
@@ -67,6 +65,12 @@ function makeService(opts?: Partial<Pick<Deps, 'seedForHousehold'>>): {
 
   // EntityManager: persist().flush() chain. Side-effect: assigns an id to the user before flush returns.
   const em = {
+    // Only refresh rows are created through the EntityManager.
+    create: jest
+      .fn()
+      .mockImplementation((_entity: unknown, data: unknown) =>
+        createRefreshToken(data),
+      ),
     persist: jest.fn().mockImplementation((entity: { id?: string }) => {
       if (entity && typeof entity === 'object' && !entity.id) {
         entity.id = 'user-' + Math.random().toString(36).slice(2);
@@ -234,6 +238,25 @@ describe('AuthService.validateUser input types', () => {
 
     expect(result).toBeNull();
     expect(deps.findUser).not.toHaveBeenCalled();
+  });
+});
+
+describe('AuthService REFRESH_REUSE_GRACE_SECONDS validation', () => {
+  afterEach(() => {
+    delete process.env.REFRESH_REUSE_GRACE_SECONDS;
+  });
+
+  // An invalid value must stop startup: read lazily, it would only fail on
+  // the reuse path and skip the session revocation there.
+  it('fails at module init on an invalid value', () => {
+    process.env.REFRESH_REUSE_GRACE_SECONDS = '30s';
+    const { service } = makeService();
+    expect(() => service.onModuleInit()).toThrow('REFRESH_REUSE_GRACE_SECONDS');
+  });
+
+  it('accepts an unset value', () => {
+    const { service } = makeService();
+    expect(() => service.onModuleInit()).not.toThrow();
   });
 });
 /* eslint-enable @typescript-eslint/no-unsafe-return */

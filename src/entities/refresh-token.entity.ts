@@ -34,4 +34,8 @@ export class RefreshToken extends BaseEntity {
 
   @Property({ type: 'boolean', nullable: false, default: false })
   is_revoked!: boolean;
+
+  // Null for tokens revoked before the column existed.
+  @Property({ type: 'timestamptz', nullable: true })
+  revoked_at?: Date | null;
 }

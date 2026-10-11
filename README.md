@@ -132,6 +132,8 @@ User ──► AiRequest ──► AiRequestAttempt
 
 **`RefreshToken`** uses token rotation: each `/auth/refresh` call revokes the presented token and issues a new one. Only the `token_hash` (SHA-256) is stored, never the raw token. Each row also stores a `jti` (JWT ID) for fast lookup.
 
+Rotation is atomic: revoking the old token and storing the new one happen in one transaction, so if issuing fails the old token is still valid and the client can retry. Presenting an already-rotated token counts as theft: the whole session is revoked. Two concurrent refreshes with the same token yield exactly one `200`; the other gets `401` — and, if it reads the token after the winner committed, it is treated as a reuse and revokes the session too. Clients should therefore serialize refresh calls. `REFRESH_REUSE_GRACE_SECONDS` (off by default) lets a reuse within that many seconds of the rotation get a plain `401` without revoking the session; `revoked_at` records when each token was revoked. The trade-off: within the window, a thief who refreshes first keeps the session and the real client's retry is not flagged as theft — keep the window short (seconds, e.g. ≤ 30).
+
 **`Log`** is a structured audit table written by the auth module for login, logout, registration, and refresh events. Fields include `source`, `level`, `endpoint`, `http_method`, `status_code`, `ip_address`, and an optional JSONB `metadata` blob.
 
 ---
@@ -297,6 +299,7 @@ Both secrets must be at least 32 characters. Generate with `openssl rand -base64
 | `JWT_EXPIRES_IN_MS` | yes | Access token TTL in milliseconds (e.g. `900000` = 15 min) |
 | `JWT_REFRESH_SECRET` | yes | Secret for signing refresh tokens |
 | `JWT_REFRESH_EXPIRES_IN_MS` | yes | Refresh token TTL in milliseconds (e.g. `604800000` = 7 days) |
+| `REFRESH_REUSE_GRACE_SECONDS` | no | Seconds after a rotation during which reusing the old refresh token gets `401` without revoking the session (for clients retrying after a timeout). Default `0`: any reuse revokes the session |
 
 ### AI Gateway
 

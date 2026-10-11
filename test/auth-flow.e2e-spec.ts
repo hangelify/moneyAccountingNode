@@ -1,3 +1,4 @@
+import { createHash } from 'crypto';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { JwtService } from '@nestjs/jwt';
 import { MikroORM } from '@mikro-orm/core';
@@ -37,6 +38,9 @@ describe('Auth session flow (e2e)', () => {
     app.get(JwtService).decode<JwtPayload>(accessToken).sid;
 
   const em = () => app.get(MikroORM).em.fork();
+
+  const sha256 = (value: string) =>
+    createHash('sha256').update(value).digest('hex');
 
   beforeAll(async () => {
     app = await createTestApp();
@@ -106,6 +110,73 @@ describe('Auth session flow (e2e)', () => {
 
     it('rejects a garbage refresh token', async () => {
       await refresh('not-a-jwt').expect(401);
+    });
+
+    it('keeps the old refresh token valid when issuing the new pair fails', async () => {
+      const tokens = await login();
+      const sign = jest
+        .spyOn(app.get(JwtService), 'signAsync')
+        .mockRejectedValueOnce(new Error('signing failed'));
+      try {
+        await refresh(tokens.refresh_token).expect(500);
+      } finally {
+        sign.mockRestore();
+      }
+
+      // The revocation was rolled back with the failed rotation, so the
+      // client's retry is a normal refresh, not a reuse.
+      await refresh(tokens.refresh_token).expect(200);
+    });
+
+    it('lets exactly one of two concurrent refreshes with the same token win', async () => {
+      // The loser gets 401 either way: blocked on the row lock and then
+      // matching no row, or reading the token after the commit and taking
+      // the reuse path (which also revokes the session, so the winner's
+      // tokens are not asserted here).
+      const tokens = await login();
+      const results = await Promise.all([
+        refresh(tokens.refresh_token),
+        refresh(tokens.refresh_token),
+      ]);
+
+      expect(results.map((r) => r.status).sort()).toEqual([200, 401]);
+    });
+
+    describe('with a reuse grace window', () => {
+      beforeEach(() => {
+        process.env.REFRESH_REUSE_GRACE_SECONDS = '30';
+      });
+
+      afterEach(() => {
+        delete process.env.REFRESH_REUSE_GRACE_SECONDS;
+      });
+
+      it('rejects a retry of a just-rotated token without revoking the session', async () => {
+        const first = await login();
+        const second = (await refresh(first.refresh_token).expect(200))
+          .body as TokenResponseDto;
+
+        await refresh(first.refresh_token).expect(401);
+
+        await me(second.access_token).expect(200);
+        await refresh(second.refresh_token).expect(200);
+      });
+
+      it('still revokes the session on reuse after the window', async () => {
+        const first = await login();
+        const second = (await refresh(first.refresh_token).expect(200))
+          .body as TokenResponseDto;
+        await em().nativeUpdate(
+          RefreshToken,
+          { token_hash: sha256(first.refresh_token) },
+          { revoked_at: new Date(Date.now() - 31_000) },
+        );
+
+        await refresh(first.refresh_token).expect(401);
+
+        await refresh(second.refresh_token).expect(401);
+        await me(second.access_token).expect(401);
+      });
     });
 
     it('rejects a refresh token whose row has expired', async () => {

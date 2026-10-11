@@ -3,6 +3,7 @@ import {
   UnauthorizedException,
   Logger,
   BadRequestException,
+  OnModuleInit,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@mikro-orm/nestjs';
@@ -20,7 +21,11 @@ import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { TokenResponseDto } from './dto/token-response.dto';
 import { JwtPayload } from './types/jwt-payload.interface';
-import { requireEnv, requireIntEnv } from './auth.env';
+import {
+  optionalNonNegativeIntEnv,
+  requireEnv,
+  requireIntEnv,
+} from './auth.env';
 import { CategoryDefaultsService } from '../category/category-defaults.service';
 import { sanitizeIp } from '../../common/utils/ip.util';
 
@@ -37,7 +42,7 @@ interface IssuedTokens {
 }
 
 @Injectable()
-export class AuthService {
+export class AuthService implements OnModuleInit {
   private readonly logger = new Logger(AuthService.name);
 
   constructor(
@@ -53,6 +58,12 @@ export class AuthService {
     private readonly jwtService: JwtService,
     private readonly categoryDefaults: CategoryDefaultsService,
   ) {}
+
+  // Read lazily, an invalid value would only surface on the reuse path and
+  // skip the session revocation there; fail at startup instead.
+  onModuleInit(): void {
+    this.reuseGraceSeconds();
+  }
 
   async validateUser(email: string, password: string): Promise<User | null> {
     // Callers may pass a raw request body; a non-string here would turn into
@@ -232,6 +243,20 @@ export class AuthService {
     }
 
     if (tokenEntity.is_revoked) {
+      // A client retrying after a lost response presents the token it just
+      // rotated. Inside the grace window that is refused without treating it
+      // as theft; the session and the newly issued pair stay valid.
+      if (this.isWithinReuseGrace(tokenEntity.revoked_at)) {
+        await this.logAuthAttempt(
+          tokenEntity.user.email,
+          false,
+          'Token refresh failed - token already rotated, within reuse grace window',
+          ipAddress,
+          userAgent,
+        );
+        throw new UnauthorizedException('Refresh token already used');
+      }
+
       this.logger.warn(
         `Refresh token reuse detected for session ${tokenEntity.session.id}`,
       );
@@ -262,37 +287,47 @@ export class AuthService {
       throw new UnauthorizedException('Refresh token expired');
     }
 
-    const rowsRevoked = await this.refreshTokenRepository.nativeUpdate(
-      { id: tokenEntity.id, is_revoked: false },
-      { is_revoked: true },
+    // Revocation and the new pair commit together: if issuing fails, the old
+    // token stays valid and the client's retry is not taken for a reuse.
+    // The conditional UPDATE locks the row, so a concurrent refresh with the
+    // same token that already passed the checks above waits for this
+    // transaction and then matches no row (401). One that reads the token
+    // after the commit takes the reuse path instead.
+    const { issued, user } = await this.em.transactional(
+      async (txEm) => {
+        const rowsRevoked = await txEm.nativeUpdate(
+          RefreshToken,
+          { id: tokenEntity.id, is_revoked: false },
+          { is_revoked: true, revoked_at: now },
+        );
+
+        if (rowsRevoked === 0) {
+          throw new UnauthorizedException('Refresh token already used');
+        }
+
+        const user = await txEm.findOneOrFail(User, {
+          id: tokenEntity.user.id,
+        });
+        const freshSession = await txEm.findOneOrFail(Session, {
+          id: session.id,
+        });
+
+        freshSession.last_activity_at = now;
+        const sanitizedIp = sanitizeIp(ipAddress);
+        if (sanitizedIp) freshSession.ip_address = sanitizedIp;
+        if (userAgent) freshSession.user_agent = userAgent;
+
+        const issued = await this.issueTokensForSession(
+          txEm,
+          user,
+          freshSession,
+          ipAddress,
+          userAgent,
+        );
+        return { issued, user };
+      },
+      { clear: true },
     );
-
-    if (rowsRevoked === 0) {
-      throw new UnauthorizedException('Refresh token already used');
-    }
-
-    this.em.clear();
-
-    const user = await this.userRepository.findOneOrFail({
-      id: tokenEntity.user.id,
-    });
-    const freshSession = await this.sessionRepository.findOneOrFail({
-      id: session.id,
-    });
-
-    freshSession.last_activity_at = now;
-    const sanitizedIp = sanitizeIp(ipAddress);
-    if (sanitizedIp) freshSession.ip_address = sanitizedIp;
-    if (userAgent) freshSession.user_agent = userAgent;
-
-    const issued = await this.issueTokensForSession(
-      user,
-      freshSession,
-      ipAddress,
-      userAgent,
-    );
-
-    await this.em.flush();
 
     await this.logAuthAttempt(
       user.email,
@@ -360,6 +395,7 @@ export class AuthService {
     await this.em.persist(session).flush();
 
     const issued = await this.issueTokensForSession(
+      this.em,
       user,
       session,
       ipAddress,
@@ -369,7 +405,9 @@ export class AuthService {
     return issued;
   }
 
+  // Persists the new refresh row into `em` without flushing.
   private async issueTokensForSession(
+    em: EntityManager,
     user: User,
     session: Session,
     ipAddress?: string,
@@ -420,7 +458,7 @@ export class AuthService {
     const refreshExpiresAt = new Date(Date.now() + refreshTokenExpiresInMs);
     const refreshTokenHash = this.hashToken(refreshToken);
 
-    const refreshRow = this.refreshTokenRepository.create({
+    const refreshRow = em.create(RefreshToken, {
       user,
       session,
       token_hash: refreshTokenHash,
@@ -432,7 +470,7 @@ export class AuthService {
       is_revoked: false,
     });
 
-    this.em.persist(refreshRow);
+    em.persist(refreshRow);
 
     return {
       tokens: {
@@ -455,8 +493,20 @@ export class AuthService {
     );
     await this.refreshTokenRepository.nativeUpdate(
       { session: { id: sessionId }, is_revoked: false },
-      { is_revoked: true },
+      { is_revoked: true, revoked_at: new Date() },
     );
+  }
+
+  private reuseGraceSeconds(): number {
+    return optionalNonNegativeIntEnv('REFRESH_REUSE_GRACE_SECONDS', 0);
+  }
+
+  private isWithinReuseGrace(revokedAt: Date | null | undefined): boolean {
+    const graceSeconds = this.reuseGraceSeconds();
+    if (graceSeconds === 0 || !revokedAt) {
+      return false;
+    }
+    return Date.now() - revokedAt.getTime() <= graceSeconds * 1000;
   }
 
   private hashToken(token: string): string {

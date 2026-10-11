@@ -29,12 +29,16 @@ describe('Auth login hardening (e2e)', () => {
     typeof where.email !== 'string';
 
   const login = (body: object, query = '') =>
-    request(app.getHttpServer()).post(`/auth/login${query}`).send(body);
+    request(app.getHttpServer())
+      .post(`/auth/login${query}`)
+      .set('X-Client-Type', 'mobile')
+      .send(body);
 
   beforeAll(async () => {
     app = await createTestApp();
     await request(app.getHttpServer())
       .post('/auth/register')
+      .set('X-Client-Type', 'mobile')
       .send({ email, password, first_name: 'Login' })
       .expect(201);
   });

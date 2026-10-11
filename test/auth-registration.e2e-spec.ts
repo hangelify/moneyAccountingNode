@@ -8,7 +8,10 @@ describe('Auth Registration (e2e)', () => {
   let app: NestExpressApplication;
 
   const register = (body: object) =>
-    request(app.getHttpServer()).post('/auth/register').send(body);
+    request(app.getHttpServer())
+      .post('/auth/register')
+      .set('X-Client-Type', 'mobile')
+      .send(body);
 
   beforeAll(async () => {
     app = await createTestApp();
@@ -65,6 +68,7 @@ describe('Auth Registration (e2e)', () => {
 
     await request(app.getHttpServer())
       .post('/auth/login')
+      .set('X-Client-Type', 'mobile')
       .send({ email: 'case-login@example.com', password: 'password123' })
       .expect(200);
   });

@@ -1,4 +1,10 @@
-import { Entity, Property, ManyToOne, Index } from '@mikro-orm/core';
+import type { Rel } from '@mikro-orm/core';
+import {
+  Entity,
+  Property,
+  ManyToOne,
+  Index,
+} from '@mikro-orm/decorators/legacy';
 import { BaseEntity } from './base.entity';
 import { User } from './user.entity';
 import { Session } from './session.entity';
@@ -6,11 +12,11 @@ import { Session } from './session.entity';
 @Entity({ tableName: 'refresh_tokens' })
 export class RefreshToken extends BaseEntity {
   @ManyToOne(() => User, { nullable: false, deleteRule: 'cascade' })
-  user!: User;
+  user!: Rel<User>;
 
   @ManyToOne(() => Session, { nullable: false, deleteRule: 'cascade' })
   @Index()
-  session!: Session;
+  session!: Rel<Session>;
 
   @Property({ type: 'varchar', length: 64, nullable: false, unique: true })
   @Index()

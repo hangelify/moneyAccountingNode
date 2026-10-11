@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { dirname, join, relative, resolve } from 'path';
 import * as ts from 'typescript';
-import { Utils } from '@mikro-orm/core';
+import { fs } from '@mikro-orm/core/fs-utils';
 import mikroOrmConfig from './mikro-orm.config';
 
 // `start:prod`, docker-entrypoint.sh and the CI smoke step run `node dist/main.js`,
@@ -59,7 +59,7 @@ describe('production build layout', () => {
     expect(outside).toEqual([]);
   });
 
-  it('MikroORM entity globs find the compiled entities', async () => {
+  it('MikroORM entity globs find the compiled entities', () => {
     const entity = emittedJs(parsed, 'src/entities/user.entity.ts');
     const sandbox = mkdtempSync(join(tmpdir(), 'build-layout-'));
     try {
@@ -69,9 +69,7 @@ describe('production build layout', () => {
       const globs = (mikroOrmConfig.entities ?? []).filter(
         (e): e is string => typeof e === 'string',
       );
-      const found = await Promise.all(
-        globs.map((g) => Utils.pathExists(g, { cwd: sandbox })),
-      );
+      const found = globs.map((g) => fs.glob(g, sandbox).length > 0);
       expect(found).toContain(true);
     } finally {
       rmSync(sandbox, { recursive: true, force: true });

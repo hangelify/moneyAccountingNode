@@ -5,7 +5,7 @@ import {
   BeforeUpdate,
   Enum,
   Unique,
-} from '@mikro-orm/core';
+} from '@mikro-orm/decorators/legacy';
 import { BaseEntity } from './base.entity';
 import { Currency } from '../types/currency.enum';
 import { LanguageCode } from '../types/language-code.enum';

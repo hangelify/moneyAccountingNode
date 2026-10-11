@@ -1,11 +1,11 @@
+import { Collection, type Rel } from '@mikro-orm/core';
 import {
   Entity,
   Property,
   BeforeCreate,
   OneToMany,
   ManyToOne,
-  Collection,
-} from '@mikro-orm/core';
+} from '@mikro-orm/decorators/legacy';
 import { BaseEntity } from './base.entity';
 import { PlaningHorizon } from './planing-horizon.entity';
 import { Household } from './household.entity';
@@ -25,7 +25,7 @@ export class Budget extends BaseEntity {
   deleted_at?: Date;
 
   @ManyToOne(() => Household, { nullable: false })
-  household!: Household;
+  household!: Rel<Household>;
 
   @OneToMany(() => PlaningHorizon, (planingHorizon) => planingHorizon.budget)
   planingHorizons = new Collection<PlaningHorizon>(this);

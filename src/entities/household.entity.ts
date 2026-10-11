@@ -1,12 +1,12 @@
+import { Collection, type Rel } from '@mikro-orm/core';
 import {
   Entity,
   Property,
   BeforeCreate,
   ManyToOne,
   OneToMany,
-  Collection,
   Index,
-} from '@mikro-orm/core';
+} from '@mikro-orm/decorators/legacy';
 import { BaseEntity } from './base.entity';
 import { User } from './user.entity';
 import { HouseholdMember } from './household-member.entity';
@@ -19,7 +19,7 @@ export class Household extends BaseEntity {
   name!: string;
 
   @ManyToOne(() => User, { nullable: false, fieldName: 'created_by' })
-  created_by!: User;
+  created_by!: Rel<User>;
 
   @Property({ type: 'timestamptz', nullable: false, defaultRaw: 'NOW()' })
   created_at!: Date;

@@ -1,3 +1,4 @@
+import { Collection, type Rel } from '@mikro-orm/core';
 import {
   Entity,
   Property,
@@ -5,10 +6,9 @@ import {
   BeforeUpdate,
   ManyToMany,
   ManyToOne,
-  Collection,
   OneToMany,
   Index,
-} from '@mikro-orm/core';
+} from '@mikro-orm/decorators/legacy';
 import { BaseEntity } from './base.entity';
 import { PlaningHorizon } from './planing-horizon.entity';
 import { SubCategory } from './sub-category.entity';
@@ -45,7 +45,7 @@ export class Category extends BaseEntity {
   subCategories = new Collection<SubCategory>(this);
 
   @ManyToOne(() => Household, { nullable: false, deleteRule: 'cascade' })
-  household!: Household;
+  household!: Rel<Household>;
 
   @BeforeCreate()
   beforeCreate() {

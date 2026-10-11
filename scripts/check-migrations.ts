@@ -1,12 +1,21 @@
+import { createRequire } from 'module';
+import { fileURLToPath } from 'url';
 import { MikroORM } from '@mikro-orm/core';
 import config from '../src/mikro-orm.config';
 
 async function checkMigrations() {
-  const orm = await MikroORM.init(config);
-  const migrator = orm.getMigrator();
+  // MikroORM loads entities and migrations with import(), which bypasses
+  // ts-node's require hook; load them through require() like the CLI does
+  // for CommonJS projects.
+  const orm = await MikroORM.init({
+    ...config,
+    dynamicImportProvider: (id: string) =>
+      Promise.resolve(createRequire(__filename)(fileURLToPath(id))),
+  });
+  const migrator = orm.migrator;
 
   try {
-    const pendingMigrations = await migrator.getPendingMigrations();
+    const pendingMigrations = await migrator.getPending();
 
     if (pendingMigrations.length > 0) {
       console.error('❌ There are pending migrations that need to be applied:');

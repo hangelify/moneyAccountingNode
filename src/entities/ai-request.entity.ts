@@ -1,3 +1,4 @@
+import { Collection, type Rel } from '@mikro-orm/core';
 import {
   Entity,
   Property,
@@ -5,10 +6,9 @@ import {
   BeforeUpdate,
   ManyToOne,
   OneToMany,
-  Collection,
   Index,
   Enum,
-} from '@mikro-orm/core';
+} from '@mikro-orm/decorators/legacy';
 import { BaseEntity } from './base.entity';
 import { User } from './user.entity';
 import { AiRequestAttempt } from './ai-request-attempt.entity';
@@ -33,7 +33,7 @@ export class AiRequest extends BaseEntity {
   task_name!: string;
 
   @ManyToOne(() => User, { nullable: true, deleteRule: 'set null' })
-  user?: User;
+  user?: Rel<User>;
 
   @Enum({
     items: () => AiRequestStatus,

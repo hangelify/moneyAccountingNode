@@ -1,3 +1,4 @@
+import { Collection, type Rel } from '@mikro-orm/core';
 import {
   Entity,
   Property,
@@ -6,8 +7,7 @@ import {
   Enum,
   ManyToOne,
   ManyToMany,
-  Collection,
-} from '@mikro-orm/core';
+} from '@mikro-orm/decorators/legacy';
 import { BaseEntity } from './base.entity';
 import { Currency } from '../types/currency.enum';
 import { PeriodType } from '../types/period-type.enum';
@@ -54,7 +54,7 @@ export class PlaningHorizon extends BaseEntity {
   is_archived!: boolean;
 
   @ManyToOne(() => Budget, { nullable: false })
-  budget!: Budget;
+  budget!: Rel<Budget>;
 
   @ManyToMany(() => Category, (category) => category.planingHorizons, {
     owner: true,

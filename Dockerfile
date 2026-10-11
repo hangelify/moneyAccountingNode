@@ -42,6 +42,10 @@ RUN npm pkg delete scripts.prepare \
 # Copy built application from builder
 COPY --from=builder /app/dist ./dist
 
+# The MikroORM 7 CLI prefers the TypeScript config, entities and migrations
+# (src/) whenever it is not told otherwise; the image only ships dist/.
+ENV MIKRO_ORM_CLI_PREFER_TS=false
+
 # Copy entrypoint script
 COPY docker-entrypoint.sh ./
 RUN chmod +x docker-entrypoint.sh

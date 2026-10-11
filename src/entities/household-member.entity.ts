@@ -1,4 +1,10 @@
-import { Entity, Property, BeforeCreate, ManyToOne } from '@mikro-orm/core';
+import type { Rel } from '@mikro-orm/core';
+import {
+  Entity,
+  Property,
+  BeforeCreate,
+  ManyToOne,
+} from '@mikro-orm/decorators/legacy';
 import { Household } from './household.entity';
 import { User } from './user.entity';
 
@@ -9,14 +15,14 @@ export class HouseholdMember {
     nullable: false,
     deleteRule: 'cascade',
   })
-  household!: Household;
+  household!: Rel<Household>;
 
   @ManyToOne(() => User, {
     primary: true,
     nullable: false,
     deleteRule: 'cascade',
   })
-  user!: User;
+  user!: Rel<User>;
 
   @Property({ type: 'varchar', length: 20, nullable: false, default: 'member' })
   role: 'owner' | 'member' = 'member';

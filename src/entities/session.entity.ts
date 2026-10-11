@@ -1,11 +1,12 @@
-import { Entity, Property, ManyToOne } from '@mikro-orm/core';
+import type { Rel } from '@mikro-orm/core';
+import { Entity, Property, ManyToOne } from '@mikro-orm/decorators/legacy';
 import { BaseEntity } from './base.entity';
 import { User } from './user.entity';
 
 @Entity({ tableName: 'sessions' })
 export class Session extends BaseEntity {
   @ManyToOne(() => User, { nullable: false, deleteRule: 'cascade' })
-  user!: User;
+  user!: Rel<User>;
 
   @Property({ type: 'varchar', length: 45, nullable: true })
   ip_address?: string | null;

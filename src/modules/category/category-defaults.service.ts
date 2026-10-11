@@ -17,21 +17,44 @@ export class CategoryDefaultsService {
   constructor(private readonly em: EntityManager) {}
 
   async seedForHousehold(householdId: string): Promise<SeedCounts> {
-    const em = this.em.fork();
+    const counts = await this.em.fork().transactional(async (em) => {
+      // Concurrent seeds of one household (registration, a double click)
+      // run one at a time: the second one sees the first one's rows.
+      await em
+        .getConnection()
+        .execute(
+          'select pg_advisory_xact_lock(hashtext(?))',
+          [householdId],
+          'all',
+          em.getTransactionContext(),
+        );
+      return this.seed(em, householdId);
+    });
+    this.log.log(
+      `Seeded defaults for household ${householdId}: +${counts.categoriesCreated} categories, +${counts.subCategoriesCreated} subcategories`,
+    );
+    return counts;
+  }
+
+  // Names match case-insensitively, as the unique indexes do.
+  private async seed(
+    em: EntityManager,
+    householdId: string,
+  ): Promise<SeedCounts> {
     const existingCats = await em.find(
       Category,
       { household: { id: householdId }, deleted_at: null },
       { populate: ['subCategories'] },
     );
     const byName = new Map<string, Category>(
-      existingCats.map((c) => [c.name, c as Category]),
+      existingCats.map((c) => [c.name.toLowerCase(), c as Category]),
     );
 
     let categoriesCreated = 0;
     let subCategoriesCreated = 0;
 
     for (const node of DEFAULT_CATEGORY_TREE) {
-      const existing = byName.get(node.name);
+      const existing = byName.get(node.name.toLowerCase());
       if (!existing) {
         const category = em.create(Category, {
           name: node.name,
@@ -56,10 +79,10 @@ export class CategoryDefaultsService {
           existing.subCategories
             .getItems()
             .filter((s) => !s.deleted_at)
-            .map((s) => s.name),
+            .map((s) => s.name.toLowerCase()),
         );
         for (const sub of node.subCategories) {
-          if (existingSubNames.has(sub.name)) continue;
+          if (existingSubNames.has(sub.name.toLowerCase())) continue;
           const sc = em.create(SubCategory, {
             name: sub.name,
             category: existing,
@@ -73,9 +96,6 @@ export class CategoryDefaultsService {
     }
 
     await em.flush();
-    this.log.log(
-      `Seeded defaults for household ${householdId}: +${categoriesCreated} categories, +${subCategoriesCreated} subcategories`,
-    );
     return { categoriesCreated, subCategoriesCreated };
   }
 }

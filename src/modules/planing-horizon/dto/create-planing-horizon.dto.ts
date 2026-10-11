@@ -14,7 +14,8 @@ import { PeriodType } from '../../../types/period-type.enum';
 
 export class CreatePlaningHorizonDto {
   @ApiProperty({
-    description: 'Planning horizon name (must be unique per user)',
+    description:
+      'Planning horizon name (unique per budget among active horizons, case-insensitive)',
     example: 'Q1 2025 Budget',
     minLength: 1,
     maxLength: 255,

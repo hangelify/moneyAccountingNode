@@ -23,6 +23,13 @@ export const ApiBadRequestResponse = (description?: string) =>
     description: description || 'Bad request - Invalid input',
   });
 
+export const ApiConflictResponse = () =>
+  ApiResponse({
+    status: 409,
+    description:
+      'A budget with this name (case-insensitive) already exists in the household',
+  });
+
 /**
  * Combined decorators for specific endpoints
  */
@@ -33,9 +40,8 @@ export const ApiCreateBudgetResponses = () =>
       description: 'Budget created successfully',
       type: BudgetResponseDto,
     }),
-    ApiBadRequestResponse(
-      'Bad request - Budget name already exists for this user or invalid input',
-    ),
+    ApiBadRequestResponse('Bad request - Invalid input'),
+    ApiConflictResponse(),
     ApiUnauthorizedResponse(),
   );
 
@@ -59,6 +65,7 @@ export const ApiUpdateBudgetResponses = () =>
     }),
     ApiNotFoundResponse(),
     ApiBadRequestResponse('Bad request - Invalid input'),
+    ApiConflictResponse(),
     ApiUnauthorizedResponse(),
   );
 

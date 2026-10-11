@@ -24,6 +24,13 @@ export const ApiBadRequestResponse = (description?: string) =>
     description: description || 'Bad request - Invalid input',
   });
 
+export const ApiConflictResponse = () =>
+  ApiResponse({
+    status: 409,
+    description:
+      'A planning horizon with this name (case-insensitive) already exists in the budget',
+  });
+
 /**
  * Combined decorators for specific endpoints
  */
@@ -34,9 +41,8 @@ export const ApiCreatePlaningHorizonResponses = () =>
       description: 'Planning horizon created successfully',
       type: PlaningHorizonBaseResponseDto,
     }),
-    ApiBadRequestResponse(
-      'Bad request - Planning horizon name already exists for this user, budget not found, or invalid input',
-    ),
+    ApiBadRequestResponse('Bad request - Budget not found or invalid input'),
+    ApiConflictResponse(),
     ApiUnauthorizedResponse(),
   );
 
@@ -59,9 +65,8 @@ export const ApiUpdatePlaningHorizonResponses = () =>
       type: PlaningHorizonBaseResponseDto,
     }),
     ApiNotFoundResponse(),
-    ApiBadRequestResponse(
-      'Bad request - Planning horizon name already exists for this user or invalid input',
-    ),
+    ApiBadRequestResponse('Bad request - Invalid input'),
+    ApiConflictResponse(),
     ApiUnauthorizedResponse(),
   );
 

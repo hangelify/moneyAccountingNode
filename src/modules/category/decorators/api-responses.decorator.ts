@@ -24,6 +24,13 @@ export const ApiBadRequestResponse = (description?: string) =>
     description: description || 'Bad request - Invalid input',
   });
 
+export const ApiConflictResponse = () =>
+  ApiResponse({
+    status: 409,
+    description:
+      'A category with this name (case-insensitive) already exists in the household',
+  });
+
 /**
  * Combined decorators for specific endpoints
  */
@@ -37,6 +44,7 @@ export const ApiCreateCategoryResponses = () =>
     ApiBadRequestResponse(
       'Bad request - Invalid input or planning horizon not found',
     ),
+    ApiConflictResponse(),
     ApiUnauthorizedResponse(),
   );
 
@@ -48,8 +56,9 @@ export const ApiBulkCreateCategoryResponses = () =>
       type: [CategoryResponseDto],
     }),
     ApiBadRequestResponse(
-      'Bad request - Invalid input or planning horizon not found',
+      'Bad request - Invalid input or planning horizon not found, or duplicate names within the request',
     ),
+    ApiConflictResponse(),
     ApiUnauthorizedResponse(),
   );
 
@@ -83,6 +92,7 @@ export const ApiUpdateCategoryResponses = () =>
     }),
     ApiNotFoundResponse(),
     ApiBadRequestResponse('Bad request - Invalid input'),
+    ApiConflictResponse(),
     ApiUnauthorizedResponse(),
   );
 

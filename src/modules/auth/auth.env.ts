@@ -16,3 +16,19 @@ export function requireIntEnv(name: string): number {
   }
   return parsed;
 }
+
+export function optionalNonNegativeIntEnv(
+  name: string,
+  fallback: number,
+): number {
+  const raw = process.env[name];
+  if (!raw) {
+    return fallback;
+  }
+  if (!/^\d+$/.test(raw)) {
+    throw new Error(
+      `Environment variable ${name} must be a non-negative integer, got: ${raw}`,
+    );
+  }
+  return parseInt(raw, 10);
+}

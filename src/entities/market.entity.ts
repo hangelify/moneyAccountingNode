@@ -1,3 +1,4 @@
+import type { Rel } from '@mikro-orm/core';
 import {
   Entity,
   Property,
@@ -5,7 +6,7 @@ import {
   BeforeUpdate,
   ManyToOne,
   Index,
-} from '@mikro-orm/core';
+} from '@mikro-orm/decorators/legacy';
 import { BaseEntity } from './base.entity';
 import { Household } from './household.entity';
 
@@ -29,7 +30,7 @@ export class Market extends BaseEntity {
   country?: string;
 
   @ManyToOne(() => Household, { nullable: false })
-  household!: Household;
+  household!: Rel<Household>;
 
   @Property({ type: 'timestamptz', nullable: false, defaultRaw: 'NOW()' })
   created_at!: Date;

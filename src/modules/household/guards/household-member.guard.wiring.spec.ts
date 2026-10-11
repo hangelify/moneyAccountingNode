@@ -50,7 +50,7 @@ describe('HouseholdMemberGuard wiring', () => {
     // compile() builds controller guards, so a missing repository fails here.
     const moduleRef = await Test.createTestingModule({
       imports: [
-        MikroOrmModule.forRoot({ ...createMikroOrmConfig(), connect: false }),
+        MikroOrmModule.forRoot(createMikroOrmConfig()),
         // Global in AppModule; no AI providers are needed to build the graph.
         AiGatewayModule.forRoot({ providers: [] }),
         // Global in AppModule; UserThrottlerGuard (parse-photo) needs it.

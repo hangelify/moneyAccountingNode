@@ -1,3 +1,4 @@
+import { Collection, type Rel } from '@mikro-orm/core';
 import {
   Entity,
   Property,
@@ -5,8 +6,7 @@ import {
   BeforeUpdate,
   ManyToOne,
   OneToMany,
-  Collection,
-} from '@mikro-orm/core';
+} from '@mikro-orm/decorators/legacy';
 import { BaseEntity } from './base.entity';
 import { Category } from './category.entity';
 import { BillSubCategory } from './bill-sub-category.entity';
@@ -29,7 +29,7 @@ export class SubCategory extends BaseEntity {
   deleted_at?: Date;
 
   @ManyToOne(() => Category, { nullable: false })
-  category!: Category;
+  category!: Rel<Category>;
 
   @OneToMany(
     () => BillSubCategory,

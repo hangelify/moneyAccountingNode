@@ -1,4 +1,5 @@
 // src/entities/bill.entity.ts
+import { Collection, type Rel } from '@mikro-orm/core';
 import {
   Entity,
   Property,
@@ -6,10 +7,9 @@ import {
   BeforeUpdate,
   OneToMany,
   ManyToOne,
-  Collection,
   Enum,
   Index,
-} from '@mikro-orm/core';
+} from '@mikro-orm/decorators/legacy';
 import { BaseEntity } from './base.entity';
 import { BillSubCategory } from './bill-sub-category.entity';
 import { Household } from './household.entity';
@@ -63,17 +63,17 @@ export class Bill extends BaseEntity {
   market_name_raw?: string;
 
   @ManyToOne(() => Household, { nullable: false })
-  household!: Household;
+  household!: Rel<Household>;
 
   @ManyToOne(() => User, {
     nullable: true,
     deleteRule: 'set null',
     fieldName: 'created_by_user_id',
   })
-  created_by?: User;
+  created_by?: Rel<User>;
 
   @ManyToOne(() => Market, { nullable: true })
-  market?: Market;
+  market?: Rel<Market>;
 
   @Enum({
     items: () => Currency,

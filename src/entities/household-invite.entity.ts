@@ -1,10 +1,11 @@
+import type { Rel } from '@mikro-orm/core';
 import {
   Entity,
   Property,
   BeforeCreate,
   ManyToOne,
   Index,
-} from '@mikro-orm/core';
+} from '@mikro-orm/decorators/legacy';
 import { BaseEntity } from './base.entity';
 import { Household } from './household.entity';
 import { User } from './user.entity';
@@ -20,13 +21,13 @@ import { User } from './user.entity';
 })
 export class HouseholdInvite extends BaseEntity {
   @ManyToOne(() => Household, { nullable: false, deleteRule: 'cascade' })
-  household!: Household;
+  household!: Rel<Household>;
 
   @Property({ type: 'varchar', length: 255, nullable: false })
   invitee_email!: string;
 
   @ManyToOne(() => User, { nullable: false, fieldName: 'invited_by' })
-  invited_by!: User;
+  invited_by!: Rel<User>;
 
   /** SHA-256 hex of the raw token. Raw token is returned to client once, never persisted. */
   @Property({ type: 'varchar', length: 64, nullable: false, unique: true })

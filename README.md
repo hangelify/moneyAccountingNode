@@ -237,7 +237,7 @@ Every call routed through the AI gateway is persisted for auditing and cost trac
 
 | Layer | Technology |
 |---|---|
-| Framework | NestJS 11 (Node 20, TypeScript 5) |
+| Framework | NestJS 11 (Node 24, TypeScript 5) |
 | ORM | MikroORM 6 with PostgreSQL driver |
 | Auth | Passport.js + JWT (access + refresh token rotation) |
 | Validation | `class-validator` + `class-transformer` |
@@ -253,7 +253,7 @@ Every call routed through the AI gateway is persisted for auditing and cost trac
 
 ## Prerequisites
 
-- **Node.js 22+**
+- **Node.js 24+**
 - **npm**
 - **Docker + Docker Compose** (required for PostgreSQL, Redis, and MinIO)
 
@@ -389,7 +389,7 @@ Production requires all infrastructure (PostgreSQL, Redis, MinIO/S3) to be runni
 
 ### Full Docker stack
 
-A `Dockerfile` (multi-stage, Node 20 Alpine) and `docker-compose.yml` are included. The Docker entrypoint waits for PostgreSQL to be ready, runs all pending migrations, then starts the application.
+A `Dockerfile` (multi-stage, Node 24 Alpine) and `docker-compose.yml` are included. The Docker entrypoint waits for PostgreSQL to be ready, runs all pending migrations, then starts the application.
 
 ```bash
 # Build the application image

@@ -1,3 +1,4 @@
+import type { Rel } from '@mikro-orm/core';
 import {
   Entity,
   Property,
@@ -5,7 +6,7 @@ import {
   ManyToOne,
   Index,
   Enum,
-} from '@mikro-orm/core';
+} from '@mikro-orm/decorators/legacy';
 import { BaseEntity } from './base.entity';
 import { AiRequest } from './ai-request.entity';
 
@@ -31,7 +32,7 @@ export enum AiAttemptErrorCode {
 export class AiRequestAttempt extends BaseEntity {
   @ManyToOne(() => AiRequest, { nullable: false })
   @Index()
-  ai_request!: AiRequest;
+  ai_request!: Rel<AiRequest>;
 
   @Property({ type: 'integer', nullable: false })
   attempt_number!: number;

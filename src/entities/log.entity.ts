@@ -1,4 +1,11 @@
-import { Entity, Property, ManyToOne, Index, Enum } from '@mikro-orm/core';
+import type { Rel } from '@mikro-orm/core';
+import {
+  Entity,
+  Property,
+  ManyToOne,
+  Index,
+  Enum,
+} from '@mikro-orm/decorators/legacy';
 import { BaseEntity } from './base.entity';
 import { User } from './user.entity';
 
@@ -48,7 +55,7 @@ export class Log extends BaseEntity {
   metadata?: Record<string, any>;
 
   @ManyToOne(() => User, { nullable: true, deleteRule: 'set null' })
-  user?: User;
+  user?: Rel<User>;
 
   @Property({ type: 'varchar', length: 45, nullable: true })
   ip_address?: string | null;

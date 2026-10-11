@@ -1,4 +1,4 @@
-import { PrimaryKey } from '@mikro-orm/core';
+import { PrimaryKey } from '@mikro-orm/decorators/legacy';
 
 /**
  * Base entity that provides ID for all tables.

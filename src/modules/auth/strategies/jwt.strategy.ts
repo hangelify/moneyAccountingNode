@@ -7,6 +7,13 @@ import { User } from '../../../entities/user.entity';
 import { Session } from '../../../entities/session.entity';
 import { JwtPayload, AuthenticatedUser } from '../types/jwt-payload.interface';
 import { requireEnv } from '../auth.env';
+import {
+  ACCESS_TOKEN_TYP,
+  JWT_ALGORITHM,
+  hasTyp,
+  jwtAudience,
+  jwtIssuer,
+} from '../token-format';
 
 const LAST_ACTIVITY_WRITE_THROTTLE_MS = 60_000;
 
@@ -22,11 +29,27 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
       secretOrKey: requireEnv('JWT_SECRET'),
+      algorithms: [JWT_ALGORITHM],
+      issuer: jwtIssuer(),
+      audience: jwtAudience(),
+      // The header is needed to check typ, which jsonwebtoken does not.
+      jsonWebTokenOptions: { complete: true },
     });
   }
 
-  async validate(payload: JwtPayload): Promise<AuthenticatedUser> {
-    if (!payload.sub || payload.type !== 'access' || !payload.sid) {
+  async validate({
+    header,
+    payload,
+  }: {
+    header: { typ?: string };
+    payload: JwtPayload;
+  }): Promise<AuthenticatedUser> {
+    if (
+      !hasTyp(header.typ, ACCESS_TOKEN_TYP) ||
+      !payload.sub ||
+      payload.type !== 'access' ||
+      !payload.sid
+    ) {
       throw new UnauthorizedException('Invalid token payload');
     }
 

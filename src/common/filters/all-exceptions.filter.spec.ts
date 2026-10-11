@@ -12,11 +12,13 @@ import {
   UniqueConstraintViolationException,
 } from '@mikro-orm/core';
 import { AllExceptionsFilter } from './all-exceptions.filter';
+import { HttpExceptionWithHeaders } from '../exceptions/http-exception-with-headers';
 
 function makeHost(method: string, routePath?: string, originalUrl = '/x') {
   const status = jest.fn().mockReturnThis();
   const json = jest.fn();
-  const response = { status, json };
+  const setHeader = jest.fn();
+  const response = { status, json, setHeader };
   const request = {
     method,
     originalUrl,
@@ -28,7 +30,7 @@ function makeHost(method: string, routePath?: string, originalUrl = '/x') {
       getRequest: () => request,
     }),
   } as unknown as ArgumentsHost;
-  return { host, status, json };
+  return { host, status, json, setHeader };
 }
 
 function pgError(code: string, message: string): Error {
@@ -52,6 +54,27 @@ describe('AllExceptionsFilter', () => {
 
   afterEach(() => {
     jest.restoreAllMocks();
+  });
+
+  it('sends the headers an HttpException carries', () => {
+    const { host, status, json, setHeader } = makeHost('GET', '/auth/me');
+    const err = new HttpExceptionWithHeaders(
+      { statusCode: 401, message: 'Unauthorized' },
+      401,
+      { 'WWW-Authenticate': 'Bearer realm="api"' },
+    );
+
+    filter.catch(err, host);
+
+    expect(setHeader).toHaveBeenCalledWith(
+      'WWW-Authenticate',
+      'Bearer realm="api"',
+    );
+    expect(status).toHaveBeenCalledWith(401);
+    expect(json).toHaveBeenCalledWith({
+      statusCode: 401,
+      message: 'Unauthorized',
+    });
   });
 
   it('logs and returns 500 for a non-HttpException Error', () => {

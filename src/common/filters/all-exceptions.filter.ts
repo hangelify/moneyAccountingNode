@@ -13,6 +13,7 @@ import {
   UniqueConstraintViolationException,
 } from '@mikro-orm/core';
 import { Request, Response } from 'express';
+import { HttpExceptionWithHeaders } from '../exceptions/http-exception-with-headers';
 
 // Postgres "invalid_text_representation", e.g. a malformed uuid.
 const PG_INVALID_TEXT_REPRESENTATION = '22P02';
@@ -34,6 +35,11 @@ export class AllExceptionsFilter implements ExceptionFilter {
           ? { statusCode: status, message: response }
           : response;
       if (status >= 500) this.logError(req, exception);
+      if (exception instanceof HttpExceptionWithHeaders) {
+        for (const [name, value] of Object.entries(exception.headers)) {
+          res.setHeader(name, value);
+        }
+      }
       res.status(status).json(body);
       return;
     }

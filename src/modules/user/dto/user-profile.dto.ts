@@ -16,6 +16,13 @@ export class UserProfileDto {
   email!: string;
 
   @ApiProperty({
+    description:
+      'Whether the email address is confirmed; household invites need it',
+    example: true,
+  })
+  email_verified!: boolean;
+
+  @ApiProperty({
     description: 'User first name',
     example: 'John',
   })

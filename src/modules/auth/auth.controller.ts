@@ -35,6 +35,7 @@ import { ChangePasswordDto } from './dto/change-password.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { RevokeTokenDto } from './dto/revoke-token.dto';
 import { SessionDto } from './dto/session.dto';
+import { VerifyEmailDto } from './dto/verify-email.dto';
 import {
   ClientTokenResponse,
   TokenResponseDto,
@@ -354,6 +355,59 @@ export class AuthController {
     await this.authService.changePassword(
       user,
       dto,
+      this.extractIpAddress(req),
+      this.extractUserAgent(req),
+    );
+  }
+
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  @Post('verify-email')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({
+    summary: 'Confirm the email address with the token from the email',
+    description:
+      'Public: the link may be opened on another device. A token works once.',
+  })
+  @ApiBody({ type: VerifyEmailDto })
+  @ApiResponse({ status: 204, description: 'Email address verified' })
+  @ApiResponse({
+    status: 400,
+    description: 'Invalid or expired verification token',
+  })
+  async verifyEmail(
+    @Body() dto: VerifyEmailDto,
+    @Req() req: Request,
+  ): Promise<void> {
+    await this.authService.verifyEmail(
+      dto.token,
+      this.extractIpAddress(req),
+      this.extractUserAgent(req),
+    );
+  }
+
+  @Throttle({ default: { limit: 3, ttl: 60_000 } })
+  @UseGuards(JwtAuthGuard)
+  @Post('resend-verification')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({
+    summary: 'Send a new verification email',
+    description:
+      'The previous link stops working. Does nothing when the email is already verified.',
+  })
+  @ApiResponse({ status: 204, description: 'Email sent, or already verified' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({
+    status: 429,
+    description: 'The previous email was sent less than a minute ago',
+  })
+  @ApiResponse({ status: 503, description: 'The email could not be sent' })
+  async resendVerification(
+    @CurrentUser() user: AuthenticatedUser,
+    @Req() req: Request,
+  ): Promise<void> {
+    await this.authService.resendVerification(
+      user,
       this.extractIpAddress(req),
       this.extractUserAgent(req),
     );

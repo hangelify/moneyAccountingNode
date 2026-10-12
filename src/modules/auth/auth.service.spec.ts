@@ -1,8 +1,9 @@
 import { JwtService } from '@nestjs/jwt';
-import { UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, UnauthorizedException } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 import { EntityManager, EntityRepository } from '@mikro-orm/core';
 import { AuthService } from './auth.service';
+import type { EmailVerificationService } from './email-verification/email-verification.service';
 import { CategoryDefaultsService } from '../category/category-defaults.service';
 import { User } from '../../entities/user.entity';
 import { RefreshToken } from '../../entities/refresh-token.entity';
@@ -24,6 +25,7 @@ jest.mock('bcrypt', () => {
 
 interface Deps {
   seedForHousehold: jest.Mock;
+  issueAndSend: jest.Mock;
   findUser: jest.Mock;
   createSession: jest.Mock;
   createRefreshToken: jest.Mock;
@@ -58,6 +60,12 @@ function makeService(opts?: Partial<Pick<Deps, 'seedForHousehold'>>): {
   const createLog = jest.fn().mockImplementation((data) => data);
   const findUser = jest.fn().mockResolvedValue(null);
   const updateUser = jest.fn().mockResolvedValue(1);
+  const issueAndSend = jest.fn().mockResolvedValue(undefined);
+  const verifyToken = jest
+    .fn()
+    .mockRejectedValue(
+      new BadRequestException('Invalid or expired verification token'),
+    );
   const userRepo = {
     findOne: findUser,
     nativeUpdate: updateUser,
@@ -108,11 +116,16 @@ function makeService(opts?: Partial<Pick<Deps, 'seedForHousehold'>>): {
     { seedForHousehold } as unknown as CategoryDefaultsService,
     new PasswordService(),
     new LoginLockoutService(new InMemoryLoginAttemptStore()),
+    {
+      issueAndSend,
+      verify: verifyToken,
+    } as unknown as EmailVerificationService,
   );
   return {
     service,
     deps: {
       seedForHousehold,
+      issueAndSend,
       findUser,
       createSession,
       createRefreshToken,
@@ -122,6 +135,45 @@ function makeService(opts?: Partial<Pick<Deps, 'seedForHousehold'>>): {
     },
   };
 }
+
+describe('AuthService.register email verification', () => {
+  it('sends the verification email to the new user', async () => {
+    const { service, deps } = makeService();
+    await service.register(
+      {
+        email: 'New-User@test',
+        password: 'supersecret-password',
+        first_name: 'Test',
+      },
+      '1.2.3.4',
+      'jest',
+    );
+
+    expect(deps.issueAndSend).toHaveBeenCalledWith(
+      expect.objectContaining({ email: 'new-user@test', first_name: 'Test' }),
+    );
+  });
+});
+
+describe('AuthService.verifyEmail', () => {
+  it('audits a rejected token', async () => {
+    const { service, deps } = makeService();
+
+    await expect(
+      service.verifyEmail('a'.repeat(64), '1.2.3.4', 'jest'),
+    ).rejects.toThrow(BadRequestException);
+
+    expect(deps.createLog).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: expect.stringContaining('Email verification failed') as string,
+        metadata: expect.objectContaining({ success: false }) as Record<
+          string,
+          unknown
+        >,
+      }),
+    );
+  });
+});
 
 describe('AuthService.register seeder hook', () => {
   it('seeds default categories for the new user after persist', async () => {

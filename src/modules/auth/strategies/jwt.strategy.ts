@@ -64,6 +64,7 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
           'username',
           'currency',
           'language_code',
+          'email_verified_at',
         ],
       },
     );

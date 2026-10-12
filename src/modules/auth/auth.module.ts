@@ -22,6 +22,11 @@ import {
   RedisLoginAttemptStore,
 } from './login-lockout/login-attempt.store';
 import { LoginLockoutService } from './login-lockout/login-lockout.service';
+import { EmailVerificationService } from './email-verification/email-verification.service';
+import {
+  EMAIL_VERIFICATION_CONFIG,
+  readEmailVerificationConfig,
+} from './email-verification/email-verification.env';
 
 @Module({
   imports: [
@@ -55,6 +60,11 @@ import { LoginLockoutService } from './login-lockout/login-lockout.service';
     PasswordService,
     JwtStrategy,
     LoginLockoutService,
+    EmailVerificationService,
+    {
+      provide: EMAIL_VERIFICATION_CONFIG,
+      useFactory: () => readEmailVerificationConfig(),
+    },
     {
       provide: LOGIN_ATTEMPT_STORE,
       // Lazy: an app that never handles a login (tests, tools) opens no

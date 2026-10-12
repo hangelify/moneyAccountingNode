@@ -129,11 +129,20 @@ export class HouseholdService {
     await this.em.persist(household).flush();
   }
 
+  // Invites are bound to an email address, so both ends must have proven
+  // they own theirs.
+  private assertEmailVerified(user: Pick<User, 'email_verified_at'>): void {
+    if (!user.email_verified_at) {
+      throw new ForbiddenException('Email address is not verified');
+    }
+  }
+
   async createInvite(
     hid: string,
-    inviterId: string,
+    inviter: Pick<User, 'id' | 'email_verified_at'>,
     dto: CreateInviteDto,
   ): Promise<InviteResponseDto> {
+    this.assertEmailVerified(inviter);
     const rawToken = randomBytes(32).toString('hex');
     const tokenHash = createHash('sha256').update(rawToken).digest('hex');
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
@@ -161,7 +170,7 @@ export class HouseholdService {
 
       const invite = new HouseholdInvite();
       invite.household = household;
-      invite.invited_by = txEm.getReference(User, inviterId);
+      invite.invited_by = txEm.getReference(User, inviter.id);
       invite.invitee_email = normalizeEmail(dto.email);
       invite.token_hash = tokenHash;
       invite.expires_at = expiresAt;
@@ -215,8 +224,9 @@ export class HouseholdService {
 
   async acceptInvite(
     rawToken: string,
-    user: Pick<User, 'id' | 'email'>,
+    user: Pick<User, 'id' | 'email' | 'email_verified_at'>,
   ): Promise<void> {
+    this.assertEmailVerified(user);
     const tokenHash = createHash('sha256').update(rawToken).digest('hex');
 
     await this.em.transactional(async (txEm) => {

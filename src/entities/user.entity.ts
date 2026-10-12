@@ -18,6 +18,11 @@ import { LanguageCode } from '../types/language-code.enum';
   expression:
     'create unique index "users_email_lower_unique" on "users" (lower("email"))',
 })
+@Unique({
+  name: 'users_email_verification_token_hash_unique',
+  expression:
+    'create unique index "users_email_verification_token_hash_unique" on "users" ("email_verification_token_hash") where "email_verification_token_hash" is not null',
+})
 export class User extends BaseEntity {
   @Property({ type: 'varchar', length: 255, nullable: false })
   first_name!: string;
@@ -60,6 +65,22 @@ export class User extends BaseEntity {
 
   @Property({ type: 'timestamptz', nullable: true })
   deleted_at?: Date;
+
+  /** NULL until the user opens the link from the verification email. */
+  @Property({ type: 'timestamptz', nullable: true })
+  email_verified_at?: Date | null;
+
+  // SHA-256 of the one active verification token; the raw token is only in
+  // the email.
+  @Property({ type: 'varchar', length: 64, nullable: true, hidden: true })
+  email_verification_token_hash?: string | null;
+
+  @Property({ type: 'timestamptz', nullable: true, hidden: true })
+  email_verification_expires_at?: Date | null;
+
+  /** When the active token was emailed; drives the resend cooldown. */
+  @Property({ type: 'timestamptz', nullable: true, hidden: true })
+  email_verification_sent_at?: Date | null;
 
   @BeforeCreate()
   beforeCreate() {

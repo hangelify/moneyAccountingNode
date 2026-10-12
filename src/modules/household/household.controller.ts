@@ -112,7 +112,7 @@ export class HouseholdController {
     @Body() dto: CreateInviteDto,
   ): Promise<InviteResponseDto> {
     this.householdService.assertOwner(ctx);
-    return this.householdService.createInvite(hid, user.id, dto);
+    return this.householdService.createInvite(hid, user, dto);
   }
 
   @Get(':hid/invites')

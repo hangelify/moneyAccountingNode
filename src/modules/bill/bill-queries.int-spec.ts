@@ -102,7 +102,7 @@ describe('bill list and dashboard SQL (PostgreSQL)', () => {
     };
 
     const march5 = bill(
-      { bill_date: new Date('2026-03-05'), amount: 10.5, market: lidl },
+      { bill_date: '2026-03-05', amount: 10.5, market: lidl },
       [
         [bread, 4.5],
         [soap, 6],
@@ -110,7 +110,7 @@ describe('bill list and dashboard SQL (PostgreSQL)', () => {
     );
     const march20 = bill(
       {
-        bill_date: new Date('2026-03-20'),
+        bill_date: '2026-03-20',
         amount: 100,
         currency: Currency.USD,
         market_name_raw: 'Corner shop',
@@ -121,14 +121,14 @@ describe('bill list and dashboard SQL (PostgreSQL)', () => {
       ],
     );
     const april2 = bill({
-      bill_date: new Date('2026-04-02'),
+      bill_date: '2026-04-02',
       amount: 7,
       market: lidl,
     });
     // Never listed nor counted: a draft, a deleted bill, another household.
     bill(
       {
-        bill_date: new Date('2026-03-10'),
+        bill_date: '2026-03-10',
         amount: 999,
         status: BillStatus.DRAFT,
       },
@@ -136,13 +136,13 @@ describe('bill list and dashboard SQL (PostgreSQL)', () => {
     );
     bill(
       {
-        bill_date: new Date('2026-03-11'),
+        bill_date: '2026-03-11',
         amount: 555,
         deleted_at: new Date(),
       },
       [[bread, 555]],
     );
-    bill({ bill_date: new Date('2026-03-12'), amount: 777, household: other }, [
+    bill({ bill_date: '2026-03-12', amount: 777, household: other }, [
       [bread, 777],
     ]);
 
@@ -151,7 +151,7 @@ describe('bill list and dashboard SQL (PostgreSQL)', () => {
       name: 'Sql mixed',
       created_by: user,
     } as never);
-    const may10 = { bill_date: new Date('2026-05-10'), household: mixed };
+    const may10 = { bill_date: '2026-05-10', household: mixed };
     bill({ ...may10, amount: 200, currency: Currency.MDL }, [
       [bread, 150],
       [soap, 50],

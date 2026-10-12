@@ -1,6 +1,5 @@
 import {
   IsUUID,
-  IsDateString,
   IsEnum,
   IsNumber,
   IsString,
@@ -18,6 +17,7 @@ import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Currency } from '../../../types/currency.enum';
 import { MAX_MONEY_AMOUNT } from '../../../common/utils/money.util';
+import { IsCalendarDate } from '../../../common/validators/is-calendar-date';
 import { MaxDecimalPlaces } from '../../../common/validators/max-decimal-places';
 import { MAX_WEIGHT_KG } from '../tasks/schemas/parsed-bill.schema';
 
@@ -55,8 +55,8 @@ export class CreateBillDto {
   @IsOptional()
   market_id?: string;
 
-  @ApiProperty({ example: '2026-05-19' })
-  @IsDateString()
+  @ApiProperty({ example: '2026-05-19', format: 'date' })
+  @IsCalendarDate()
   bill_date!: string;
 
   @ApiPropertyOptional({ enum: Currency })

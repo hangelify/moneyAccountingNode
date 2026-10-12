@@ -328,7 +328,7 @@ describe('Household isolation (e2e)', () => {
       const draft = em.create(Bill, {
         household: alice.householdId,
         status: BillStatus.DRAFT,
-        bill_date: new Date('2026-03-02'),
+        bill_date: '2026-03-02',
         amount: 1,
       } as never);
       await em.flush();

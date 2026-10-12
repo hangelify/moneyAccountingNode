@@ -8,6 +8,7 @@ import { EntityManager, EntityRepository } from '@mikro-orm/core';
 import { BillCrudService } from './bill-crud.service';
 import { Bill } from '../../entities/bill.entity';
 import { BillSubCategory } from '../../entities/bill-sub-category.entity';
+import { todayIsoDate } from '../../common/utils/calendar-date';
 import { BillStatus } from '../../types/bill-status.enum';
 import { Market } from '../../entities/market.entity';
 import { SubCategory } from '../../entities/sub-category.entity';
@@ -515,7 +516,7 @@ describe('BillCrudService', () => {
         id: billId,
         status: BillStatus.DRAFT,
         amount: 9.99,
-        bill_date: new Date(),
+        bill_date: '2026-05-19',
         created_at: new Date(),
         deleted_at: undefined,
         market: undefined,
@@ -827,15 +828,16 @@ describe('BillCrudService', () => {
 
       it('keeps a valid ISO bill_date', async () => {
         const { bill } = await draft(base);
-        expect(bill.bill_date.toISOString().slice(0, 10)).toBe('2026-05-07');
+        expect(bill.bill_date).toBe('2026-05-07');
+        expect(bill.bill_date_inferred).toBe(false);
       });
 
       it.each(['07.05.2026', '2026-02-30', '0000-01-01', 'garbage'])(
-        'replaces bill_date %p with a valid date',
+        'replaces bill_date %p with today flagged as inferred',
         async (raw) => {
           const { bill } = await draft({ ...base, bill_date: raw });
-          expect(Number.isNaN(bill.bill_date.getTime())).toBe(false);
-          expect(bill.bill_date.getUTCFullYear()).toBeGreaterThan(2000);
+          expect(bill.bill_date).toBe(todayIsoDate());
+          expect(bill.bill_date_inferred).toBe(true);
         },
       );
 

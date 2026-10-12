@@ -42,7 +42,7 @@ export const ParsedBillItemSchema = z.object({
     .describe('Weight in kilograms if weight-priced'),
   price_per_kg: bounded(MAX_PRICE_PER_UNIT).nullable().catch(null),
   final_price: bounded(MAX_AMOUNT).describe(
-    'Line total for this item, in bill currency',
+    'Amount paid for this line after its discount (and its share of any whole-receipt discount), in bill currency',
   ),
 });
 

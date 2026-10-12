@@ -18,7 +18,11 @@ describe.each<[string, new () => object, object]>([
     CreateBillDto,
     { bill_date: '2026-05-19', total_amount: 1 },
   ],
-  ['ConfirmBillDto', ConfirmBillDto, {}],
+  [
+    'ConfirmBillDto',
+    ConfirmBillDto,
+    { bill_date: '2026-05-19', total_amount: 1 },
+  ],
 ])('%s items', (_, Dto, base) => {
   async function itemErrors(n: number) {
     const errors = await validate(

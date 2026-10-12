@@ -32,6 +32,10 @@ import { BillStatus } from '../types/bill-status.enum';
     'create index "bills_market_id_index" on "bills" ("market_id") where "deleted_at" is null',
 })
 @Index({ name: 'bills_created_by_user_id_index', properties: ['created_by'] })
+@Index({
+  name: 'bills_confirmed_by_user_id_index',
+  properties: ['confirmed_by'],
+})
 // Drafts list: a household's open drafts, newest first.
 @Index({
   name: 'bills_household_drafts_created_index',
@@ -102,6 +106,17 @@ export class Bill extends BaseEntity {
     fieldName: 'created_by_user_id',
   })
   created_by?: Rel<User>;
+
+  /** Who confirmed the AI draft; null on bills created by hand. */
+  @ManyToOne(() => User, {
+    nullable: true,
+    deleteRule: 'set null',
+    fieldName: 'confirmed_by_user_id',
+  })
+  confirmed_by?: Rel<User>;
+
+  @Property({ type: 'timestamptz', nullable: true })
+  confirmed_at?: Date;
 
   @ManyToOne(() => Market, { nullable: true })
   market?: Rel<Market>;

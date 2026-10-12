@@ -201,6 +201,8 @@ describe('Household isolation (e2e)', () => {
     it('bills: confirming a foreign bill answers 404', async () => {
       // Items refer to Alice's own sub-category: only the bill is foreign.
       await call(alice, 'post', `${own()}/bills/${bobs.bill}/confirm`, {
+        bill_date: '2026-05-19',
+        total_amount: 1,
         items: [
           { sub_category_id: alices.subCategory, product_count: 1, amount: 1 },
         ],
@@ -340,6 +342,8 @@ describe('Household isolation (e2e)', () => {
         'a foreign market',
         () => ({
           market_id: bobs.market,
+          bill_date: '2026-05-19',
+          total_amount: 1,
           items: [
             {
               sub_category_id: alices.subCategory,
@@ -352,6 +356,8 @@ describe('Household isolation (e2e)', () => {
       [
         'a foreign sub-category',
         () => ({
+          bill_date: '2026-05-19',
+          total_amount: 1,
           items: [
             { sub_category_id: bobs.subCategory, product_count: 1, amount: 1 },
           ],

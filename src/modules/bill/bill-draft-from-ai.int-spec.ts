@@ -461,6 +461,7 @@ describe('draft from AI output (PostgreSQL)', () => {
         (svc: BillCrudService, id: string) =>
           svc.confirmBill(id, householdId, userId, {
             bill_date: '2026-05-01',
+            total_amount: 1,
             items: [
               { sub_category_id: subCategoryId, product_count: 1, amount: 1 },
             ],

@@ -12,12 +12,14 @@ Given a photo of a supermarket bill, extract:
   - unit: one of 'kg' | 'g' | 'l' | 'ml' | 'piece' based on how the item is priced
   - weight_kg: the weight in kilograms if weight-priced (convert grams to kg), null otherwise
   - price_per_kg: the per-kilogram unit price for weight-priced items, null otherwise
-  - final_price: the line total (quantity × unit_price, or weight × price_per_kg)
+  - final_price: the amount paid for the line after its discount (quantity × unit_price, or weight × price_per_kg, minus any discount printed for that line)
 
 Rules:
 - If you cannot confidently read a field, return null rather than guessing.
 - Numbers use . as the decimal separator even if the receipt uses ,.
-- Do not include discount lines, sub-totals, taxes, or payment info as items.
+- Do not return discount lines as items: subtract a line discount from the final_price of the item it applies to.
+- Spread a discount on the whole receipt over the items in proportion to their final_price, so the items add up to total_amount.
+- Do not include sub-totals, taxes, or payment info as items.
 
 Return only the JSON that matches the provided schema.`;
 
@@ -45,7 +47,7 @@ Extract:
   - unit: one of 'kg' | 'g' | 'l' | 'ml' | 'piece' based on how the item is priced
   - weight_kg: the weight in kilograms if weight-priced (convert grams to kg), null otherwise
   - price_per_kg: the per-kilogram unit price for weight-priced items, null otherwise
-  - final_price: the line total (quantity × unit_price, or weight × price_per_kg)
+  - final_price: the amount paid for the line after its discount (quantity × unit_price, or weight × price_per_kg, minus any discount printed for that line)
   - sub_category_id: the UUID from the provided list that best matches this item; null if no match is confident (< 0.6)
   - category_confidence: your confidence score between 0 and 1
   - category_reasoning: one short sentence explaining the match, or null
@@ -53,7 +55,9 @@ Extract:
 Rules:
 - If you cannot confidently read a receipt field, return null rather than guessing.
 - Numbers use . as the decimal separator even if the receipt uses ,.
-- Do not include discount lines, sub-totals, taxes, or payment info as items.
+- Do not return discount lines as items: subtract a line discount from the final_price of the item it applies to.
+- Spread a discount on the whole receipt over the items in proportion to their final_price, so the items add up to total_amount.
+- Do not include sub-totals, taxes, or payment info as items.
 - Use ONLY sub_category_id values from the provided list.
 
 Return only the JSON that matches the provided schema.`;

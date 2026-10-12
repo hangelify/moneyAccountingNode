@@ -25,6 +25,12 @@ export class BillResponseDto {
   @ApiProperty({ example: 23.45 })
   total_amount!: number;
 
+  @ApiProperty({
+    description:
+      'True when the items add up to more than BILL_ITEM_TOLERANCE per item away from total_amount',
+  })
+  amount_mismatch!: boolean;
+
   @ApiPropertyOptional()
   description?: string;
 

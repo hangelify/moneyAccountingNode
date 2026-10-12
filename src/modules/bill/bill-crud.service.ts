@@ -1,5 +1,7 @@
 import {
+  Inject,
   Injectable,
+  Optional,
   NotFoundException,
   BadRequestException,
   ConflictException,
@@ -39,6 +41,11 @@ import {
 } from './tasks/schemas/parsed-bill.schema';
 import { BillResponseDto, BillMarketRefDto } from './dto/bill-response.dto';
 import { addMoney } from '../../common/utils/money.util';
+import {
+  BILL_ITEM_TOLERANCE,
+  DEFAULT_BILL_ITEM_TOLERANCE,
+  isAmountMismatch,
+} from './bill-totals';
 import {
   BillDetailResponseDto,
   BillItemResponseDto,
@@ -112,6 +119,9 @@ export class BillCrudService {
     @InjectRepository(SubCategory)
     private readonly subCategoryRepository: EntityRepository<SubCategory>,
     private readonly em: EntityManager,
+    @Optional()
+    @Inject(BILL_ITEM_TOLERANCE)
+    private readonly itemTolerance: number = DEFAULT_BILL_ITEM_TOLERANCE,
   ) {}
 
   async createBill(
@@ -214,13 +224,19 @@ export class BillCrudService {
       this.em.getConnection().execute(
         `SELECT b.id, b.bill_date::text, b.currency, b.amount::text, b.description,
                 b.created_at::text,
-                m.id AS market_id, m.name AS market_name, m.city AS market_city
+                m.id AS market_id, m.name AS market_name, m.city AS market_city,
+                abs(b.amount - i.total) > ? * i.count AS amount_mismatch
          FROM   bills b
          LEFT   JOIN markets m ON m.id = b.market_id
+         CROSS  JOIN LATERAL (
+                  SELECT coalesce(sum(amount), 0) AS total, count(*) AS count
+                  FROM   bill_sub_categories
+                  WHERE  bill_id = b.id
+                ) i
          WHERE  ${where}
          ORDER  BY b.bill_date DESC
          LIMIT  ? OFFSET ?`,
-        [...params, limit, offset],
+        [this.itemTolerance, ...params, limit, offset],
       ) as Promise<
         Array<{
           id: string;
@@ -232,6 +248,7 @@ export class BillCrudService {
           market_name: string | null;
           market_city: string | null;
           created_at: string;
+          amount_mismatch: boolean;
         }>
       >,
     ]);
@@ -250,6 +267,7 @@ export class BillCrudService {
         bill_date: r.bill_date,
         currency: (r.currency ?? undefined) as Currency | undefined,
         total_amount: Number(r.amount),
+        amount_mismatch: r.amount_mismatch,
         description: r.description ?? undefined,
         market: r.market_id
           ? {
@@ -284,7 +302,7 @@ export class BillCrudService {
   ): Promise<BillResponseDto> {
     const bill = await this.billRepository.findOne(
       { id, household: { id: householdId }, deleted_at: null },
-      { populate: ['market'] },
+      { populate: ['market', 'billSubCategories'] },
     );
     if (!bill) throw new NotFoundException(`Bill with ID ${id} not found`);
 
@@ -310,7 +328,7 @@ export class BillCrudService {
     if (dto.description !== undefined) bill.description = dto.description;
 
     await this.em.persist(bill).flush();
-    return this.toListDto(bill);
+    return this.toListDto(bill, bill.billSubCategories.getItems());
   }
 
   async softDeleteBill(id: string, householdId: string): Promise<void> {
@@ -562,7 +580,8 @@ export class BillCrudService {
       if (bill.status !== BillStatus.DRAFT)
         throw new ConflictException(`Bill with ID ${id} is already confirmed`);
 
-      bill.created_by = em.getReference(User, userId);
+      bill.confirmed_by = em.getReference(User, userId);
+      bill.confirmed_at = new Date();
 
       // Resolve market
       if (dto.market_id) {
@@ -589,12 +608,10 @@ export class BillCrudService {
       }
 
       // Apply overrides
-      if (dto.bill_date !== undefined) {
-        bill.bill_date = dto.bill_date;
-        bill.bill_date_inferred = false;
-      }
+      bill.bill_date = dto.bill_date;
+      bill.bill_date_inferred = false;
+      bill.amount = dto.total_amount;
       if (dto.currency !== undefined) bill.currency = dto.currency;
-      if (dto.total_amount !== undefined) bill.amount = dto.total_amount;
       if (dto.description !== undefined) bill.description = dto.description;
 
       // Replace items
@@ -692,12 +709,17 @@ export class BillCrudService {
     return { id: market.id, name: market.name, city: market.city };
   }
 
-  private toListDto(bill: Bill): BillResponseDto {
+  private toListDto(bill: Bill, items: BillSubCategory[]): BillResponseDto {
     return {
       id: bill.id,
       bill_date: bill.bill_date,
       currency: bill.currency,
       total_amount: Number(bill.amount),
+      amount_mismatch: isAmountMismatch(
+        bill.amount,
+        items.map((i) => i.amount),
+        this.itemTolerance,
+      ),
       description: bill.description,
       market: this.toMarketRef(bill.market),
       created_at: bill.created_at,
@@ -709,7 +731,7 @@ export class BillCrudService {
     items: BillSubCategory[],
   ): BillDetailResponseDto {
     return {
-      ...this.toListDto(bill),
+      ...this.toListDto(bill, items),
       status: bill.status,
       market_name_raw: bill.market_name_raw ?? undefined,
       bill_date_inferred: bill.bill_date_inferred,

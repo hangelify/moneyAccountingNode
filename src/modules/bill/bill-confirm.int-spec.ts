@@ -24,6 +24,7 @@ describe('confirm and create bill (PostgreSQL)', () => {
   let em: EntityManager;
   const queries: string[] = [];
   let userId: string;
+  let confirmerId: string;
   let householdId: string;
   let otherHouseholdId: string;
   const subIds: string[] = [];
@@ -59,6 +60,11 @@ describe('confirm and create bill (PostgreSQL)', () => {
       email: `p08-confirm-${randomUUID()}@example.com`,
       password: 'x',
     } as never);
+    const confirmer = em.create(User, {
+      first_name: 'Confirmer',
+      email: `p36-confirmer-${randomUUID()}@example.com`,
+      password: 'x',
+    } as never);
     const household = em.create(Household, {
       name: 'P08 confirm',
       created_by: user,
@@ -84,6 +90,7 @@ describe('confirm and create bill (PostgreSQL)', () => {
     } as never);
     await em.flush();
     userId = user.id;
+    confirmerId = confirmer.id;
     householdId = household.id;
     otherHouseholdId = other.id;
     subIds.push(...subs.map((s) => s.id));
@@ -112,7 +119,10 @@ describe('confirm and create bill (PostgreSQL)', () => {
       hids,
     );
     await conn.execute('DELETE FROM households WHERE id IN (?, ?)', hids);
-    await conn.execute('DELETE FROM users WHERE id = ?', [userId]);
+    await conn.execute('DELETE FROM users WHERE id IN (?, ?)', [
+      userId,
+      confirmerId,
+    ]);
     await orm.close(true);
   });
 
@@ -154,6 +164,8 @@ describe('confirm and create bill (PostgreSQL)', () => {
     return { bill, items };
   }
 
+  const required = { bill_date: '2026-05-20', total_amount: 1 };
+
   function items(...ids: string[]): CreateBillItemDto[] {
     return ids.map((id) => ({
       sub_category_id: id,
@@ -173,6 +185,7 @@ describe('confirm and create bill (PostgreSQL)', () => {
 
         await expect(
           crud().confirmBill(id, householdId, userId, {
+            ...required,
             items: items(subIds[0], badId()),
           }),
         ).rejects.toBeInstanceOf(BadRequestException);
@@ -194,6 +207,7 @@ describe('confirm and create bill (PostgreSQL)', () => {
 
       await expect(
         crud().confirmBill(id, householdId, userId, {
+          ...required,
           items: items(subIds[0], subIds[0]),
         }),
       ).rejects.toThrow(/duplicate/i);
@@ -208,9 +222,11 @@ describe('confirm and create bill (PostgreSQL)', () => {
 
       const results = await Promise.allSettled([
         crud().confirmBill(id, householdId, userId, {
+          ...required,
           items: items(subIds[0], subIds[1]),
         }),
         crud().confirmBill(id, householdId, userId, {
+          ...required,
           items: items(subIds[2], subIds[3], subIds[4]),
         }),
       ]);
@@ -231,11 +247,13 @@ describe('confirm and create bill (PostgreSQL)', () => {
     it('answers 409 when the bill is already confirmed', async () => {
       const id = await makeDraft();
       await crud().confirmBill(id, householdId, userId, {
+        ...required,
         items: items(subIds[0]),
       });
 
       await expect(
         crud().confirmBill(id, householdId, userId, {
+          ...required,
           items: items(subIds[1]),
         }),
       ).rejects.toBeInstanceOf(ConflictException);
@@ -247,6 +265,7 @@ describe('confirm and create bill (PostgreSQL)', () => {
       const id = await makeDraft();
 
       const result = await crud().confirmBill(id, householdId, userId, {
+        ...required,
         new_market: { name: `P08 market ${randomUUID()}` },
         items: items(subIds[0]),
       });
@@ -261,6 +280,7 @@ describe('confirm and create bill (PostgreSQL)', () => {
         const id = await makeDraft();
         queries.length = 0;
         await crud().confirmBill(id, householdId, userId, {
+          ...required,
           items: items(...ids),
         });
         return queries.length;
@@ -269,6 +289,123 @@ describe('confirm and create bill (PostgreSQL)', () => {
       const one = await count(subIds.slice(0, 1));
       const five = await count(subIds);
       expect(five).toBe(one);
+    });
+  });
+
+  describe('confirm author', () => {
+    it('keeps created_by and records who confirmed and when', async () => {
+      const id = await makeDraft();
+      const before = new Date();
+
+      await crud().confirmBill(id, householdId, confirmerId, {
+        ...required,
+        items: items(subIds[0]),
+      });
+
+      const { bill } = await load(id);
+      expect(bill.created_by?.id).toBe(userId);
+      expect(bill.confirmed_by?.id).toBe(confirmerId);
+      expect(bill.confirmed_at!.getTime()).toBeGreaterThanOrEqual(
+        before.getTime() - 1000,
+      );
+    });
+
+    it('indexes confirmed_by, so deleting a user does not scan bills', async () => {
+      const rows = (await em
+        .getConnection()
+        .execute(
+          `SELECT indexdef FROM pg_indexes WHERE tablename = 'bills' AND indexname = 'bills_confirmed_by_user_id_index'`,
+        )) as Array<{ indexdef: string }>;
+      expect(rows[0]?.indexdef).toMatch(/\(confirmed_by_user_id\)/);
+    });
+
+    it('leaves confirmed_by empty on a bill created by hand', async () => {
+      const result = await crud().createBill(householdId, userId, {
+        ...required,
+        items: items(subIds[0]),
+      });
+
+      const { bill } = await load(result.id);
+      expect(bill.created_by?.id).toBe(userId);
+      expect(bill.confirmed_by).toBeNull();
+      expect(bill.confirmed_at).toBeNull();
+    });
+  });
+
+  describe('amount_mismatch', () => {
+    function priced(...amounts: number[]): CreateBillItemDto[] {
+      return amounts.map((amount, i) => ({
+        sub_category_id: subIds[i],
+        product_count: 1,
+        amount,
+      }));
+    }
+
+    it('is false when the confirmed items add up to the total', async () => {
+      const id = await makeDraft();
+      const result = await crud().confirmBill(id, householdId, userId, {
+        ...required,
+        total_amount: 10.01,
+        items: priced(4.5, 5.5),
+      });
+      expect(result.amount_mismatch).toBe(false);
+    });
+
+    it('is true when the confirmed items exceed a discounted total', async () => {
+      const id = await makeDraft();
+      const result = await crud().confirmBill(id, householdId, userId, {
+        ...required,
+        total_amount: 9,
+        items: priced(4.5, 5.5),
+      });
+      expect(result.amount_mismatch).toBe(true);
+    });
+
+    it('is reported by createBill and getBill', async () => {
+      const created = await crud().createBill(householdId, userId, {
+        ...required,
+        total_amount: 20,
+        items: priced(5),
+      });
+      expect(created.amount_mismatch).toBe(true);
+      const read = await crud().getBill(created.id, householdId);
+      expect(read.amount_mismatch).toBe(true);
+    });
+
+    it('turns true when PUT changes the total away from the items', async () => {
+      const created = await crud().createBill(householdId, userId, {
+        ...required,
+        total_amount: 5,
+        items: priced(5),
+      });
+      expect(created.amount_mismatch).toBe(false);
+
+      const updated = await crud().updateBill(created.id, householdId, {
+        total_amount: 7,
+      });
+      expect(updated.amount_mismatch).toBe(true);
+    });
+
+    it('is reported per bill in the list', async () => {
+      const date = '1999-01-01';
+      const ok = await crud().createBill(householdId, userId, {
+        bill_date: date,
+        total_amount: 10,
+        items: priced(4, 6),
+      });
+      const off = await crud().createBill(householdId, userId, {
+        bill_date: date,
+        total_amount: 12,
+        items: priced(4, 6),
+      });
+
+      const { data } = await crud().listBills(householdId, {
+        date_from: date,
+        date_to: date,
+      });
+      const byId = new Map(data.map((b) => [b.id, b.amount_mismatch]));
+      expect(byId.get(ok.id)).toBe(false);
+      expect(byId.get(off.id)).toBe(true);
     });
   });
 

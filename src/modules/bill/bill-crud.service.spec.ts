@@ -532,6 +532,7 @@ describe('BillCrudService', () => {
       ]);
 
       const dto: ConfirmBillDto = {
+        bill_date: '2026-05-19',
         total_amount: 12,
         items: [{ sub_category_id: subCatId, product_count: 1, amount: 12 }],
       };
@@ -554,7 +555,11 @@ describe('BillCrudService', () => {
       (em.findOne as jest.Mock).mockResolvedValue(null);
 
       await expect(
-        service.confirmBill(billId, householdId, userId, { items: [] }),
+        service.confirmBill(billId, householdId, userId, {
+          bill_date: '2026-05-19',
+          total_amount: 1,
+          items: [],
+        }),
       ).rejects.toBeInstanceOf(NotFoundException);
     });
 
@@ -567,7 +572,11 @@ describe('BillCrudService', () => {
       });
 
       await expect(
-        service.confirmBill(billId, householdId, userId, { items: [] }),
+        service.confirmBill(billId, householdId, userId, {
+          bill_date: '2026-05-19',
+          total_amount: 1,
+          items: [],
+        }),
       ).rejects.toBeInstanceOf(ConflictException);
       expect(em.nativeDelete as jest.Mock).not.toHaveBeenCalled();
     });

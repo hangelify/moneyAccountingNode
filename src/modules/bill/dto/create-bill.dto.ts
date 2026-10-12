@@ -33,7 +33,11 @@ export class CreateBillItemDto {
   @Min(1)
   product_count!: number;
 
-  @ApiProperty({ example: 8.99 })
+  @ApiProperty({
+    example: 8.99,
+    description:
+      'Amount paid for the item after discounts; the items of a bill add up to its total_amount',
+  })
   @IsNumber()
   @MaxDecimalPlaces(2)
   @IsPositive()

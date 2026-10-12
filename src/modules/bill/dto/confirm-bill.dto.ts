@@ -63,23 +63,21 @@ export class ConfirmBillDto {
   @IsOptional()
   new_market?: NewMarketDto;
 
-  @ApiPropertyOptional({ example: '2026-05-19', format: 'date' })
+  @ApiProperty({ example: '2026-05-19', format: 'date' })
   @IsCalendarDate()
-  @IsOptional()
-  bill_date?: string;
+  bill_date!: string;
 
   @ApiPropertyOptional({ enum: Currency })
   @IsEnum(Currency)
   @IsOptional()
   currency?: Currency;
 
-  @ApiPropertyOptional({ example: 23.45 })
+  @ApiProperty({ example: 23.45 })
   @IsNumber()
   @MaxDecimalPlaces(2)
   @IsPositive()
   @Max(MAX_MONEY_AMOUNT)
-  @IsOptional()
-  total_amount?: number;
+  total_amount!: number;
 
   @ApiPropertyOptional()
   @IsString()

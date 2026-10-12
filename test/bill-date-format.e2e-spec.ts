@@ -115,6 +115,7 @@ describe('bill_date format (e2e)', () => {
 
     const confirmed = await call('post', `/bills/${id}/confirm`, {
       bill_date: '2026-03-03',
+      total_amount: 5,
       items,
     }).expect(200);
     expect(date(confirmed)).toBe('2026-03-03');
@@ -137,6 +138,7 @@ describe('bill_date format (e2e)', () => {
     await call('put', `/bills/${id}`, { bill_date: bad }).expect(400);
     await call('post', `/bills/${id}/confirm`, {
       bill_date: bad,
+      total_amount: 5,
       items,
     }).expect(400);
   });

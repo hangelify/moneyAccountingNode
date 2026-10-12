@@ -21,6 +21,7 @@ import {
   DRAFT_RETENTION_DAYS,
   readDraftRetentionDays,
 } from './draft-cleanup.env';
+import { BILL_ITEM_TOLERANCE, readBillItemTolerance } from './bill-totals';
 
 @Module({
   imports: [
@@ -46,6 +47,7 @@ import {
     BillDashboardService,
     DraftCleanupService,
     { provide: DRAFT_RETENTION_DAYS, useFactory: readDraftRetentionDays },
+    { provide: BILL_ITEM_TOLERANCE, useFactory: readBillItemTolerance },
   ],
   exports: [BillAiOrchestrator],
 })

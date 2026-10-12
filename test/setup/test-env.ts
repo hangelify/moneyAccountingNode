@@ -35,6 +35,14 @@ export function applyTestEnv(env: NodeJS.ProcessEnv = process.env): void {
   env.JWT_AUDIENCE = 'e2e-clients';
   delete env.TRUST_PROXY;
 
+  // Configured, never contacted: createTestApp keeps emails in memory.
+  env.SMTP_HOST = '127.0.0.1';
+  env.SMTP_PORT = '1';
+  env.MAIL_FROM = 'Money e2e <no-reply@e2e.test>';
+  delete env.SMTP_USER;
+  delete env.SMTP_PASS;
+  delete env.EMAIL_VERIFICATION_TTL_HOURS;
+
   // Configured, never contacted: specs stub S3 and the AI calls they need.
   env.S3_REGION = 'us-east-1';
   env.S3_BUCKET = 'e2e';

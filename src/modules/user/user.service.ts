@@ -25,6 +25,7 @@ export class UserService {
           'language_code',
           'created_at',
           'updated_at',
+          'email_verified_at',
         ],
       },
     );
@@ -40,6 +41,7 @@ export class UserService {
       language_code: user.language_code,
       created_at: user.created_at,
       updated_at: user.updated_at,
+      email_verified: user.email_verified_at != null,
     };
   }
 }

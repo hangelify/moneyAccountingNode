@@ -138,3 +138,31 @@ describe('HouseholdService', () => {
     });
   });
 });
+
+describe('HouseholdService email verification gate', () => {
+  it('refuses to create an invite for an unverified inviter', async () => {
+    const { service, em } = makeService();
+
+    await expect(
+      service.createInvite(
+        hid,
+        { id: userId, email_verified_at: null },
+        { email: 'jane@example.com' },
+      ),
+    ).rejects.toThrow(new ForbiddenException('Email address is not verified'));
+    expect(em.transactional as jest.Mock).not.toHaveBeenCalled();
+  });
+
+  it('refuses to accept an invite for an unverified user', async () => {
+    const { service, em } = makeService();
+
+    await expect(
+      service.acceptInvite('a'.repeat(64), {
+        id: userId,
+        email: 'jane@example.com',
+        email_verified_at: null,
+      }),
+    ).rejects.toThrow(new ForbiddenException('Email address is not verified'));
+    expect(em.transactional as jest.Mock).not.toHaveBeenCalled();
+  });
+});

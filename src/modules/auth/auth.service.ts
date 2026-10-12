@@ -48,6 +48,7 @@ import { normalizeEmail } from '../../common/transforms/normalize-email';
 import { PasswordService } from './password.service';
 import { maskEmail } from '../../common/utils/mask-email';
 import { LoginLockoutService } from './login-lockout/login-lockout.service';
+import { EmailVerificationService } from './email-verification/email-verification.service';
 
 // Whom an audit entry is about: a known user, or the email as typed.
 type AuthSubject = { userId: string } | { email: string } | null;
@@ -78,6 +79,7 @@ export class AuthService implements OnModuleInit {
     private readonly categoryDefaults: CategoryDefaultsService,
     private readonly passwordService: PasswordService,
     private readonly loginLockout: LoginLockoutService,
+    private readonly emailVerification: EmailVerificationService,
   ) {}
 
   // Read lazily, an invalid value would only surface on the reuse path and
@@ -270,6 +272,9 @@ export class AuthService implements OnModuleInit {
       // Continue — user can invoke POST /households/:hid/categories/seed-defaults to backfill.
     }
 
+    // Never fails registration: the user can ask for another email.
+    await this.emailVerification.issueAndSend(user);
+
     const issued = await this.startSession(user, ipAddress, userAgent);
     await this.logAuthAttempt(
       { userId: user.id },
@@ -280,6 +285,50 @@ export class AuthService implements OnModuleInit {
     );
 
     return issued.tokens;
+  }
+
+  async verifyEmail(
+    token: string,
+    ipAddress?: string,
+    userAgent?: string,
+  ): Promise<void> {
+    let userId: string;
+    try {
+      userId = await this.emailVerification.verify(token);
+    } catch (err) {
+      await this.logAuthAttempt(
+        null,
+        false,
+        'Email verification failed - invalid or expired token',
+        ipAddress,
+        userAgent,
+      );
+      throw err;
+    }
+    await this.logAuthAttempt(
+      { userId },
+      true,
+      'Email verified',
+      ipAddress,
+      userAgent,
+    );
+  }
+
+  async resendVerification(
+    user: AuthenticatedUser,
+    ipAddress?: string,
+    userAgent?: string,
+  ): Promise<void> {
+    const result = await this.emailVerification.resend(user.id);
+    if (result === 'sent') {
+      await this.logAuthAttempt(
+        { userId: user.id },
+        true,
+        'Verification email resent',
+        ipAddress,
+        userAgent,
+      );
+    }
   }
 
   async refreshToken(

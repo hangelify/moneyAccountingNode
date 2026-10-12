@@ -14,6 +14,8 @@ import {
   InMemoryLoginAttemptStore,
   LOGIN_ATTEMPT_STORE,
 } from '../../src/modules/auth/login-lockout/login-attempt.store';
+import { MAIL_SENDER } from '../../src/modules/mail/mail-sender';
+import { InMemoryMailSender } from './mail';
 import type { TokenResponseDto } from '../../src/modules/auth/dto/token-response.dto';
 import type { HouseholdResponseDto } from '../../src/modules/household/dto/household-response.dto';
 
@@ -28,7 +30,8 @@ export interface TestAppOptions {
  * Builds AppModule configured exactly like main.ts. Rate-limit and
  * login-failure counters live in memory, per app instance, instead of Redis:
  * every app starts at zero and
- * no test needs a Redis server or leaves counters behind.
+ * no test needs a Redis server or leaves counters behind. Emails are kept in
+ * memory too (see sentMail), no SMTP server is contacted.
  */
 export async function createTestApp(
   options: TestAppOptions = {},
@@ -37,7 +40,9 @@ export async function createTestApp(
     .overrideProvider(getOptionsToken())
     .useValue({ throttlers: APP_THROTTLERS })
     .overrideProvider(LOGIN_ATTEMPT_STORE)
-    .useValue(new InMemoryLoginAttemptStore());
+    .useValue(new InMemoryLoginAttemptStore())
+    .overrideProvider(MAIL_SENDER)
+    .useValue(new InMemoryMailSender());
   if (options.override) builder = options.override(builder);
 
   const moduleFixture = await builder.compile();
@@ -83,10 +88,15 @@ export interface TestUser {
 
 let userSeq = 0;
 
-/** Registers a user; registration also creates their personal household. */
+/**
+ * Registers a user; registration also creates their personal household.
+ * The email is marked verified directly in the database unless
+ * `verified: false`, so specs do not spend the verify-email rate limit.
+ */
 export async function registerUser(
   app: NestExpressApplication,
   label = 'user',
+  { verified = true }: { verified?: boolean } = {},
 ): Promise<TestUser> {
   const email = `${label}-${++userSeq}-${Date.now()}@example.com`;
   const password = 'password123';
@@ -96,6 +106,15 @@ export async function registerUser(
     .send({ email, password, first_name: label })
     .expect(201);
   const tokens = reg.body as TokenResponseDto;
+  if (verified) {
+    await app
+      .get(MikroORM)
+      .em.getConnection()
+      .execute(
+        'update users set email_verified_at = now(), email_verification_token_hash = null, email_verification_expires_at = null where email = ?',
+        [email],
+      );
+  }
 
   const list = await request(app.getHttpServer())
     .get('/households')

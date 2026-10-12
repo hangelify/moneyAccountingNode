@@ -21,4 +21,5 @@ export type AuthenticatedUser = Pick<
   | 'username'
   | 'currency'
   | 'language_code'
+  | 'email_verified_at'
 > & { sid: string };

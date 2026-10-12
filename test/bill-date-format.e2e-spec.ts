@@ -43,14 +43,29 @@ describe('bill_date format (e2e)', () => {
     app = await createTestApp();
     user = await registerUser(app, 'dates');
     base = `/households/${user.householdId}`;
-    const category = await call('post', '/categories', { name: 'Cat' });
-    const sub = await call('post', '/sub-categories', {
+    const create = async (path: string, body: object) => {
+      const res = await call('post', path, body).expect(201);
+      return (res.body as { id: string }).id;
+    };
+    const budget = await create('/budgets', { name: 'Budget' });
+    const horizon = await create('/planing-horizons', {
+      name: 'Horizon',
+      amount: 100,
+      currency: 'EUR',
+      period_type: 'MONTHLY',
+      budget_id: budget,
+    });
+    const category = await create('/categories', {
+      name: 'Cat',
+      planing_horizon_id: horizon,
+    });
+    const subCategory = await create('/sub-categories', {
       name: 'Sub',
-      category_id: (category.body as { id: string }).id,
+      category_id: category,
     });
     items = [
       {
-        sub_category_id: (sub.body as { id: string }).id,
+        sub_category_id: subCategory,
         product_count: 1,
         amount: 5,
       },
@@ -101,7 +116,7 @@ describe('bill_date format (e2e)', () => {
     const confirmed = await call('post', `/bills/${id}/confirm`, {
       bill_date: '2026-03-03',
       items,
-    }).expect(201);
+    }).expect(200);
     expect(date(confirmed)).toBe('2026-03-03');
   });
 

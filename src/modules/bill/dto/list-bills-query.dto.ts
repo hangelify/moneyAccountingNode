@@ -1,6 +1,5 @@
 import {
   IsOptional,
-  IsDateString,
   IsArray,
   IsString,
   IsEnum,
@@ -14,10 +13,12 @@ import {
 import { Transform, Type } from 'class-transformer';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Currency } from '../../../types/currency.enum';
+import { IsCalendarDate } from '../../../common/validators/is-calendar-date';
 
 export class ListBillsQueryDto {
   @ApiPropertyOptional({
     example: '2026-01-01',
+    format: 'date',
     description:
       'Include bills with bill_date >= this date (YYYY-MM-DD). Omit to start from the beginning.',
   })
@@ -25,11 +26,12 @@ export class ListBillsQueryDto {
     value === '' ? undefined : value,
   )
   @IsOptional()
-  @IsDateString()
+  @IsCalendarDate()
   date_from?: string;
 
   @ApiPropertyOptional({
     example: '2026-12-31',
+    format: 'date',
     description:
       'Include bills with bill_date <= this date (YYYY-MM-DD). Omit to include up to today.',
   })
@@ -37,7 +39,7 @@ export class ListBillsQueryDto {
     value === '' ? undefined : value,
   )
   @IsOptional()
-  @IsDateString()
+  @IsCalendarDate()
   date_to?: string;
 
   @ApiPropertyOptional({

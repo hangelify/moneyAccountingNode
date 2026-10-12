@@ -69,7 +69,7 @@ describe('DraftCleanupService (PostgreSQL)', () => {
       household: em.getReference(Household, householdId),
       status,
       amount: 1,
-      bill_date: createdAt,
+      bill_date: createdAt.toISOString().slice(0, 10),
     } as never);
     await em.flush();
     await orm.em

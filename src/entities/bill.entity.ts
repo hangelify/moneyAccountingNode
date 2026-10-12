@@ -53,8 +53,9 @@ export class Bill extends BaseEntity {
   @Property({ type: 'decimal', precision: 19, scale: 2, nullable: false })
   amount!: number;
 
-  @Property({ type: 'date', nullable: false })
-  bill_date!: Date;
+  /** `YYYY-MM-DD`; the `date` column has no time or timezone. */
+  @Property({ type: 'date', runtimeType: 'string', nullable: false })
+  bill_date!: string;
 
   @Property({ type: 'timestamptz', nullable: false, defaultRaw: 'NOW()' })
   created_at!: Date;

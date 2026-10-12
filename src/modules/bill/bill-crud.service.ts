@@ -18,6 +18,7 @@ import { SubCategory } from '../../entities/sub-category.entity';
 import { User } from '../../entities/user.entity';
 import { Household } from '../../entities/household.entity';
 import { AiRequest } from '../../entities/ai-request.entity';
+import { isCalendarDate, todayIsoDate } from '../../common/utils/calendar-date';
 import { BillStatus } from '../../types/bill-status.enum';
 import { Currency } from '../../types/currency.enum';
 import { ListBillsQueryDto } from './dto/list-bills-query.dto';
@@ -65,23 +66,11 @@ function toCurrency(v: string | null): Currency | undefined {
   return code && CURRENCIES.has(code) ? (code as Currency) : undefined;
 }
 
-/** A real `YYYY-MM-DD` date, or today flagged as inferred. */
-function toDraftDate(v: string | null): { date: Date; inferred: boolean } {
-  if (v && /^\d{4}-\d{2}-\d{2}$/.test(v) && v >= '0001-01-01') {
-    const d = new Date(v);
-    // Rejects roll-overs such as 2026-02-30 -> 2026-03-02.
-    if (!Number.isNaN(d.getTime()) && d.toISOString().startsWith(v)) {
-      return { date: d, inferred: false };
-    }
-  }
-  return { date: new Date(), inferred: true };
-}
-
-/** A `date` column value as `YYYY-MM-DD` (read in the server's timezone). */
-function toIsoDate(v: Date | string): string {
-  if (typeof v === 'string') return v.slice(0, 10);
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return `${v.getFullYear()}-${pad(v.getMonth() + 1)}-${pad(v.getDate())}`;
+/** A real `YYYY-MM-DD` date, or today (UTC) flagged as inferred. */
+function toDraftDate(v: string | null): { date: string; inferred: boolean } {
+  return isCalendarDate(v)
+    ? { date: v, inferred: false }
+    : { date: todayIsoDate(), inferred: true };
 }
 
 function numberOrNull(v: number | string | null | undefined): number | null {
@@ -147,7 +136,7 @@ export class BillCrudService {
     const bill = new Bill();
     bill.household = this.em.getReference(Household, householdId);
     bill.created_by = this.em.getReference(User, userId);
-    bill.bill_date = new Date(dto.bill_date);
+    bill.bill_date = dto.bill_date;
     bill.amount = dto.total_amount;
     bill.description = dto.description;
     bill.currency = dto.currency;
@@ -169,7 +158,7 @@ export class BillCrudService {
     if (
       filters.date_from &&
       filters.date_to &&
-      new Date(filters.date_from) > new Date(filters.date_to)
+      filters.date_from > filters.date_to
     ) {
       throw new BadRequestException('date_from must not be later than date_to');
     }
@@ -258,7 +247,7 @@ export class BillCrudService {
     const data = dataRows.map(
       (r): BillResponseDto => ({
         id: r.id,
-        bill_date: new Date(r.bill_date),
+        bill_date: r.bill_date,
         currency: (r.currency ?? undefined) as Currency | undefined,
         total_amount: Number(r.amount),
         description: r.description ?? undefined,
@@ -313,7 +302,7 @@ export class BillCrudService {
       bill.market = market;
     }
     if (dto.bill_date !== undefined) {
-      bill.bill_date = new Date(dto.bill_date);
+      bill.bill_date = dto.bill_date;
       bill.bill_date_inferred = false;
     }
     if (dto.currency !== undefined) bill.currency = dto.currency;
@@ -470,7 +459,7 @@ export class BillCrudService {
       parsed: {
         draft_id: bill.id,
         market_name: bill.market_name_raw ?? null,
-        bill_date: bill.bill_date_inferred ? null : toIsoDate(bill.bill_date),
+        bill_date: bill.bill_date_inferred ? null : bill.bill_date,
         currency: bill.currency ?? null,
         total_amount: Number(bill.amount),
         items: bill.billSubCategories.getItems().map(
@@ -601,7 +590,7 @@ export class BillCrudService {
 
       // Apply overrides
       if (dto.bill_date !== undefined) {
-        bill.bill_date = new Date(dto.bill_date);
+        bill.bill_date = dto.bill_date;
         bill.bill_date_inferred = false;
       }
       if (dto.currency !== undefined) bill.currency = dto.currency;

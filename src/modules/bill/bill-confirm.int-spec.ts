@@ -131,7 +131,7 @@ describe('confirm and create bill (PostgreSQL)', () => {
       household: householdId,
       created_by: userId,
       status: BillStatus.DRAFT,
-      bill_date: new Date('2026-05-19'),
+      bill_date: '2026-05-19',
       amount: 10,
     } as never);
     fork.create(BillSubCategory, {

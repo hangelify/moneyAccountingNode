@@ -1,6 +1,5 @@
 import {
   IsUUID,
-  IsDateString,
   IsEnum,
   IsNumber,
   IsString,
@@ -17,6 +16,7 @@ import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Currency } from '../../../types/currency.enum';
 import { MAX_MONEY_AMOUNT } from '../../../common/utils/money.util';
+import { IsCalendarDate } from '../../../common/validators/is-calendar-date';
 import { MaxDecimalPlaces } from '../../../common/validators/max-decimal-places';
 import { CreateBillItemDto, MAX_BILL_ITEMS } from './create-bill.dto';
 
@@ -63,8 +63,8 @@ export class ConfirmBillDto {
   @IsOptional()
   new_market?: NewMarketDto;
 
-  @ApiPropertyOptional({ example: '2026-05-19' })
-  @IsDateString()
+  @ApiPropertyOptional({ example: '2026-05-19', format: 'date' })
+  @IsCalendarDate()
   @IsOptional()
   bill_date?: string;
 

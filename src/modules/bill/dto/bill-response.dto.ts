@@ -16,8 +16,8 @@ export class BillResponseDto {
   @ApiProperty({ format: 'uuid' })
   id!: string;
 
-  @ApiProperty({ example: '2026-05-19' })
-  bill_date!: Date;
+  @ApiProperty({ example: '2026-05-19', format: 'date' })
+  bill_date!: string;
 
   @ApiPropertyOptional({ enum: Currency })
   currency?: Currency;

@@ -7,9 +7,12 @@ import {
   MinLength,
   MaxLength,
   Min,
+  Max,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Currency } from '../../../types/currency.enum';
+import { MAX_MONEY_AMOUNT } from '../../../common/utils/money.util';
+import { MaxDecimalPlaces } from '../../../common/validators/max-decimal-places';
 import { PeriodType } from '../../../types/period-type.enum';
 
 export class CreatePlaningHorizonDto {
@@ -38,8 +41,10 @@ export class CreatePlaningHorizonDto {
     example: 10000.5,
     minimum: 0,
   })
-  @IsNumber({ maxDecimalPlaces: 2 })
+  @IsNumber()
+  @MaxDecimalPlaces(2)
   @Min(0)
+  @Max(MAX_MONEY_AMOUNT)
   amount!: number;
 
   @ApiProperty({

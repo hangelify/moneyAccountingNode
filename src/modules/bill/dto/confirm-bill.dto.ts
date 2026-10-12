@@ -10,11 +10,14 @@ import {
   ArrayMaxSize,
   ValidateNested,
   IsPositive,
+  Max,
   Length,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Currency } from '../../../types/currency.enum';
+import { MAX_MONEY_AMOUNT } from '../../../common/utils/money.util';
+import { MaxDecimalPlaces } from '../../../common/validators/max-decimal-places';
 import { CreateBillItemDto, MAX_BILL_ITEMS } from './create-bill.dto';
 
 export class NewMarketDto {
@@ -72,7 +75,9 @@ export class ConfirmBillDto {
 
   @ApiPropertyOptional({ example: 23.45 })
   @IsNumber()
+  @MaxDecimalPlaces(2)
   @IsPositive()
+  @Max(MAX_MONEY_AMOUNT)
   @IsOptional()
   total_amount?: number;
 

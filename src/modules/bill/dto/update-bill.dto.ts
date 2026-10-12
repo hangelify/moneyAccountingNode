@@ -6,9 +6,12 @@ import {
   IsString,
   IsOptional,
   IsPositive,
+  Max,
 } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Currency } from '../../../types/currency.enum';
+import { MAX_MONEY_AMOUNT } from '../../../common/utils/money.util';
+import { MaxDecimalPlaces } from '../../../common/validators/max-decimal-places';
 
 export class UpdateBillDto {
   @ApiPropertyOptional({ format: 'uuid' })
@@ -28,7 +31,9 @@ export class UpdateBillDto {
 
   @ApiPropertyOptional({ example: 23.45 })
   @IsNumber()
+  @MaxDecimalPlaces(2)
   @IsPositive()
+  @Max(MAX_MONEY_AMOUNT)
   @IsOptional()
   total_amount?: number;
 

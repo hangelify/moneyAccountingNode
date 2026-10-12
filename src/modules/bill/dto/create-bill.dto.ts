@@ -12,10 +12,14 @@ import {
   ArrayMaxSize,
   ValidateNested,
   Min,
+  Max,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Currency } from '../../../types/currency.enum';
+import { MAX_MONEY_AMOUNT } from '../../../common/utils/money.util';
+import { MaxDecimalPlaces } from '../../../common/validators/max-decimal-places';
+import { MAX_WEIGHT_KG } from '../tasks/schemas/parsed-bill.schema';
 
 export const MAX_BILL_ITEMS = 200;
 
@@ -31,11 +35,16 @@ export class CreateBillItemDto {
 
   @ApiProperty({ example: 8.99 })
   @IsNumber()
+  @MaxDecimalPlaces(2)
   @IsPositive()
+  @Max(MAX_MONEY_AMOUNT)
   amount!: number;
 
   @ApiPropertyOptional({ example: 1.234, description: 'Weight in kg' })
   @IsNumber()
+  @MaxDecimalPlaces(3)
+  @IsPositive()
+  @Max(MAX_WEIGHT_KG)
   @IsOptional()
   product_weight?: number;
 }
@@ -57,7 +66,9 @@ export class CreateBillDto {
 
   @ApiProperty({ example: 23.45 })
   @IsNumber()
+  @MaxDecimalPlaces(2)
   @IsPositive()
+  @Max(MAX_MONEY_AMOUNT)
   total_amount!: number;
 
   @ApiPropertyOptional()

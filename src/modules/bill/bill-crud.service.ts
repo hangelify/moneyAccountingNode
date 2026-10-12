@@ -37,6 +37,7 @@ import {
   MAX_WEIGHT_KG,
 } from './tasks/schemas/parsed-bill.schema';
 import { BillResponseDto, BillMarketRefDto } from './dto/bill-response.dto';
+import { addMoney } from '../../common/utils/money.util';
 import {
   BillDetailResponseDto,
   BillItemResponseDto,
@@ -377,7 +378,7 @@ export class BillCrudService {
         const id = item.sub_category.id;
         const existing = categorized.get(id);
         if (existing) {
-          existing.amount += item.final_price;
+          existing.amount = addMoney(existing.amount, item.final_price);
           existing.product_count += item.quantity ?? 1;
           existing.weight_kg ??= item.weight_kg ?? undefined;
           existing.unit ??= item.unit ?? undefined;

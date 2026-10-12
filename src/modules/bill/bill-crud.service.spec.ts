@@ -703,6 +703,35 @@ describe('BillCrudService', () => {
       expect(bsc.category_reasoning).toBe('milk'); // from first item
     });
 
+    it('sums merged item prices in cents without float drift', async () => {
+      const { service, em } = makeService();
+      const line = (final_price: number) => ({
+        name: 'Gum',
+        quantity: 1,
+        unit: 'piece' as const,
+        weight_kg: null,
+        price_per_kg: null,
+        final_price,
+        sub_category: { id: 'gum-id', name: 'gum', category_name: 'Snacks' },
+        category_confidence: 0.9,
+        category_reasoning: 'gum',
+      });
+      const parsed: ParsedBillResponseDto = {
+        draft_id: '',
+        market_name: null,
+        bill_date: null,
+        currency: null,
+        total_amount: 0.3,
+        items: [line(0.1), line(0.2)],
+      };
+
+      await service.createDraftFromParsed(householdId, userId, parsed);
+
+      const calls = (em.persist as jest.Mock).mock.calls as [unknown][];
+      const bsc = calls[1][0] as BillSubCategory;
+      expect(bsc.amount).toBe(0.3);
+    });
+
     it('handles a mix of categorized and uncategorized items producing separate rows', async () => {
       const { service, em } = makeService();
       const parsed: ParsedBillResponseDto = {

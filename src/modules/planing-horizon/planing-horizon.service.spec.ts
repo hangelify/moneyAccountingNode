@@ -30,7 +30,7 @@ describe('PlaningHorizonService.listPlaningHorizons', () => {
       {
         id: 'ph1',
         name: 'Q1',
-        amount: '1000',
+        amount: 1000,
         currency: 'EUR',
         period_type: 'monthly',
         created_at: new Date(),

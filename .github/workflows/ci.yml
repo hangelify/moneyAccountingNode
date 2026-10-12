@@ -131,9 +131,9 @@ jobs:
           DB_PASSWORD: postgres
 
       # Runs the compiled app exactly as start:prod / docker-entrypoint.sh do.
-      # S3 and the AI provider are only configured, not contacted, at startup
-      # and on GET /; the AI gateway refuses to boot without a vision-capable
-      # provider, hence the dummy key.
+      # S3, SMTP and the AI provider are only configured, not contacted, at
+      # startup and on GET /; the AI gateway refuses to boot without a
+      # vision-capable provider, hence the dummy key.
       - name: Smoke test production build
         run: |
           node dist/main.js > app.log 2>&1 &
@@ -170,5 +170,8 @@ jobs:
           S3_BUCKET: ci-smoke
           S3_ACCESS_KEY: ci-smoke
           S3_SECRET_KEY: ci-smoke
+          SMTP_HOST: localhost
+          SMTP_PORT: 1025
+          MAIL_FROM: Money CI <no-reply@ci.test>
           ANTHROPIC_API_KEY: ci-smoke-dummy-key
           ANTHROPIC_MODEL: claude-sonnet-4-6

@@ -1,4 +1,4 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class SubCategoryRefDto {
   @ApiProperty({
@@ -15,6 +15,13 @@ export class SubCategoryRefDto {
 }
 
 export class ParsedBillItemResponseDto {
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description:
+      'Saved draft line; send it back in confirm to update the line in place',
+  })
+  id?: string;
+
   @ApiProperty({ example: 'BREAD' })
   name!: string;
 

@@ -5,6 +5,12 @@ import { SubCategoryRefDto } from './parsed-bill-response.dto';
 import { BillStatus } from '../../../types/bill-status.enum';
 
 export class BillItemResponseDto {
+  @ApiProperty({
+    format: 'uuid',
+    description: 'Line id; send it back in confirm to update the line in place',
+  })
+  id!: string;
+
   @ApiProperty({ type: SubCategoryRefDto, nullable: true })
   sub_category!: SubCategoryRefDto | null;
 

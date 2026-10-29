@@ -11,9 +11,10 @@ import {
   IsPositive,
   Max,
   Length,
+  ValidateIf,
 } from 'class-validator';
 import { Type } from 'class-transformer';
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional, OmitType } from '@nestjs/swagger';
 import { Currency } from '../../../types/currency.enum';
 import { MAX_MONEY_AMOUNT } from '../../../common/utils/money.util';
 import { IsCalendarDate } from '../../../common/validators/is-calendar-date';
@@ -43,6 +44,40 @@ export class NewMarketDto {
   @IsOptional()
   @Length(1, 500)
   address?: string;
+}
+
+export class ConfirmBillItemDto extends OmitType(CreateBillItemDto, [
+  'sub_category_id',
+] as const) {
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description:
+      'Draft line this item updates in place, keeping what the model read (unit, confidence); omit for a new line. Draft lines left out are removed.',
+  })
+  @IsUUID()
+  @IsOptional()
+  id?: string;
+
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description: 'Omit to confirm the line without a sub-category',
+  })
+  @IsUUID()
+  @IsOptional()
+  sub_category_id?: string;
+
+  @ApiPropertyOptional({
+    example: 'LAPTE 1L',
+    description:
+      'Name as printed on the receipt. Defaults to the draft line name, else the sub-category name; required on a new line without a sub-category.',
+  })
+  @ValidateIf(
+    (o: ConfirmBillItemDto) =>
+      o.raw_name !== undefined || (!o.id && !o.sub_category_id),
+  )
+  @IsString()
+  @Length(1, 255)
+  raw_name?: string;
 }
 
 export class ConfirmBillDto {
@@ -85,7 +120,7 @@ export class ConfirmBillDto {
   description?: string;
 
   @ApiProperty({
-    type: [CreateBillItemDto],
+    type: [ConfirmBillItemDto],
     minItems: 1,
     maxItems: MAX_BILL_ITEMS,
   })
@@ -93,6 +128,6 @@ export class ConfirmBillDto {
   @ArrayMinSize(1)
   @ArrayMaxSize(MAX_BILL_ITEMS)
   @ValidateNested({ each: true })
-  @Type(() => CreateBillItemDto)
-  items!: CreateBillItemDto[];
+  @Type(() => ConfirmBillItemDto)
+  items!: ConfirmBillItemDto[];
 }

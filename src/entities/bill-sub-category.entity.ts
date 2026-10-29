@@ -10,7 +10,7 @@ export class BillSubCategory extends BaseEntity {
   bill!: Rel<Bill>;
 
   @ManyToOne(() => SubCategory, { nullable: true })
-  sub_category?: Rel<SubCategory>;
+  sub_category?: Rel<SubCategory> | null;
 
   @Property({ type: 'varchar', length: 255, nullable: false })
   raw_name!: string;
@@ -22,17 +22,17 @@ export class BillSubCategory extends BaseEntity {
   amount!: number;
 
   @Property({ type: 'decimal', precision: 10, scale: 3, nullable: true })
-  product_weight?: number;
+  product_weight?: number | null;
 
   @Property({ type: 'varchar', length: 10, nullable: true })
   unit?: string;
 
   @Property({ type: 'decimal', precision: 10, scale: 2, nullable: true })
-  price_per_unit?: number;
+  price_per_unit?: number | null;
 
   @Property({ type: 'decimal', precision: 5, scale: 4, nullable: true })
-  category_confidence?: number;
+  category_confidence?: number | null;
 
   @Property({ type: 'text', nullable: true })
-  category_reasoning?: string;
+  category_reasoning?: string | null;
 }

@@ -414,6 +414,57 @@ describe('draft from AI output (PostgreSQL)', () => {
   });
 
   describe('reviewing drafts', () => {
+    it('keeps two items of one sub-category as separate lines', async () => {
+      const sub = { id: subCategoryId, name: 'Bread', category_name: 'Food' };
+      const item = parsedDto().items[1];
+      const { id } = await crud(orm.em.fork()).createDraftFromParsed(
+        householdId,
+        userId,
+        parsedDto({
+          total_amount: 8,
+          items: [
+            {
+              ...item,
+              name: 'TOMATOES',
+              weight_kg: 2,
+              price_per_kg: 2.5,
+              final_price: 5,
+              sub_category: sub,
+            },
+            {
+              ...item,
+              name: 'CUCUMBERS',
+              weight_kg: 1,
+              price_per_kg: 3,
+              final_price: 3,
+              sub_category: sub,
+            },
+          ],
+        }),
+      );
+
+      const draft = await crud(orm.em.fork()).getBill(id, householdId);
+
+      expect(draft.items).toHaveLength(2);
+      expect(draft.items).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            raw_name: 'TOMATOES',
+            amount: 5,
+            product_weight: 2,
+            price_per_unit: 2.5,
+          }),
+          expect.objectContaining({
+            raw_name: 'CUCUMBERS',
+            amount: 3,
+            product_weight: 1,
+            price_per_unit: 3,
+          }),
+        ]),
+      );
+      expect(draft.items.every((i) => typeof i.id === 'string')).toBe(true);
+    });
+
     it('reopens a draft with every item as the model read it', async () => {
       const { id } = await crud(orm.em.fork()).createDraftFromParsed(
         householdId,

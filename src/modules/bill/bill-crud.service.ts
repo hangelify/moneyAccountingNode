@@ -26,7 +26,7 @@ import { Currency } from '../../types/currency.enum';
 import { ListBillsQueryDto } from './dto/list-bills-query.dto';
 import { CreateBillDto, CreateBillItemDto } from './dto/create-bill.dto';
 import { UpdateBillDto } from './dto/update-bill.dto';
-import { ConfirmBillDto } from './dto/confirm-bill.dto';
+import { ConfirmBillDto, ConfirmBillItemDto } from './dto/confirm-bill.dto';
 import type {
   ParsedBillResponseDto,
   ParsedBillItemResponseDto,
@@ -40,7 +40,6 @@ import {
   MAX_WEIGHT_KG,
 } from './tasks/schemas/parsed-bill.schema';
 import { BillResponseDto, BillMarketRefDto } from './dto/bill-response.dto';
-import { addMoney } from '../../common/utils/money.util';
 import {
   BILL_ITEM_TOLERANCE,
   DEFAULT_BILL_ITEM_TOLERANCE,
@@ -364,78 +363,25 @@ export class BillCrudService {
     bill.currency = toCurrency(dto.currency);
     this.em.persist(bill);
 
-    type Entry = {
-      raw_name: string;
-      amount: number;
-      product_count: number;
-      weight_kg?: number;
-      unit?: string;
-      price_per_unit?: number;
-      category_confidence?: number;
-      category_reasoning?: string;
-      sub_category_id?: string;
-    };
-
-    const categorized = new Map<string, Entry>();
-    const uncategorized: Entry[] = [];
-
+    // One row per receipt line, even when lines share a sub-category.
     for (const raw of dto.items) {
       const item = toDraftItem(raw);
-      if (item.sub_category) {
-        const id = item.sub_category.id;
-        const existing = categorized.get(id);
-        if (existing) {
-          existing.amount = addMoney(existing.amount, item.final_price);
-          existing.product_count += item.quantity ?? 1;
-          existing.weight_kg ??= item.weight_kg ?? undefined;
-          existing.unit ??= item.unit ?? undefined;
-          existing.price_per_unit ??= item.price_per_kg ?? undefined;
-          // category_confidence and category_reasoning: keep first item's values per spec
-        } else {
-          categorized.set(id, {
-            raw_name: item.name,
-            amount: item.final_price,
-            product_count: item.quantity ?? 1,
-            weight_kg: item.weight_kg ?? undefined,
-            unit: item.unit ?? undefined,
-            price_per_unit: item.price_per_kg ?? undefined, // DTO field is price_per_kg; entity is price_per_unit (unit varies: kg, l, piece)
-            category_confidence: item.category_confidence,
-            category_reasoning: item.category_reasoning ?? undefined,
-            sub_category_id: id,
-          });
-        }
-      } else {
-        uncategorized.push({
-          raw_name: item.name,
-          amount: item.final_price,
-          product_count: item.quantity ?? 1,
-          weight_kg: item.weight_kg ?? undefined,
-          unit: item.unit ?? undefined,
-          price_per_unit: item.price_per_kg ?? undefined,
-          category_confidence: item.category_confidence,
-          category_reasoning: item.category_reasoning ?? undefined,
-        });
-      }
-    }
-
-    for (const entry of [...categorized.values(), ...uncategorized]) {
       const bsc = new BillSubCategory();
       bsc.bill = bill;
-      bsc.raw_name = entry.raw_name;
-      bsc.product_count = entry.product_count;
-      bsc.amount = entry.amount;
-      if (entry.weight_kg !== undefined) bsc.product_weight = entry.weight_kg;
-      if (entry.unit !== undefined) bsc.unit = entry.unit;
-      if (entry.price_per_unit !== undefined)
-        bsc.price_per_unit = entry.price_per_unit;
-      if (entry.category_confidence !== undefined)
-        bsc.category_confidence = entry.category_confidence;
-      if (entry.category_reasoning !== undefined)
-        bsc.category_reasoning = entry.category_reasoning;
-      if (entry.sub_category_id !== undefined) {
+      bsc.raw_name = item.name;
+      bsc.product_count = item.quantity ?? 1;
+      bsc.amount = item.final_price;
+      if (item.weight_kg != null) bsc.product_weight = item.weight_kg;
+      if (item.unit != null) bsc.unit = item.unit;
+      // DTO field is price_per_kg; entity is price_per_unit (unit varies: kg, l, piece)
+      if (item.price_per_kg != null) bsc.price_per_unit = item.price_per_kg;
+      bsc.category_confidence = item.category_confidence;
+      if (item.category_reasoning != null)
+        bsc.category_reasoning = item.category_reasoning;
+      if (item.sub_category) {
         bsc.sub_category = this.em.getReference(
           SubCategory,
-          entry.sub_category_id,
+          item.sub_category.id,
         );
       }
       this.em.persist(bsc);
@@ -482,6 +428,7 @@ export class BillCrudService {
         total_amount: Number(bill.amount),
         items: bill.billSubCategories.getItems().map(
           (bsc): ParsedBillItemResponseDto => ({
+            id: bsc.id,
             name: bsc.raw_name,
             // A weight-priced line is saved with a count of 1.
             quantity: bsc.product_weight == null ? bsc.product_count : null,
@@ -565,6 +512,14 @@ export class BillCrudService {
     dto: ConfirmBillDto,
   ): Promise<BillDetailResponseDto> {
     // Validate before touching the draft: a rejected confirm keeps its items.
+    const lineIds = new Set<string>();
+    for (const { id: lineId } of dto.items) {
+      if (!lineId) continue;
+      if (lineIds.has(lineId)) {
+        throw new BadRequestException(`Duplicate item id ${lineId} in items`);
+      }
+      lineIds.add(lineId);
+    }
     const subCats = await this.findSubCategories(householdId, dto.items);
 
     return this.em.transactional(async (em) => {
@@ -614,12 +569,9 @@ export class BillCrudService {
       if (dto.currency !== undefined) bill.currency = dto.currency;
       if (dto.description !== undefined) bill.description = dto.description;
 
-      // Replace items
-      await em.nativeDelete(BillSubCategory, { bill: id });
-      const bscEntities = this.toBillItems(bill, dto.items, subCats);
+      const bscEntities = await this.confirmItems(em, bill, dto.items, subCats);
 
       bill.status = BillStatus.CONFIRMED;
-      for (const bsc of bscEntities) em.persist(bsc);
       await em.flush();
 
       return this.toDetailDto(bill, bscEntities);
@@ -628,21 +580,17 @@ export class BillCrudService {
 
   /**
    * Loads the household's sub-categories for `items` in one query.
-   * Throws 400 on a repeated or unknown id.
+   * Throws 400 on an unknown id.
    */
   private async findSubCategories(
     householdId: string,
-    items: CreateBillItemDto[],
+    items: { sub_category_id?: string }[],
   ): Promise<Map<string, SubCategory>> {
     const ids = new Set<string>();
     for (const { sub_category_id } of items) {
-      if (ids.has(sub_category_id)) {
-        throw new BadRequestException(
-          `Duplicate sub_category_id ${sub_category_id} in items: merge them into one item`,
-        );
-      }
-      ids.add(sub_category_id);
+      if (sub_category_id) ids.add(sub_category_id);
     }
+    if (!ids.size) return new Map();
 
     const found = await this.subCategoryRepository.find(
       {
@@ -660,6 +608,66 @@ export class BillCrudService {
       );
     }
     return byId;
+  }
+
+  /**
+   * Updates the draft lines named by id in place, adds the lines without
+   * one and removes the rest. A kept line keeps what the model read (name,
+   * unit, confidence) unless the user changed it.
+   */
+  private async confirmItems(
+    em: EntityManager,
+    bill: Bill,
+    items: ConfirmBillItemDto[],
+    subCats: Map<string, SubCategory>,
+  ): Promise<BillSubCategory[]> {
+    const drafted = new Map(
+      (await em.find(BillSubCategory, { bill: bill.id })).map((l) => [l.id, l]),
+    );
+    const lines = items.map((item) => {
+      const subCat = item.sub_category_id
+        ? subCats.get(item.sub_category_id)!
+        : null;
+      let bsc: BillSubCategory;
+      if (item.id) {
+        const draftLine = drafted.get(item.id);
+        if (!draftLine) {
+          throw new BadRequestException(
+            `Item with ID ${item.id} is not a line of this draft`,
+          );
+        }
+        drafted.delete(item.id);
+        bsc = draftLine;
+        // The model's confidence and reasoning were about its sub-category.
+        if ((bsc.sub_category?.id ?? null) !== (subCat?.id ?? null)) {
+          bsc.category_confidence = null;
+          bsc.category_reasoning = null;
+        }
+        // The unit price was read off the receipt for the old amount and
+        // weight (or count, on a line sold by the piece).
+        const weight = item.product_weight ?? null;
+        if (
+          Number(bsc.amount) !== item.amount ||
+          numberOrNull(bsc.product_weight) !== weight ||
+          (weight === null && bsc.product_count !== item.product_count)
+        ) {
+          bsc.price_per_unit = null;
+        }
+      } else {
+        bsc = new BillSubCategory();
+        bsc.bill = bill;
+        em.persist(bsc);
+      }
+      bsc.sub_category = subCat;
+      // The DTO requires raw_name on a new line without a sub-category.
+      bsc.raw_name = item.raw_name ?? bsc.raw_name ?? subCat!.name;
+      bsc.product_count = item.product_count;
+      bsc.amount = item.amount;
+      bsc.product_weight = item.product_weight ?? null;
+      return bsc;
+    });
+    for (const left of drafted.values()) em.remove(left);
+    return lines;
   }
 
   private toBillItems(
@@ -737,6 +745,7 @@ export class BillCrudService {
       bill_date_inferred: bill.bill_date_inferred,
       items: items.map(
         (bsc): BillItemResponseDto => ({
+          id: bsc.id,
           raw_name: bsc.raw_name,
           unit: bsc.unit ?? undefined,
           price_per_unit: numberOrNull(bsc.price_per_unit) ?? undefined,

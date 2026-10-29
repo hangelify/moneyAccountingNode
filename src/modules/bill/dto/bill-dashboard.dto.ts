@@ -76,7 +76,7 @@ export class DashboardBillSummaryDto {
 
   @ApiProperty({
     example: 25,
-    description: 'Count of bill_sub_categories rows (merged category slots)',
+    description: 'Count of receipt lines (bill_sub_categories rows)',
   })
   items_count!: number;
 }

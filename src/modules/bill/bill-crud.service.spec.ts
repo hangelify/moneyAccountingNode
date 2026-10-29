@@ -59,9 +59,10 @@ function makeService() {
   const em = {
     persist: jest.fn().mockReturnThis(),
     flush: jest.fn().mockResolvedValue(undefined),
+    find: jest.fn().mockResolvedValue([]),
     findOne: jest.fn(),
+    remove: jest.fn().mockReturnThis(),
     getReference: jest.fn().mockReturnValue({}),
-    nativeDelete: jest.fn().mockResolvedValue(1),
     getConnection: jest.fn().mockReturnValue({ execute: mockExecute }),
   } as unknown as EntityManager;
   (em as unknown as { transactional: jest.Mock }).transactional = jest.fn(
@@ -578,7 +579,7 @@ describe('BillCrudService', () => {
           items: [],
         }),
       ).rejects.toBeInstanceOf(ConflictException);
-      expect(em.nativeDelete as jest.Mock).not.toHaveBeenCalled();
+      expect(em.remove as jest.Mock).not.toHaveBeenCalled();
     });
   });
 
@@ -659,87 +660,37 @@ describe('BillCrudService', () => {
       expect(bsc.product_weight).toBeCloseTo(0.539);
     });
 
-    it('merges same sub_category items and takes raw_name from first', async () => {
+    it('keeps items of one sub_category as separate rows with their own names', async () => {
       const { service, em } = makeService();
-      const parsed: ParsedBillResponseDto = {
-        draft_id: '',
-        market_name: null,
-        bill_date: null,
-        currency: null,
-        total_amount: 60,
-        items: [
-          {
-            name: 'Lapte 1L',
-            quantity: 1,
-            unit: 'piece',
-            weight_kg: null,
-            price_per_kg: null,
-            final_price: 27.5,
-            sub_category: {
-              id: 'milk-id',
-              name: 'milk',
-              category_name: 'Dairy',
-            },
-            category_confidence: 0.96,
-            category_reasoning: 'milk',
-          },
-          {
-            name: 'Lapte 0.5L',
-            quantity: 2,
-            unit: 'piece',
-            weight_kg: null,
-            price_per_kg: null,
-            final_price: 32.5,
-            sub_category: {
-              id: 'milk-id',
-              name: 'milk',
-              category_name: 'Dairy',
-            },
-            category_confidence: 0.96,
-            category_reasoning: 'milk',
-          },
-        ],
-      };
-
-      await service.createDraftFromParsed(householdId, userId, parsed);
-
-      const calls = (em.persist as jest.Mock).mock.calls as [unknown][];
-      expect(calls).toHaveLength(2); // bill + 1 merged BillSubCategory
-      const bsc = calls[1][0] as BillSubCategory;
-      expect(bsc.raw_name).toBe('Lapte 1L'); // first item wins
-      expect(bsc.amount).toBeCloseTo(60); // summed
-      expect(bsc.product_count).toBe(3); // summed
-      expect(bsc.category_confidence).toBeCloseTo(0.96); // from first item
-      expect(bsc.category_reasoning).toBe('milk'); // from first item
-    });
-
-    it('sums merged item prices in cents without float drift', async () => {
-      const { service, em } = makeService();
-      const line = (final_price: number) => ({
-        name: 'Gum',
+      const line = (name: string, final_price: number) => ({
+        name,
         quantity: 1,
         unit: 'piece' as const,
         weight_kg: null,
         price_per_kg: null,
         final_price,
-        sub_category: { id: 'gum-id', name: 'gum', category_name: 'Snacks' },
-        category_confidence: 0.9,
-        category_reasoning: 'gum',
+        sub_category: { id: 'milk-id', name: 'milk', category_name: 'Dairy' },
+        category_confidence: 0.96,
+        category_reasoning: 'milk',
       });
       const parsed: ParsedBillResponseDto = {
         draft_id: '',
         market_name: null,
         bill_date: null,
         currency: null,
-        total_amount: 0.3,
-        items: [line(0.1), line(0.2)],
+        total_amount: 60,
+        items: [line('Lapte 1L', 27.5), line('Lapte 0.5L', 32.5)],
       };
 
       await service.createDraftFromParsed(householdId, userId, parsed);
 
       const calls = (em.persist as jest.Mock).mock.calls as [unknown][];
-      const bsc = calls[1][0] as BillSubCategory;
-      expect(bsc.amount).toBe(0.3);
+      expect(calls).toHaveLength(3); // bill + 2 BillSubCategory
+      const rows = calls.slice(1).map((c) => c[0] as BillSubCategory);
+      expect(rows.map((r) => [r.raw_name, r.amount])).toEqual([
+        ['Lapte 1L', 27.5],
+        ['Lapte 0.5L', 32.5],
+      ]);
     });
 
     it('handles a mix of categorized and uncategorized items producing separate rows', async () => {

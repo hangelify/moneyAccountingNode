@@ -114,6 +114,14 @@ describe('database indexes (PostgreSQL)', () => {
       'sessions_absolute_expires_at_index',
       'ON public.sessions USING btree (absolute_expires_at)',
     ],
+    [
+      'bill_sub_categories_sub_category_id_partial_index',
+      'ON public.bill_sub_categories USING btree (sub_category_id) WHERE (sub_category_id IS NOT NULL)',
+    ],
+    [
+      'bill_sub_categories_bill_id_index',
+      'ON public.bill_sub_categories USING btree (bill_id)',
+    ],
   ])('has %s', async (name, def) => {
     expect((await indexDefs()).get(name)).toContain(def);
   });
@@ -125,6 +133,8 @@ describe('database indexes (PostgreSQL)', () => {
     'sessions_is_active_index',
     'bills_bill_date_index',
     'users_email_unique',
+    // One row per receipt line: a bill may list a sub-category many times.
+    'bill_sub_categories_bill_sub_category_unique',
   ])('no longer has the write-only %s', async (name) => {
     expect((await indexDefs()).has(name)).toBe(false);
   });

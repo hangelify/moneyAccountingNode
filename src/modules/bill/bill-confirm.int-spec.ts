@@ -14,6 +14,7 @@ import { User } from '../../entities/user.entity';
 import { BillStatus } from '../../types/bill-status.enum';
 import { BillCrudService } from './bill-crud.service';
 import type { CreateBillItemDto } from './dto/create-bill.dto';
+import type { ConfirmBillItemDto } from './dto/confirm-bill.dto';
 
 jest.setTimeout(30_000);
 
@@ -135,7 +136,7 @@ describe('confirm and create bill (PostgreSQL)', () => {
     );
   }
 
-  async function makeDraft(): Promise<string> {
+  async function makeDraft(subId?: string): Promise<string> {
     const fork = orm.em.fork();
     const bill = fork.create(Bill, {
       household: householdId,
@@ -152,9 +153,18 @@ describe('confirm and create bill (PostgreSQL)', () => {
       unit: 'l',
       price_per_unit: 5,
       category_confidence: 0.9,
+      category_reasoning: 'Looks like milk.',
+      sub_category: subId,
     } as never);
     await fork.flush();
     return bill.id;
+  }
+
+  /** A draft with one recognized line; returns the bill and line ids. */
+  async function makeDraftLine(subId?: string) {
+    const id = await makeDraft(subId);
+    const { items: lines } = await load(id);
+    return { id, lineId: lines[0].id };
   }
 
   async function load(id: string) {
@@ -202,19 +212,31 @@ describe('confirm and create bill (PostgreSQL)', () => {
       },
     );
 
-    it('rejects duplicate sub_category_id with 400 and keeps the draft', async () => {
+    it('saves two items of the same sub-category as two lines', async () => {
       const id = await makeDraft();
 
-      await expect(
-        crud().confirmBill(id, householdId, userId, {
-          ...required,
-          items: items(subIds[0], subIds[0]),
-        }),
-      ).rejects.toThrow(/duplicate/i);
+      const result = await crud().confirmBill(id, householdId, userId, {
+        ...required,
+        items: [
+          {
+            sub_category_id: subIds[0],
+            product_count: 1,
+            amount: 5,
+            product_weight: 2,
+          },
+          {
+            sub_category_id: subIds[0],
+            product_count: 1,
+            amount: 3,
+            product_weight: 1,
+          },
+        ],
+      });
 
-      const { bill, items: left } = await load(id);
-      expect(bill.status).toBe(BillStatus.DRAFT);
-      expect(left.map((i) => i.raw_name)).toEqual(['LAPTE 1L']);
+      const { items: saved } = await load(id);
+      expect(saved).toHaveLength(2);
+      expect(saved.map((i) => Number(i.product_weight)).sort()).toEqual([1, 2]);
+      expect(result.items).toHaveLength(2);
     });
 
     it('lets one of two concurrent confirms win and answers 409 to the other', async () => {
@@ -289,6 +311,169 @@ describe('confirm and create bill (PostgreSQL)', () => {
       const one = await count(subIds.slice(0, 1));
       const five = await count(subIds);
       expect(five).toBe(one);
+    });
+  });
+
+  describe('confirming draft lines', () => {
+    function line(
+      lineId: string,
+      overrides: Partial<ConfirmBillItemDto> = {},
+    ): ConfirmBillItemDto {
+      return {
+        id: lineId,
+        sub_category_id: subIds[0],
+        product_count: 2,
+        amount: 10,
+        ...overrides,
+      };
+    }
+
+    it('updates the line in place and keeps what the model read', async () => {
+      const { id, lineId } = await makeDraftLine(subIds[0]);
+
+      const result = await crud().confirmBill(id, householdId, userId, {
+        ...required,
+        items: [line(lineId)],
+      });
+
+      const { items: saved } = await load(id);
+      expect(saved).toHaveLength(1);
+      expect(saved[0]).toMatchObject({
+        id: lineId,
+        raw_name: 'LAPTE 1L',
+        unit: 'l',
+        category_reasoning: 'Looks like milk.',
+      });
+      expect(Number(saved[0].category_confidence)).toBeCloseTo(0.9);
+      expect(Number(saved[0].price_per_unit)).toBe(5);
+      expect(result.items[0]).toMatchObject({
+        id: lineId,
+        raw_name: 'LAPTE 1L',
+        category_confidence: 0.9,
+      });
+    });
+
+    it('saves an edited raw_name', async () => {
+      const { id, lineId } = await makeDraftLine(subIds[0]);
+
+      await crud().confirmBill(id, householdId, userId, {
+        ...required,
+        items: [line(lineId, { raw_name: 'Milk 1L' })],
+      });
+
+      const { items: saved } = await load(id);
+      expect(saved[0].raw_name).toBe('Milk 1L');
+    });
+
+    it('confirms a line without a sub-category', async () => {
+      const { id, lineId } = await makeDraftLine();
+
+      const result = await crud().confirmBill(id, householdId, userId, {
+        ...required,
+        items: [line(lineId, { sub_category_id: undefined })],
+      });
+
+      const { bill, items: saved } = await load(id);
+      expect(bill.status).toBe(BillStatus.CONFIRMED);
+      expect(saved[0].sub_category).toBeNull();
+      expect(saved[0].raw_name).toBe('LAPTE 1L');
+      expect(result.items[0].sub_category).toBeNull();
+    });
+
+    it('saves a new uncategorized line under its raw_name', async () => {
+      const id = await makeDraft();
+
+      await crud().confirmBill(id, householdId, userId, {
+        ...required,
+        items: [{ raw_name: 'Bag', product_count: 1, amount: 1 }],
+      });
+
+      const { items: saved } = await load(id);
+      expect(saved).toHaveLength(1);
+      expect(saved[0]).toMatchObject({ raw_name: 'Bag', sub_category: null });
+    });
+
+    it('clears the model confidence and reasoning when the sub-category changes', async () => {
+      const { id, lineId } = await makeDraftLine(subIds[0]);
+
+      await crud().confirmBill(id, householdId, userId, {
+        ...required,
+        items: [line(lineId, { sub_category_id: subIds[1] })],
+      });
+
+      const { items: saved } = await load(id);
+      expect(saved[0].sub_category?.id).toBe(subIds[1]);
+      expect(saved[0].category_confidence).toBeNull();
+      expect(saved[0].category_reasoning).toBeNull();
+      expect(saved[0].unit).toBe('l');
+    });
+
+    it.each([
+      ['the count of an unweighed line', { product_count: 3 }],
+      ['the weight', { product_weight: 1.5 }],
+    ])('clears price_per_unit when %s changes', async (_, change) => {
+      const { id, lineId } = await makeDraftLine(subIds[0]);
+
+      await crud().confirmBill(id, householdId, userId, {
+        ...required,
+        items: [line(lineId, change)],
+      });
+
+      const { items: saved } = await load(id);
+      expect(saved[0].price_per_unit).toBeNull();
+    });
+
+    it('clears price_per_unit when the amount changes', async () => {
+      const { id, lineId } = await makeDraftLine(subIds[0]);
+
+      await crud().confirmBill(id, householdId, userId, {
+        ...required,
+        items: [line(lineId, { amount: 12 })],
+      });
+
+      const { items: saved } = await load(id);
+      expect(saved[0].price_per_unit).toBeNull();
+    });
+
+    it('deletes draft lines left out of the confirm', async () => {
+      const { id } = await makeDraftLine(subIds[0]);
+
+      await crud().confirmBill(id, householdId, userId, {
+        ...required,
+        items: items(subIds[1]),
+      });
+
+      const { items: saved } = await load(id);
+      expect(saved.map((i) => i.sub_category?.id)).toEqual([subIds[1]]);
+    });
+
+    it.each([
+      ['a line of another bill', async () => (await makeDraftLine()).lineId],
+      ['a nonexistent line', () => Promise.resolve(randomUUID())],
+    ])('rejects %s with 400 and keeps the draft', async (_, badLineId) => {
+      const { id } = await makeDraftLine(subIds[0]);
+
+      await expect(
+        crud().confirmBill(id, householdId, userId, {
+          ...required,
+          items: [line(await badLineId())],
+        }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+
+      const { bill, items: left } = await load(id);
+      expect(bill.status).toBe(BillStatus.DRAFT);
+      expect(left).toHaveLength(1);
+    });
+
+    it('rejects a repeated line id with 400', async () => {
+      const { id, lineId } = await makeDraftLine(subIds[0]);
+
+      await expect(
+        crud().confirmBill(id, householdId, userId, {
+          ...required,
+          items: [line(lineId), line(lineId)],
+        }),
+      ).rejects.toThrow(/duplicate/i);
     });
   });
 
@@ -410,14 +595,15 @@ describe('confirm and create bill (PostgreSQL)', () => {
   });
 
   describe('createBill', () => {
-    it('rejects duplicate sub_category_id with 400', async () => {
-      await expect(
-        crud().createBill(householdId, userId, {
-          bill_date: '2026-05-19',
-          total_amount: 2,
-          items: items(subIds[0], subIds[0]),
-        }),
-      ).rejects.toBeInstanceOf(BadRequestException);
+    it('saves two items of the same sub-category as two lines', async () => {
+      const result = await crud().createBill(householdId, userId, {
+        bill_date: '2026-05-19',
+        total_amount: 2,
+        items: items(subIds[0], subIds[0]),
+      });
+
+      const { items: saved } = await load(result.id);
+      expect(saved).toHaveLength(2);
     });
 
     it('runs the same number of SQL queries for 1 and 5 items', async () => {

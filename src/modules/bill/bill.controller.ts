@@ -180,7 +180,7 @@ export class BillController {
         parsed,
       });
     }
-    // Answer with the draft as saved (items merged per sub-category, values
+    // Answer with the draft as saved (one line per item, values
     // clamped), so a re-upload of this photo gets the same answer.
     const stored = await this.billCrud.findDraftByImageHash(
       ctx.householdId,

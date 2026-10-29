@@ -62,7 +62,7 @@
     "dotenv": "^17.2.3",
     "file-type": "^21.3.4",
     "ioredis": "^5.11.0",
-    "nodemailer": "^10.1.0",
+    "nodemailer": "^10.3.0",
     "openai": "^6.37.0",
     "passport": "^0.7.0",
     "passport-jwt": "^4.0.1",
@@ -71,7 +71,7 @@
     "rxjs": "^7.8.1",
     "sharp": "^0.35.5",
     "swagger-ui-express": "^5.0.1",
-    "zod": "^4.4.3",
+    "zod": "^4.6.7",
     "zod-to-json-schema": "^3.25.2"
   },
   "devDependencies": {
@@ -132,5 +132,13 @@
       "prettier --check",
       "eslint --fix"
     ]
+  },
+  "overrides": {
+    "@nestjs/platform-express": {
+      "multer": "2.5.0"
+    },
+    "@nestjs/swagger": {
+      "js-yaml": "5.5.0"
+    }
   }
 }

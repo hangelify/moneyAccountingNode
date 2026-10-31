@@ -2368,6 +2368,30 @@
           "keyName": "exchange_rates_source_date_currency_unique",
           "primary": false,
           "unique": true
+        },
+        {
+          "columnNames": [
+            "source",
+            "currency",
+            "rate_date"
+          ],
+          "composite": true,
+          "constraint": false,
+          "keyName": "exchange_rates_source_currency_date_index",
+          "primary": false,
+          "unique": false,
+          "columns": [
+            {
+              "name": "source"
+            },
+            {
+              "name": "currency"
+            },
+            {
+              "name": "rate_date",
+              "sort": "DESC"
+            }
+          ]
         }
       ],
       "checks": [],

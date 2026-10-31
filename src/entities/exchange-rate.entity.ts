@@ -1,4 +1,10 @@
-import { Entity, Property, Enum, Unique } from '@mikro-orm/decorators/legacy';
+import {
+  Entity,
+  Property,
+  Enum,
+  Unique,
+  Index,
+} from '@mikro-orm/decorators/legacy';
 import { BaseEntity } from './base.entity';
 import { Currency } from '../types/currency.enum';
 
@@ -7,6 +13,12 @@ import { Currency } from '../types/currency.enum';
 @Unique({
   name: 'exchange_rates_source_date_currency_unique',
   properties: ['source', 'rate_date', 'currency'],
+})
+// Bill conversion: latest rate of one currency on or before a day.
+@Index({
+  name: 'exchange_rates_source_currency_date_index',
+  expression:
+    'create index "exchange_rates_source_currency_date_index" on "exchange_rates" ("source", "currency", "rate_date" desc)',
 })
 export class ExchangeRate extends BaseEntity {
   /** Who published the rate, e.g. `BNM`. */

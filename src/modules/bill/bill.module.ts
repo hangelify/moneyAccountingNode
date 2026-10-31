@@ -14,6 +14,7 @@ import { BillAiOrchestrator } from './bill-ai.orchestrator';
 import { BillPhotoService } from './bill-photo.service';
 import { BillCrudService } from './bill-crud.service';
 import { BillDashboardService } from './bill-dashboard.service';
+import { SpendingBreakdownService } from './spending-breakdown.service';
 import { BillController } from './bill.controller';
 import { StorageModule } from '../storage/storage.module';
 import { DraftCleanupService } from './draft-cleanup.service';
@@ -45,6 +46,7 @@ import { BILL_ITEM_TOLERANCE, readBillItemTolerance } from './bill-totals';
     BillPhotoService,
     BillCrudService,
     BillDashboardService,
+    SpendingBreakdownService,
     DraftCleanupService,
     { provide: DRAFT_RETENTION_DAYS, useFactory: readDraftRetentionDays },
     { provide: BILL_ITEM_TOLERANCE, useFactory: readBillItemTolerance },

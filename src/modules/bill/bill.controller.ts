@@ -38,6 +38,7 @@ import { CurrentHousehold } from '../household/decorators/current-household.deco
 import { BillPhotoService } from './bill-photo.service';
 import { BillCrudService } from './bill-crud.service';
 import { BillDashboardService } from './bill-dashboard.service';
+import { SpendingBreakdownService } from './spending-breakdown.service';
 import {
   ParsePhotoResponseDto,
   ParsedBillResponseDto,
@@ -57,6 +58,10 @@ import {
   BillDashboardQueryDto,
 } from './dto/bill-dashboard.dto';
 import {
+  SpendingBreakdownQueryDto,
+  SpendingBreakdownResponseDto,
+} from './dto/spending-breakdown.dto';
+import {
   ApiParsePhotoResponses,
   ApiCreateBillResponses,
   ApiListBillsResponses,
@@ -67,6 +72,7 @@ import {
   ApiDraftImageResponses,
   ApiConfirmBillResponses,
   ApiDashboardResponses,
+  ApiSpendingBreakdownResponses,
 } from './dto/api-responses.decorator';
 import { ListBillsQueryDto } from './dto/list-bills-query.dto';
 import { ConfirmBillDto } from './dto/confirm-bill.dto';
@@ -93,6 +99,7 @@ export class BillController {
     private readonly billPhoto: BillPhotoService,
     private readonly billCrud: BillCrudService,
     private readonly billDashboard: BillDashboardService,
+    private readonly spendingBreakdown: SpendingBreakdownService,
     @Inject(STORAGE_SERVICE) private readonly storage: StorageService,
   ) {}
 
@@ -284,6 +291,26 @@ export class BillController {
     @Query() query: BillDashboardQueryDto,
   ): Promise<BillDashboardResponseDto> {
     return this.billDashboard.getDashboard(ctx.householdId, query);
+  }
+
+  @Get('dashboard/spending-breakdown')
+  @ApiOperation({
+    summary:
+      'Spending as a category → sub-category tree for a week, month, quarter, year, 5 years or custom range',
+    description:
+      'For a sunburst chart. Counts confirmed, not deleted bills only, one ' +
+      'tree per currency (never summed across currencies; bills without a ' +
+      'currency form the null series). Lines without a sub-category go to ' +
+      'an "Uncategorized" bucket; deleted categories still show, marked ' +
+      'archived. Totals are sums of line amounts, not of bill totals, so ' +
+      'they can differ from the bill totals by a few cents.',
+  })
+  @ApiSpendingBreakdownResponses()
+  async getSpendingBreakdown(
+    @CurrentHousehold() ctx: HouseholdContext,
+    @Query() query: SpendingBreakdownQueryDto,
+  ): Promise<SpendingBreakdownResponseDto> {
+    return this.spendingBreakdown.getSpendingBreakdown(ctx.householdId, query);
   }
 
   @Get(':id')

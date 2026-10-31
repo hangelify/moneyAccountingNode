@@ -780,6 +780,31 @@ describe('household currency conversion (PostgreSQL)', () => {
       expect(householdAmount(res, billIds[0])).toBeNull();
     });
 
+    it('a rate older than a week is not used: provider down → unconverted', async () => {
+      // Saved days end at 03-11 (03-02 is 30 days back); 04-01 cannot be fetched.
+      const { hid, billIds } = await ownHousehold(Currency.EUR, [
+        ['2026-04-01', 100, Currency.MDL],
+      ]);
+      const original = provider.answer;
+      provider.answer = () => Promise.reject(new ServiceUnavailableException());
+      let res: BillDashboardResponseDto;
+      try {
+        res = await dashboard.getDashboard(hid, {
+          type: 'month',
+          year: 2026,
+          month: 4,
+        });
+      } finally {
+        provider.answer = original;
+      }
+
+      expect(res.in_household_currency.unconverted).toEqual([
+        { currency: Currency.MDL, bill_count: 1, amount: 100 },
+      ]);
+      expect(householdAmount(res, billIds[0])).toBeNull();
+      expect((await listedBill(billIds[0], hid)).household_amount).toBeNull();
+    });
+
     it('more than 10 unsaved days → 10 calls; the next request fetches the remaining', async () => {
       const days = Array.from(
         { length: 12 },

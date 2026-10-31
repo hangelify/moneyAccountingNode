@@ -16,7 +16,9 @@ import {
  * when the bill has no currency or a needed rate is not saved) and
  * `fx.rate_date` (day of the rates used, NULL when no rate was needed).
  * A rate is the latest saved one on or before `bill_date`, so weekends and
- * unsaved days use the last published day.
+ * unsaved days use the last published day, but at most 7 days back: an
+ * older rate is stale (e.g. provider down for weeks) and leaves the bill
+ * unconverted.
  */
 export function householdConversionJoin(bill = 'b'): string {
   return `
@@ -27,6 +29,7 @@ export function householdConversionJoin(bill = 'b'): string {
                   WHERE  er.source = ?
                     AND  er.currency = ${bill}.currency
                     AND  er.rate_date <= ${bill}.bill_date
+                    AND  er.rate_date >= ${bill}.bill_date - 7
                     AND  ${bill}.currency <> 'MDL'
                     AND  ${bill}.currency <> h.currency
                   ORDER  BY er.rate_date DESC
@@ -38,6 +41,7 @@ export function householdConversionJoin(bill = 'b'): string {
                   WHERE  er.source = ?
                     AND  er.currency = h.currency
                     AND  er.rate_date <= ${bill}.bill_date
+                    AND  er.rate_date >= ${bill}.bill_date - 7
                     AND  h.currency <> 'MDL'
                     AND  ${bill}.currency <> h.currency
                   ORDER  BY er.rate_date DESC

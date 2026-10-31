@@ -23,6 +23,7 @@ import { BillModule } from './modules/bill/bill.module';
 import { MarketModule } from './modules/market/market.module';
 import { HouseholdModule } from './modules/household/household.module';
 import { RetentionModule } from './modules/retention/retention.module';
+import { ExchangeRateModule } from './modules/exchange-rate/exchange-rate.module';
 
 export const APP_THROTTLERS = [{ name: 'default', ttl: 60_000, limit: 100 }];
 
@@ -44,6 +45,7 @@ export const APP_THROTTLERS = [{ name: 'default', ttl: 60_000, limit: 100 }];
     MarketModule,
     HouseholdModule,
     RetentionModule,
+    ExchangeRateModule,
     ThrottlerModule.forRootAsync({
       useFactory: () => ({
         throttlers: APP_THROTTLERS,

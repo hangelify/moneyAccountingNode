@@ -307,7 +307,11 @@ export class BillController {
       'currency form the null series). Lines without a sub-category go to ' +
       'an "Uncategorized" bucket; deleted categories still show, marked ' +
       'archived. Totals are sums of line amounts, not of bill totals, so ' +
-      'they can differ from the bill totals by a few cents.',
+      'they can differ from the bill totals by a few cents. ' +
+      'in_household_currency is one tree of every bill converted into the ' +
+      'household currency at the latest saved BNM rate on or before its ' +
+      'bill_date (loading up to 10 missing days per request); bills it ' +
+      'could not convert are listed in unconverted.',
   })
   @ApiSpendingBreakdownResponses()
   async getSpendingBreakdown(

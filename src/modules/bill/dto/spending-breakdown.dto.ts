@@ -15,6 +15,7 @@ import {
   type SpendingPeriod,
 } from '../../../common/utils/period-range';
 import { UNCATEGORIZED_NAME } from '../spending-breakdown';
+import { UnconvertedDto } from './household-conversion.dto';
 
 export class SpendingBreakdownQueryDto {
   @ApiProperty({
@@ -160,6 +161,16 @@ export class SpendingCurrencyDto {
   categories!: SpendingCategoryDto[];
 }
 
+export class SpendingHouseholdDto extends SpendingCurrencyDto {
+  @ApiProperty({
+    type: [UnconvertedDto],
+    description:
+      'Bills left out of this tree because they have no currency or no ' +
+      'rate is saved for them, per original currency',
+  })
+  unconverted!: UnconvertedDto[];
+}
+
 export class SpendingBreakdownResponseDto {
   @ApiProperty({ type: SpendingRangeDto })
   range!: SpendingRangeDto;
@@ -173,4 +184,14 @@ export class SpendingBreakdownResponseDto {
       'totals, so they can differ from the bill totals by a few cents.',
   })
   by_currency!: SpendingCurrencyDto[];
+
+  @ApiProperty({
+    type: SpendingHouseholdDto,
+    description:
+      'One tree of every convertible bill in the household currency, at the ' +
+      'latest saved BNM rate on or before each bill_date (loading up to 10 ' +
+      'missing days per request). With a currency filter, only bills in it. ' +
+      'Empty (total 0) when nothing converts.',
+  })
+  in_household_currency!: SpendingHouseholdDto;
 }

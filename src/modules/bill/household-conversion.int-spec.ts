@@ -19,6 +19,7 @@ import { EXCHANGE_RATE_PROVIDER } from '../exchange-rate/exchange-rate.provider'
 import { StubProvider } from '../exchange-rate/testing/stub-exchange-rate.provider';
 import { BillCrudService } from './bill-crud.service';
 import { BillDashboardService } from './bill-dashboard.service';
+import { SpendingBreakdownService } from './spending-breakdown.service';
 import {
   BillConversionService,
   fetchUnconverted,
@@ -45,6 +46,7 @@ describe('household currency conversion (PostgreSQL)', () => {
   let provider: StubProvider;
   let crud: BillCrudService;
   let dashboard: BillDashboardService;
+  let spending: SpendingBreakdownService;
   let userId: string;
   // EUR household with categories Food and Home.
   let householdId: string;
@@ -89,7 +91,12 @@ describe('household currency conversion (PostgreSQL)', () => {
         MikroOrmModule.forFeature([Bill, Market, SubCategory]),
         ExchangeRateModule,
       ],
-      providers: [BillCrudService, BillConversionService, BillDashboardService],
+      providers: [
+        BillCrudService,
+        BillConversionService,
+        BillDashboardService,
+        SpendingBreakdownService,
+      ],
     })
       .overrideProvider(EXCHANGE_RATE_PROVIDER)
       .useValue(provider)
@@ -97,6 +104,7 @@ describe('household currency conversion (PostgreSQL)', () => {
     orm = mod.get(MikroORM);
     crud = mod.get(BillCrudService);
     dashboard = mod.get(BillDashboardService);
+    spending = mod.get(SpendingBreakdownService);
     await mod
       .get(ExchangeRateService)
       .ensureDays(['2026-03-02', '2026-03-07'], { max: 10 });
@@ -524,6 +532,85 @@ describe('household currency conversion (PostgreSQL)', () => {
   });
   // Last in the file: these specs save 2025-01 and 2026-02 days, which
   // earlier specs expect to find unsaved.
+  describe('spending breakdown', () => {
+    const march = {
+      period: 'custom',
+      from: '2026-03-01',
+      to: '2026-03-31',
+    } as const;
+
+    it('in_household_currency converts the lines per category', async () => {
+      const res = await spending.getSpendingBreakdown(householdId, march);
+
+      const tree = res.in_household_currency;
+      expect(tree.currency).toBe(Currency.EUR);
+      expect(tree.total).toBe(32);
+      expect(tree.categories.map((c) => [c.name, c.total])).toEqual([
+        ['Food', 28],
+        ['Home', 4],
+      ]);
+      expect(tree.categories[0].sub_categories[0]).toMatchObject({
+        name: 'bread',
+        total: 28,
+      });
+      // The NULL-currency bill (31) is not part of it.
+      expect(tree.unconverted).toEqual([
+        { currency: null, bill_count: 1, amount: 31 },
+      ]);
+    });
+
+    it('by_currency keeps the original amounts', async () => {
+      const res = await spending.getSpendingBreakdown(householdId, march);
+
+      expect(res.by_currency.map((s) => [s.currency, s.total])).toEqual([
+        [Currency.EUR, 10],
+        [Currency.MDL, 500],
+        [null, 31],
+      ]);
+    });
+
+    it('?currency=MDL converts only MDL bills', async () => {
+      const res = await spending.getSpendingBreakdown(householdId, {
+        ...march,
+        currency: Currency.MDL,
+      });
+
+      // 200 / 20 + 200 / 25 + 100 / 25 = 22
+      expect(res.in_household_currency.total).toBe(22);
+      expect(res.in_household_currency.unconverted).toEqual([]);
+      expect(res.by_currency).toHaveLength(1);
+    });
+
+    it('NULL-currency bills are only in unconverted', async () => {
+      const res = await spending.getSpendingBreakdown(householdId, {
+        ...march,
+        from: '2026-03-02',
+        to: '2026-03-02',
+        currency: undefined,
+      });
+
+      expect(res.in_household_currency.unconverted).toEqual([
+        { currency: null, bill_count: 1, amount: 31 },
+      ]);
+    });
+
+    it('an empty range is an empty tree in the household currency', async () => {
+      const res = await spending.getSpendingBreakdown(householdId, {
+        period: 'custom',
+        from: '2020-01-01',
+        to: '2020-01-31',
+      });
+
+      expect(res.in_household_currency).toEqual({
+        currency: Currency.EUR,
+        total: 0,
+        lines: 0,
+        categories: [],
+        unconverted: [],
+      });
+    });
+  });
+
   describe('dashboard', () => {
     const march = { type: 'month', year: 2026, month: 3 } as const;
 

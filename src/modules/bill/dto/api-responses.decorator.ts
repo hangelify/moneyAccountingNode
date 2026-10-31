@@ -217,7 +217,8 @@ export const ApiSpendingBreakdownResponses = () =>
       description:
         'Spending as a category → sub-category tree per currency. Totals ' +
         'are sums of receipt line amounts, not of bill totals, and can ' +
-        'differ from them by a few cents.',
+        'differ from them by a few cents. in_household_currency holds the ' +
+        'same tree converted into the household currency.',
     }),
     ApiResponse({
       status: 400,

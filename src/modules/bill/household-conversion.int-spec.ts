@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { MikroORM, EntityManager } from '@mikro-orm/core';
 import { MikroOrmModule } from '@mikro-orm/nestjs';
+import { ServiceUnavailableException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { createMikroOrmConfig } from '../../mikro-orm.config';
 import { Bill } from '../../entities/bill.entity';
@@ -31,6 +32,8 @@ const SOURCE = 'TEST-HC';
 const RATES: Record<string, Record<string, number>> = {
   '2026-03-02': { EUR: 20.0, USD: 18.0 },
   '2026-03-07': { EUR: 25.0, USD: 18.0 },
+  // Published only for the bill-write specs, which find it unsaved.
+  '2026-03-11': { EUR: 22.0, USD: 18.0 },
 };
 
 // Bills read in the household's currency, converted at read time from the
@@ -44,6 +47,9 @@ describe('household currency conversion (PostgreSQL)', () => {
   let householdId: string;
   // MDL household, for the inverse direction.
   let mdlHouseholdId: string;
+  // EUR household that bill writes go to, so they leave the others as seeded.
+  let writeHouseholdId: string;
+  let writeSubId: string;
   const id = {
     eur0302: '',
     mdl0302: '',
@@ -104,6 +110,19 @@ describe('household currency conversion (PostgreSQL)', () => {
       name: 'Conversion MDL',
       currency: Currency.MDL,
       created_by: user,
+    } as never);
+    const writeHousehold = em.create(Household, {
+      name: 'Conversion writes',
+      currency: Currency.EUR,
+      created_by: user,
+    } as never);
+    const writeFood = em.create(Category, {
+      name: 'Food',
+      household: writeHousehold,
+    } as never);
+    const writeBread = em.create(SubCategory, {
+      name: 'bread',
+      category: writeFood,
     } as never);
     const food = em.create(Category, { name: 'Food', household } as never);
     const home = em.create(Category, { name: 'Home', household } as never);
@@ -178,6 +197,8 @@ describe('household currency conversion (PostgreSQL)', () => {
     userId = user.id;
     householdId = household.id;
     mdlHouseholdId = mdlHousehold.id;
+    writeHouseholdId = writeHousehold.id;
+    writeSubId = writeBread.id;
     for (const key of Object.keys(id) as Array<keyof typeof id>) {
       id[key] = bills[key].id;
     }
@@ -186,21 +207,24 @@ describe('household currency conversion (PostgreSQL)', () => {
   afterAll(async () => {
     if (!orm) return;
     const conn = orm.em.getConnection();
-    const hids = [householdId, mdlHouseholdId];
+    const hids = [householdId, mdlHouseholdId, writeHouseholdId];
     await conn.execute(
-      'DELETE FROM bill_sub_categories WHERE bill_id IN (SELECT id FROM bills WHERE household_id IN (?, ?))',
-      hids,
-    );
-    await conn.execute('DELETE FROM bills WHERE household_id IN (?, ?)', hids);
-    await conn.execute(
-      'DELETE FROM sub_categories WHERE category_id IN (SELECT id FROM categories WHERE household_id IN (?, ?))',
+      'DELETE FROM bill_sub_categories WHERE bill_id IN (SELECT id FROM bills WHERE household_id IN (?, ?, ?))',
       hids,
     );
     await conn.execute(
-      'DELETE FROM categories WHERE household_id IN (?, ?)',
+      'DELETE FROM bills WHERE household_id IN (?, ?, ?)',
       hids,
     );
-    await conn.execute('DELETE FROM households WHERE id IN (?, ?)', hids);
+    await conn.execute(
+      'DELETE FROM sub_categories WHERE category_id IN (SELECT id FROM categories WHERE household_id IN (?, ?, ?))',
+      hids,
+    );
+    await conn.execute(
+      'DELETE FROM categories WHERE household_id IN (?, ?, ?)',
+      hids,
+    );
+    await conn.execute('DELETE FROM households WHERE id IN (?, ?, ?)', hids);
     await conn.execute('DELETE FROM users WHERE id = ?', [userId]);
     await conn.execute('DELETE FROM exchange_rates WHERE source = ?', [SOURCE]);
     await conn.execute('DELETE FROM exchange_rate_days WHERE source = ?', [
@@ -323,5 +347,170 @@ describe('household currency conversion (PostgreSQL)', () => {
     await crud.getBill(id.mdl0309, householdId);
 
     expect(provider.calls).toEqual([]);
+  });
+
+  // Writes save the bill's day after they commit, then answer converted.
+  describe('bill writes', () => {
+    const items = () => [
+      { sub_category_id: writeSubId, raw_name: 'item', amount: 100 },
+    ];
+
+    async function draft(
+      currency: Currency | null,
+      billDate: string,
+    ): Promise<string> {
+      const em = orm.em.fork();
+      const d = em.create(Bill, {
+        household: em.getReference(Household, writeHouseholdId),
+        created_by: em.getReference(User, userId),
+        status: BillStatus.DRAFT,
+        bill_date: billDate,
+        amount: 100,
+        currency,
+      } as never);
+      await em.flush();
+      return d.id;
+    }
+
+    function confirmDto(billDate: string, currency?: Currency) {
+      return {
+        bill_date: billDate,
+        total_amount: 100,
+        currency,
+        items: items().map((i) => ({ ...i, product_count: 1 })),
+      } as never;
+    }
+
+    async function withDownProvider<T>(fn: () => Promise<T>): Promise<T> {
+      const original = provider.answer;
+      provider.answer = () => Promise.reject(new ServiceUnavailableException());
+      try {
+        return await fn();
+      } finally {
+        provider.answer = original;
+      }
+    }
+
+    it('confirming an MDL draft in an EUR household saves its day', async () => {
+      const draftId = await draft(Currency.MDL, '2026-03-11');
+      provider.calls = [];
+
+      const res = await crud.confirmBill(
+        draftId,
+        writeHouseholdId,
+        userId,
+        confirmDto('2026-03-11'),
+      );
+
+      expect(provider.calls).toEqual(['2026-03-11']);
+      expect(res.household_currency).toBe(Currency.EUR);
+      expect(res.household_amount).toBe(4.55);
+    });
+
+    it('confirm succeeds when the provider is down', async () => {
+      const draftId = await draft(Currency.MDL, '2026-02-20');
+
+      const res = await withDownProvider(() =>
+        crud.confirmBill(
+          draftId,
+          writeHouseholdId,
+          userId,
+          confirmDto('2026-02-20'),
+        ),
+      );
+
+      expect(res.status).toBe(BillStatus.CONFIRMED);
+      expect(res.household_amount).toBeNull();
+    });
+
+    it('confirming an EUR bill in an EUR household makes no call', async () => {
+      const draftId = await draft(Currency.EUR, '2026-03-13');
+      provider.calls = [];
+
+      const res = await crud.confirmBill(
+        draftId,
+        writeHouseholdId,
+        userId,
+        confirmDto('2026-03-13'),
+      );
+
+      expect(provider.calls).toEqual([]);
+      expect(res.household_amount).toBe(100);
+    });
+
+    it('createBill with MDL saves its day', async () => {
+      provider.calls = [];
+
+      const res = await crud.createBill(writeHouseholdId, userId, {
+        bill_date: '2026-03-14',
+        currency: Currency.MDL,
+        total_amount: 100,
+        items: items(),
+      } as never);
+
+      expect(provider.calls).toEqual(['2026-03-14']);
+      expect(res.household_currency).toBe(Currency.EUR);
+    });
+
+    it('createBill with MDL on a published day answers the converted amount', async () => {
+      const res = await crud.createBill(writeHouseholdId, userId, {
+        bill_date: '2026-03-02',
+        currency: Currency.MDL,
+        total_amount: 200,
+        items: items(),
+      } as never);
+
+      expect(res.household_amount).toBe(10);
+      expect(res.exchange_rate).toEqual({
+        rate: 0.05,
+        rate_date: '2026-03-02',
+      });
+    });
+
+    it('PUT changing currency EUR→MDL and date to a new day saves that day and returns the new household_amount', async () => {
+      const created = await crud.createBill(writeHouseholdId, userId, {
+        bill_date: '2026-03-02',
+        currency: Currency.EUR,
+        total_amount: 200,
+        items: items(),
+      } as never);
+      expect(created.household_amount).toBe(200);
+      provider.calls = [];
+
+      const res = await crud.updateBill(created.id, writeHouseholdId, {
+        currency: Currency.MDL,
+        bill_date: '2026-03-07',
+      });
+
+      // 03-07 is already saved by the fixture, so the day needs no call.
+      expect(provider.calls).toEqual([]);
+      expect(res.household_currency).toBe(Currency.EUR);
+      expect(res.household_amount).toBe(8);
+
+      const moved = await crud.updateBill(created.id, writeHouseholdId, {
+        bill_date: '2026-03-15',
+      });
+      expect(provider.calls).toEqual(['2026-03-15']);
+      expect(moved.household_currency).toBe(Currency.EUR);
+    });
+
+    it('PUT succeeds when the provider is down', async () => {
+      const created = await crud.createBill(writeHouseholdId, userId, {
+        bill_date: '2026-03-02',
+        currency: Currency.EUR,
+        total_amount: 200,
+        items: items(),
+      } as never);
+
+      const res = await withDownProvider(() =>
+        crud.updateBill(created.id, writeHouseholdId, {
+          currency: Currency.MDL,
+          bill_date: '2026-02-21',
+        }),
+      );
+
+      expect(res.bill_date).toBe('2026-02-21');
+      expect(res.household_amount).toBeNull();
+    });
   });
 });

@@ -164,7 +164,11 @@ export class BillCrudService {
     this.em.persist(bill);
     for (const bsc of bscEntities) this.em.persist(bsc);
     await this.em.flush();
-    return this.toDetailDto(bill, bscEntities);
+    await this.warmRate(householdId, bill);
+    return {
+      ...this.toDetailDto(bill, bscEntities),
+      ...(await this.conversion.forBills(householdId, [bill.id])).get(bill.id),
+    };
   }
 
   async listBills(
@@ -346,7 +350,15 @@ export class BillCrudService {
     if (dto.description !== undefined) bill.description = dto.description;
 
     await this.em.persist(bill).flush();
-    return this.toListDto(bill, bill.billSubCategories.getItems());
+    await this.warmRate(householdId, bill);
+    const { household_currency, household_amount } = (
+      await this.conversion.forBills(householdId, [id])
+    ).get(id)!;
+    return {
+      ...this.toListDto(bill, bill.billSubCategories.getItems()),
+      household_currency,
+      household_amount,
+    };
   }
 
   async softDeleteBill(id: string, householdId: string): Promise<void> {
@@ -541,7 +553,7 @@ export class BillCrudService {
     }
     const subCats = await this.findSubCategories(householdId, dto.items);
 
-    return this.em.transactional(async (em) => {
+    const confirmed = await this.em.transactional(async (em) => {
       // Not filtered by status: a concurrent confirm waits on the row lock,
       // then sees CONFIRMED here and gets 409 instead of writing its items.
       const bill = await em.findOne(
@@ -593,8 +605,30 @@ export class BillCrudService {
       bill.status = BillStatus.CONFIRMED;
       await em.flush();
 
-      return this.toDetailDto(bill, bscEntities);
+      return { bill, dto: this.toDetailDto(bill, bscEntities) };
     });
+    await this.warmRate(householdId, confirmed.bill);
+    return {
+      ...confirmed.dto,
+      ...(await this.conversion.forBills(householdId, [id])).get(id),
+    };
+  }
+
+  /**
+   * Saves the bill's day of rates once the write has committed, so reads
+   * never wait on the provider. A bill in the household's currency or without
+   * one needs no rate. Never throws: the write stands even if the rate API is
+   * down.
+   */
+  private async warmRate(householdId: string, bill: Bill): Promise<void> {
+    if (!bill.currency) return;
+    const household = await this.em.findOne(
+      Household,
+      { id: householdId },
+      { fields: ['currency'] },
+    );
+    if (!household || household.currency === bill.currency) return;
+    await this.exchangeRates.ensureDays([bill.bill_date], { max: 1 });
   }
 
   /**

@@ -3,6 +3,7 @@ import { BillResponseDto } from './bill-response.dto';
 import { PaginationMetaDto } from './bill-list-response.dto';
 import { SubCategoryRefDto } from './parsed-bill-response.dto';
 import { BillStatus } from '../../../types/bill-status.enum';
+import { BillExchangeRateDto } from './household-conversion.dto';
 
 export class BillItemResponseDto {
   @ApiProperty({
@@ -63,6 +64,14 @@ export class BillDetailResponseDto extends BillResponseDto {
 
   @ApiProperty({ type: [BillItemResponseDto] })
   items!: BillItemResponseDto[];
+
+  @ApiPropertyOptional({
+    type: BillExchangeRateDto,
+    nullable: true,
+    description:
+      'Rate used for household_amount; null when the bill is in the household currency or cannot be converted',
+  })
+  exchange_rate?: BillExchangeRateDto | null;
 }
 
 export class DraftListResponseDto {

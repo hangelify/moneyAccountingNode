@@ -13,6 +13,9 @@ import { SubCategory } from '../../entities/sub-category.entity';
 import { User } from '../../entities/user.entity';
 import { BillStatus } from '../../types/bill-status.enum';
 import { BillCrudService } from './bill-crud.service';
+import { ExchangeRateService } from '../exchange-rate/exchange-rate.service';
+import { StubProvider } from '../exchange-rate/testing/stub-exchange-rate.provider';
+import { BillConversionService } from './household-conversion';
 import type { CreateBillItemDto } from './dto/create-bill.dto';
 import type { ConfirmBillItemDto } from './dto/confirm-bill.dto';
 import { Currency } from '../../types/currency.enum';
@@ -131,11 +134,15 @@ describe('confirm and create bill (PostgreSQL)', () => {
   });
 
   function crud(fork: EntityManager = orm.em.fork()) {
+    // Bill reads never ask the provider; the stub only satisfies DI.
+    const rates = new ExchangeRateService(fork, new StubProvider());
     return new BillCrudService(
       fork.getRepository(Bill),
       fork.getRepository(Market),
       fork.getRepository(SubCategory),
       fork,
+      rates,
+      new BillConversionService(fork, rates),
     );
   }
 

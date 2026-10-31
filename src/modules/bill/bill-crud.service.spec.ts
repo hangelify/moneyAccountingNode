@@ -6,6 +6,8 @@ import {
 } from '@nestjs/common';
 import { EntityManager, EntityRepository } from '@mikro-orm/core';
 import { BillCrudService } from './bill-crud.service';
+import type { BillConversionService } from './household-conversion';
+import type { ExchangeRateService } from '../exchange-rate/exchange-rate.service';
 import { Bill } from '../../entities/bill.entity';
 import { BillSubCategory } from '../../entities/bill-sub-category.entity';
 import { todayIsoDate } from '../../common/utils/calendar-date';
@@ -69,7 +71,16 @@ function makeService() {
     (cb: (em: EntityManager) => unknown) => cb(em),
   );
   return {
-    service: new BillCrudService(billRepo, marketRepo, subCategoryRepo, em),
+    service: new BillCrudService(
+      billRepo,
+      marketRepo,
+      subCategoryRepo,
+      em,
+      { source: 'TEST' } as ExchangeRateService,
+      {
+        forBills: jest.fn().mockResolvedValue(new Map()),
+      } as unknown as BillConversionService,
+    ),
     billRepo,
     marketRepo,
     subCategoryRepo,

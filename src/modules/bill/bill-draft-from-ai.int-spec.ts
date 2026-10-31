@@ -14,6 +14,9 @@ import { AiRequest, AiRequestStatus } from '../../entities/ai-request.entity';
 import { BillStatus } from '../../types/bill-status.enum';
 import { NotFoundException } from '@nestjs/common';
 import { BillCrudService } from './bill-crud.service';
+import { ExchangeRateService } from '../exchange-rate/exchange-rate.service';
+import { StubProvider } from '../exchange-rate/testing/stub-exchange-rate.provider';
+import { BillConversionService } from './household-conversion';
 import { BillPhotoService } from './bill-photo.service';
 import type { BillAiOrchestrator } from './bill-ai.orchestrator';
 import { ParsedAndCategorizedBillSchema } from './tasks/schemas/parsed-and-categorized-bill.schema';
@@ -95,11 +98,15 @@ describe('draft from AI output (PostgreSQL)', () => {
   });
 
   function crud(fork: EntityManager) {
+    // Bill reads never ask the provider; the stub only satisfies DI.
+    const rates = new ExchangeRateService(fork, new StubProvider());
     return new BillCrudService(
       fork.getRepository(Bill),
       fork.getRepository(Market),
       fork.getRepository(SubCategory),
       fork,
+      rates,
+      new BillConversionService(fork, rates),
     );
   }
 

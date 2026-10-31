@@ -51,6 +51,11 @@ import {
   DraftListResponseDto,
 } from './dto/bill-detail-response.dto';
 import { ListDraftsQueryDto } from './dto/list-drafts-query.dto';
+import { ExchangeRateService } from '../exchange-rate/exchange-rate.service';
+import {
+  BillConversionService,
+  householdConversionJoin,
+} from './household-conversion';
 import {
   BillListResponseDto,
   PaginationMetaDto,
@@ -118,6 +123,8 @@ export class BillCrudService {
     @InjectRepository(SubCategory)
     private readonly subCategoryRepository: EntityRepository<SubCategory>,
     private readonly em: EntityManager,
+    private readonly exchangeRates: ExchangeRateService,
+    private readonly conversion: BillConversionService,
     @Optional()
     @Inject(BILL_ITEM_TOLERANCE)
     private readonly itemTolerance: number = DEFAULT_BILL_ITEM_TOLERANCE,
@@ -211,6 +218,7 @@ export class BillCrudService {
     const page = filters.page ?? 1;
     const limit = filters.limit ?? 20;
     const offset = (page - 1) * limit;
+    const source = this.exchangeRates.source;
 
     const [countRows, dataRows] = await Promise.all([
       this.em.getConnection().execute(
@@ -224,8 +232,11 @@ export class BillCrudService {
         `SELECT b.id, b.bill_date::text, b.currency, b.amount::text, b.description,
                 b.created_at::text,
                 m.id AS market_id, m.name AS market_name, m.city AS market_city,
-                abs(b.amount - i.total) > ? * i.count AS amount_mismatch
+                abs(b.amount - i.total) > ? * i.count AS amount_mismatch,
+                h.currency AS household_currency,
+                ROUND(b.amount * fx.factor, 2)::text AS household_amount
          FROM   bills b
+         ${householdConversionJoin('b')}
          LEFT   JOIN markets m ON m.id = b.market_id
          CROSS  JOIN LATERAL (
                   SELECT coalesce(sum(amount), 0) AS total, count(*) AS count
@@ -235,7 +246,7 @@ export class BillCrudService {
          WHERE  ${where}
          ORDER  BY b.bill_date DESC
          LIMIT  ? OFFSET ?`,
-        [this.itemTolerance, ...params, limit, offset],
+        [this.itemTolerance, source, source, ...params, limit, offset],
       ) as Promise<
         Array<{
           id: string;
@@ -248,6 +259,8 @@ export class BillCrudService {
           market_city: string | null;
           created_at: string;
           amount_mismatch: boolean;
+          household_currency: Currency;
+          household_amount: string | null;
         }>
       >,
     ]);
@@ -276,6 +289,8 @@ export class BillCrudService {
             }
           : undefined,
         created_at: new Date(r.created_at),
+        household_currency: r.household_currency,
+        household_amount: numberOrNull(r.household_amount),
       }),
     );
 
@@ -291,7 +306,11 @@ export class BillCrudService {
       { populate: ['market', 'billSubCategories.sub_category.category'] },
     );
     if (!bill) throw new NotFoundException(`Bill with ID ${id} not found`);
-    return this.toDetailDto(bill, bill.billSubCategories.getItems());
+    const conversion = await this.conversion.forBills(householdId, [id]);
+    return {
+      ...this.toDetailDto(bill, bill.billSubCategories.getItems()),
+      ...conversion.get(id),
+    };
   }
 
   async updateBill(

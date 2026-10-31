@@ -13,6 +13,10 @@ import { BillStatus } from '../../types/bill-status.enum';
 import { Currency } from '../../types/currency.enum';
 import { BillCrudService } from './bill-crud.service';
 import { BillDashboardService } from './bill-dashboard.service';
+import { BillConversionService } from './household-conversion';
+import { ExchangeRateService } from '../exchange-rate/exchange-rate.service';
+import { EXCHANGE_RATE_PROVIDER } from '../exchange-rate/exchange-rate.provider';
+import { StubProvider } from '../exchange-rate/testing/stub-exchange-rate.provider';
 import type { ListBillsQueryDto } from './dto/list-bills-query.dto';
 import type {
   BillDashboardQueryDto,
@@ -42,7 +46,13 @@ describe('bill list and dashboard SQL (PostgreSQL)', () => {
         }),
         MikroOrmModule.forFeature([Bill, Market, SubCategory]),
       ],
-      providers: [BillCrudService, BillDashboardService],
+      providers: [
+        BillCrudService,
+        BillDashboardService,
+        BillConversionService,
+        ExchangeRateService,
+        { provide: EXCHANGE_RATE_PROVIDER, useValue: new StubProvider() },
+      ],
     }).compile();
     orm = mod.get(MikroORM);
     crud = mod.get(BillCrudService);

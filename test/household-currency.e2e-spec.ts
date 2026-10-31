@@ -113,6 +113,17 @@ describe('Household currency (e2e)', () => {
       .expect(400);
   });
 
+  it.each([{ name: null }, { currency: null }])(
+    'rejects %j: neither field can be cleared',
+    async (body) => {
+      await http()
+        .put(`/households/${owner.householdId}`)
+        .set('Authorization', auth(owner))
+        .send(body)
+        .expect(400);
+    },
+  );
+
   it('converts an MDL bill into the household currency on the dashboard', async () => {
     const h = `/households/${owner.householdId}`;
     const create = async (path: string, body: object) => {

@@ -266,6 +266,8 @@ describe('bill list and dashboard SQL (PostgreSQL)', () => {
           id: ids.march20,
           bill_date: '2026-03-20',
           total_amount: 100,
+          // USD → EUR at the default stub rates (18.0365 / 20.0954).
+          household_amount: 89.75,
           currency: Currency.USD,
           market_name: 'Corner shop',
           items_count: 2,
@@ -274,6 +276,7 @@ describe('bill list and dashboard SQL (PostgreSQL)', () => {
           id: ids.march5,
           bill_date: '2026-03-05',
           total_amount: 10.5,
+          household_amount: 10.5,
           currency: Currency.EUR,
           market_name: 'Lidl',
           items_count: 2,

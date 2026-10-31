@@ -9,6 +9,7 @@ import {
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Currency } from '../../../types/currency.enum';
+import { UnconvertedDto } from './household-conversion.dto';
 
 export class BillDashboardQueryDto {
   @ApiProperty({ enum: ['month', 'quarter', 'year'] })
@@ -71,6 +72,14 @@ export class DashboardBillSummaryDto {
   @ApiProperty({ enum: Currency, nullable: true })
   currency!: Currency | null;
 
+  @ApiProperty({
+    nullable: true,
+    example: 59.61,
+    description:
+      'total_amount in the household currency; null without a currency or a saved rate',
+  })
+  household_amount!: number | null;
+
   @ApiProperty({ nullable: true, example: 'Nr.1 SUPERMARKET' })
   market_name!: string | null;
 
@@ -117,6 +126,16 @@ export class DashboardCurrencySeriesDto {
   category_stats!: DashboardCategoryStatDto[];
 }
 
+/** Every convertible bill of the range, in the household currency. */
+export class DashboardHouseholdSeriesDto extends DashboardCurrencySeriesDto {
+  @ApiProperty({
+    type: [UnconvertedDto],
+    description:
+      'Bills left out of the totals: no currency, or no saved rate for their day',
+  })
+  unconverted!: UnconvertedDto[];
+}
+
 export class BillDashboardResponseDto {
   @ApiProperty({
     type: [DashboardCurrencySeriesDto],
@@ -126,6 +145,14 @@ export class BillDashboardResponseDto {
       'empty when the range has no bills.',
   })
   by_currency!: DashboardCurrencySeriesDto[];
+
+  @ApiProperty({
+    type: DashboardHouseholdSeriesDto,
+    description:
+      'Totals and category shares of all bills converted into the household ' +
+      'currency (currency), at the latest saved rate on or before each bill_date',
+  })
+  in_household_currency!: DashboardHouseholdSeriesDto;
 
   @ApiProperty({
     type: [DashboardBillSummaryDto],

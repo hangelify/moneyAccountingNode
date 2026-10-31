@@ -282,7 +282,11 @@ export class BillController {
     description:
       'Totals and category shares are grouped per currency (by_currency) and ' +
       'never summed across currencies. Bills without a currency form a ' +
-      'separate series with currency null.',
+      'separate series with currency null. in_household_currency converts ' +
+      'every bill into the household currency at the latest saved BNM rate ' +
+      'on or before its bill_date (loading up to 10 missing days per ' +
+      'request) and lists bills it could not convert in unconverted; each ' +
+      'bill gains household_amount.',
   })
   @ApiDashboardResponses()
   async getDashboard(

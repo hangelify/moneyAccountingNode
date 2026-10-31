@@ -95,6 +95,47 @@ export async function fetchUnconverted(
   }));
 }
 
+/**
+ * Loads up to 10 unsaved days of the confirmed bills in `[start, end)` that
+ * need a rate (currency set and not the household's; with `currency`, only
+ * bills in it) and returns the household currency. Never throws for a rate
+ * problem: those bills stay unconverted.
+ */
+export async function loadRateDays(
+  conn: Connection,
+  rates: ExchangeRateService,
+  householdId: string,
+  start: string,
+  end: string,
+  currency?: Currency,
+): Promise<Currency> {
+  const params: unknown[] = [start, end];
+  if (currency) params.push(currency);
+  params.push(householdId);
+  // One row per date, or a single row with a NULL date when none needs a rate.
+  const rows = (await conn.execute(
+    `SELECT h.currency, d.bill_date
+     FROM   households h
+     LEFT   JOIN LATERAL (
+              SELECT DISTINCT b.bill_date::text AS bill_date
+              FROM   bills b
+              WHERE  b.household_id = h.id
+                AND  b.status     = 'confirmed'
+                AND  b.deleted_at IS NULL
+                AND  b.bill_date >= ?
+                AND  b.bill_date <  ?
+                AND  b.currency IS NOT NULL
+                AND  b.currency <> h.currency
+                ${currency ? 'AND  b.currency = ?' : ''}
+            ) d ON true
+     WHERE  h.id = ?`,
+    params,
+  )) as Array<{ currency: Currency; bill_date: string | null }>;
+  const dates = rows.flatMap((r) => (r.bill_date ? [r.bill_date] : []));
+  if (dates.length > 0) await rates.ensureDays(dates, { max: 10 });
+  return rows[0].currency;
+}
+
 /** A bill's total in its household currency and the rate behind it. */
 export interface BillConversion {
   household_currency: Currency;

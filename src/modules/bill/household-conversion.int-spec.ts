@@ -18,11 +18,13 @@ import { ExchangeRateService } from '../exchange-rate/exchange-rate.service';
 import { EXCHANGE_RATE_PROVIDER } from '../exchange-rate/exchange-rate.provider';
 import { StubProvider } from '../exchange-rate/testing/stub-exchange-rate.provider';
 import { BillCrudService } from './bill-crud.service';
+import { BillDashboardService } from './bill-dashboard.service';
 import {
   BillConversionService,
   fetchUnconverted,
 } from './household-conversion';
 import type { BillResponseDto } from './dto/bill-response.dto';
+import type { BillDashboardResponseDto } from './dto/bill-dashboard.dto';
 
 jest.setTimeout(30_000);
 
@@ -42,6 +44,7 @@ describe('household currency conversion (PostgreSQL)', () => {
   let orm: MikroORM;
   let provider: StubProvider;
   let crud: BillCrudService;
+  let dashboard: BillDashboardService;
   let userId: string;
   // EUR household with categories Food and Home.
   let householdId: string;
@@ -50,6 +53,8 @@ describe('household currency conversion (PostgreSQL)', () => {
   // EUR household that bill writes go to, so they leave the others as seeded.
   let writeHouseholdId: string;
   let writeSubId: string;
+  // Households the dashboard specs create for themselves.
+  const ownHouseholdIds: string[] = [];
   const id = {
     eur0302: '',
     mdl0302: '',
@@ -84,13 +89,14 @@ describe('household currency conversion (PostgreSQL)', () => {
         MikroOrmModule.forFeature([Bill, Market, SubCategory]),
         ExchangeRateModule,
       ],
-      providers: [BillCrudService, BillConversionService],
+      providers: [BillCrudService, BillConversionService, BillDashboardService],
     })
       .overrideProvider(EXCHANGE_RATE_PROVIDER)
       .useValue(provider)
       .compile();
     orm = mod.get(MikroORM);
     crud = mod.get(BillCrudService);
+    dashboard = mod.get(BillDashboardService);
     await mod
       .get(ExchangeRateService)
       .ensureDays(['2026-03-02', '2026-03-07'], { max: 10 });
@@ -207,24 +213,27 @@ describe('household currency conversion (PostgreSQL)', () => {
   afterAll(async () => {
     if (!orm) return;
     const conn = orm.em.getConnection();
-    const hids = [householdId, mdlHouseholdId, writeHouseholdId];
+    const hids = [
+      householdId,
+      mdlHouseholdId,
+      writeHouseholdId,
+      ...ownHouseholdIds,
+    ];
+    const ph = hids.map(() => '?').join(', ');
     await conn.execute(
-      'DELETE FROM bill_sub_categories WHERE bill_id IN (SELECT id FROM bills WHERE household_id IN (?, ?, ?))',
+      `DELETE FROM bill_sub_categories WHERE bill_id IN (SELECT id FROM bills WHERE household_id IN (${ph}))`,
+      hids,
+    );
+    await conn.execute(`DELETE FROM bills WHERE household_id IN (${ph})`, hids);
+    await conn.execute(
+      `DELETE FROM sub_categories WHERE category_id IN (SELECT id FROM categories WHERE household_id IN (${ph}))`,
       hids,
     );
     await conn.execute(
-      'DELETE FROM bills WHERE household_id IN (?, ?, ?)',
+      `DELETE FROM categories WHERE household_id IN (${ph})`,
       hids,
     );
-    await conn.execute(
-      'DELETE FROM sub_categories WHERE category_id IN (SELECT id FROM categories WHERE household_id IN (?, ?, ?))',
-      hids,
-    );
-    await conn.execute(
-      'DELETE FROM categories WHERE household_id IN (?, ?, ?)',
-      hids,
-    );
-    await conn.execute('DELETE FROM households WHERE id IN (?, ?, ?)', hids);
+    await conn.execute(`DELETE FROM households WHERE id IN (${ph})`, hids);
     await conn.execute('DELETE FROM users WHERE id = ?', [userId]);
     await conn.execute('DELETE FROM exchange_rates WHERE source = ?', [SOURCE]);
     await conn.execute('DELETE FROM exchange_rate_days WHERE source = ?', [
@@ -511,6 +520,227 @@ describe('household currency conversion (PostgreSQL)', () => {
 
       expect(res.bill_date).toBe('2026-02-21');
       expect(res.household_amount).toBeNull();
+    });
+  });
+  // Last in the file: these specs save 2025-01 and 2026-02 days, which
+  // earlier specs expect to find unsaved.
+  describe('dashboard', () => {
+    const march = { type: 'month', year: 2026, month: 3 } as const;
+
+    /** An own household with confirmed bills of `[date, amount, currency]`. */
+    async function ownHousehold(
+      currency: Currency,
+      bills: Array<[string, number, Currency | null]>,
+    ): Promise<{ hid: string; billIds: string[] }> {
+      const em = orm.em.fork();
+      const household = em.create(Household, {
+        name: `Conversion dashboard ${currency}`,
+        currency,
+        created_by: em.getReference(User, userId),
+      } as never);
+      const created = bills.map(([bill_date, amount, c]) =>
+        em.create(Bill, {
+          household,
+          created_by: em.getReference(User, userId),
+          status: BillStatus.CONFIRMED,
+          bill_date,
+          amount,
+          currency: c,
+        } as never),
+      );
+      await em.flush();
+      ownHouseholdIds.push(household.id);
+      return { hid: household.id, billIds: created.map((b) => b.id) };
+    }
+
+    /** Runs `fn` with the stub publishing EUR at `eur(date)` MDL for any day. */
+    async function withPublished<T>(
+      eur: (date: string) => number,
+      fn: () => Promise<T>,
+    ): Promise<T> {
+      const original = provider.answer;
+      provider.answer = (date) =>
+        Promise.resolve({
+          date,
+          rates: [{ currency: 'EUR', rate: eur(date), nominal: 1 }],
+        });
+      try {
+        return await fn();
+      } finally {
+        provider.answer = original;
+      }
+    }
+
+    const total = (res: BillDashboardResponseDto, period: string) =>
+      res.in_household_currency.period_totals.find((p) => p.period === period)
+        ?.total;
+    const householdAmount = (res: BillDashboardResponseDto, billId: string) =>
+      res.bills.find((b) => b.id === billId)?.household_amount;
+
+    it('period_totals sum EUR and converted MDL', async () => {
+      const res = await dashboard.getDashboard(householdId, march);
+
+      expect(res.in_household_currency.currency).toBe(Currency.EUR);
+      expect(res.in_household_currency.period_totals).toHaveLength(31);
+      expect(total(res, '2026-03-02')).toBe(20);
+      expect(total(res, '2026-03-07')).toBe(8);
+      expect(total(res, '2026-03-09')).toBe(4);
+      expect(total(res, '2026-03-01')).toBe(0);
+    });
+
+    it('by_currency keeps the original amounts', async () => {
+      const res = await dashboard.getDashboard(householdId, march);
+
+      expect(res.by_currency.map((s) => s.currency)).toEqual([
+        Currency.EUR,
+        Currency.MDL,
+        null,
+      ]);
+      const mdl = res.by_currency[1];
+      expect(
+        mdl.period_totals.find((p) => p.period === '2026-03-02')?.total,
+      ).toBe(200);
+    });
+
+    it('category_stats use converted line amounts', async () => {
+      const res = await dashboard.getDashboard(householdId, march);
+
+      expect(
+        res.in_household_currency.category_stats.map((c) => [
+          c.category_name,
+          c.total_amount,
+          c.percentage,
+        ]),
+      ).toEqual([
+        ['Food', 28, 87.5],
+        ['Home', 4, 12.5],
+      ]);
+    });
+
+    it('unconverted lists the NULL-currency bill', async () => {
+      const res = await dashboard.getDashboard(householdId, march);
+
+      expect(res.in_household_currency.unconverted).toEqual([
+        { currency: null, bill_count: 1, amount: 31 },
+      ]);
+    });
+
+    it('bills[] carry household_amount', async () => {
+      const res = await dashboard.getDashboard(householdId, march);
+
+      expect(householdAmount(res, id.eur0302)).toBe(10);
+      expect(householdAmount(res, id.mdl0302)).toBe(10);
+      expect(householdAmount(res, id.mdl0307)).toBe(8);
+      expect(householdAmount(res, id.mdl0309)).toBe(4);
+      expect(householdAmount(res, id.none0302)).toBeNull();
+      expect(res.bills).toHaveLength(5);
+    });
+
+    it('a repeat request asks only for the unpublished day', async () => {
+      await dashboard.getDashboard(householdId, march);
+      provider.calls = [];
+
+      await dashboard.getDashboard(householdId, march);
+
+      // Saved days are never asked again; 03-09 has no marker by design.
+      expect(provider.calls).toEqual(['2026-03-09']);
+    });
+
+    it('a second identical request makes zero provider calls', async () => {
+      const { hid, billIds } = await ownHousehold(Currency.EUR, [
+        ['2026-02-23', 100, Currency.MDL],
+        ['2026-02-24', 100, Currency.MDL],
+      ]);
+      const feb = { type: 'month', year: 2026, month: 2 } as const;
+
+      await withPublished(
+        () => 25,
+        async () => {
+          provider.calls = [];
+          const first = await dashboard.getDashboard(hid, feb);
+          expect(provider.calls).toEqual(['2026-02-23', '2026-02-24']);
+          expect(householdAmount(first, billIds[1])).toBe(4);
+
+          provider.calls = [];
+          await dashboard.getDashboard(hid, feb);
+          expect(provider.calls).toEqual([]);
+        },
+      );
+    });
+
+    it('provider down → still resolves, unsaved-day bills appear in unconverted', async () => {
+      const { hid, billIds } = await ownHousehold(Currency.EUR, [
+        ['2024-01-15', 50, Currency.MDL],
+      ]);
+      const original = provider.answer;
+      provider.answer = () => Promise.reject(new ServiceUnavailableException());
+      let res: BillDashboardResponseDto;
+      try {
+        res = await dashboard.getDashboard(hid, {
+          type: 'month',
+          year: 2024,
+          month: 1,
+        });
+      } finally {
+        provider.answer = original;
+      }
+
+      expect(res.in_household_currency.unconverted).toEqual([
+        { currency: Currency.MDL, bill_count: 1, amount: 50 },
+      ]);
+      expect(total(res, '2024-01-15')).toBe(0);
+      expect(householdAmount(res, billIds[0])).toBeNull();
+    });
+
+    it('more than 10 unsaved days → 10 calls; the next request fetches the remaining', async () => {
+      const days = Array.from(
+        { length: 12 },
+        (_, i) => `2025-01-${String(i + 1).padStart(2, '0')}`,
+      );
+      const { hid, billIds } = await ownHousehold(
+        Currency.EUR,
+        days.map((d) => [d, 100, Currency.MDL] as [string, number, Currency]),
+      );
+      const jan = { type: 'month', year: 2025, month: 1 } as const;
+      // 01-10 → 25 MDL per EUR, 01-12 → 27.
+      const eur = (date: string) => 15 + Number(date.slice(8));
+
+      await withPublished(eur, async () => {
+        provider.calls = [];
+        const first = await dashboard.getDashboard(hid, jan);
+        expect(provider.calls).toEqual(days.slice(0, 10));
+        expect(first.in_household_currency.unconverted).toEqual([]);
+        // Not fetched yet: the latest saved day, 01-10, is used.
+        expect(householdAmount(first, billIds[11])).toBe(4);
+
+        provider.calls = [];
+        const second = await dashboard.getDashboard(hid, jan);
+        expect(provider.calls).toEqual(days.slice(10));
+        expect(householdAmount(second, billIds[11])).toBe(3.7);
+
+        provider.calls = [];
+        await dashboard.getDashboard(hid, jan);
+        expect(provider.calls).toEqual([]);
+      });
+    });
+
+    it('switching household currency to USD converts everything to USD without a fetch', async () => {
+      const { hid, billIds } = await ownHousehold(Currency.EUR, [
+        ['2026-03-02', 10, Currency.EUR],
+        ['2026-03-02', 200, Currency.MDL],
+      ]);
+      await orm.em
+        .getConnection()
+        .execute("UPDATE households SET currency = 'USD' WHERE id = ?", [hid]);
+      provider.calls = [];
+
+      const res = await dashboard.getDashboard(hid, march);
+
+      expect(provider.calls).toEqual([]);
+      expect(res.in_household_currency.currency).toBe(Currency.USD);
+      expect(householdAmount(res, billIds[0])).toBe(11.11);
+      expect(householdAmount(res, billIds[1])).toBe(11.11);
+      expect(total(res, '2026-03-02')).toBe(22.22);
     });
   });
 });

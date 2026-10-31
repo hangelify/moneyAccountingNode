@@ -56,10 +56,12 @@ describe('bill list and dashboard SQL (PostgreSQL)', () => {
     } as never);
     const household = em.create(Household, {
       name: 'Sql',
+      currency: Currency.EUR,
       created_by: user,
     } as never);
     const other = em.create(Household, {
       name: 'Sql other',
+      currency: Currency.EUR,
       created_by: user,
     } as never);
     const lidl = em.create(Market, {
@@ -149,6 +151,7 @@ describe('bill list and dashboard SQL (PostgreSQL)', () => {
     // A household mixing MDL, EUR and bills without a currency on one day.
     const mixed = em.create(Household, {
       name: 'Sql mixed',
+      currency: Currency.EUR,
       created_by: user,
     } as never);
     const may10 = { bill_date: '2026-05-10', household: mixed };

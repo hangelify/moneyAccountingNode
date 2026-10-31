@@ -13,6 +13,7 @@ import { CategoryService } from './category.service';
 import { SubCategoryService } from '../sub-category/sub-category.service';
 import { BillPhotoService } from '../bill/bill-photo.service';
 import type { BillAiOrchestrator } from '../bill/bill-ai.orchestrator';
+import { Currency } from '../../types/currency.enum';
 
 jest.setTimeout(30_000);
 
@@ -49,6 +50,7 @@ describe('soft delete of categories and their sub-categories (PostgreSQL)', () =
     } as never);
     const household = em.create(Household, {
       name: 'P15 soft delete',
+      currency: Currency.EUR,
       created_by: user,
     } as never);
     await em.flush();

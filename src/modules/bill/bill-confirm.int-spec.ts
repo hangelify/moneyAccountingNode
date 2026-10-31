@@ -15,6 +15,7 @@ import { BillStatus } from '../../types/bill-status.enum';
 import { BillCrudService } from './bill-crud.service';
 import type { CreateBillItemDto } from './dto/create-bill.dto';
 import type { ConfirmBillItemDto } from './dto/confirm-bill.dto';
+import { Currency } from '../../types/currency.enum';
 
 jest.setTimeout(30_000);
 
@@ -68,10 +69,12 @@ describe('confirm and create bill (PostgreSQL)', () => {
     } as never);
     const household = em.create(Household, {
       name: 'P08 confirm',
+      currency: Currency.EUR,
       created_by: user,
     } as never);
     const other = em.create(Household, {
       name: 'P08 other',
+      currency: Currency.EUR,
       created_by: user,
     } as never);
     const category = em.create(Category, {

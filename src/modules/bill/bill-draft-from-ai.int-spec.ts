@@ -18,6 +18,7 @@ import { BillPhotoService } from './bill-photo.service';
 import type { BillAiOrchestrator } from './bill-ai.orchestrator';
 import { ParsedAndCategorizedBillSchema } from './tasks/schemas/parsed-and-categorized-bill.schema';
 import type { ParsedBillResponseDto } from './dto/parsed-bill-response.dto';
+import { Currency } from '../../types/currency.enum';
 
 jest.setTimeout(30_000);
 
@@ -56,6 +57,7 @@ describe('draft from AI output (PostgreSQL)', () => {
     } as never);
     const household = em.create(Household, {
       name: 'P07 draft',
+      currency: Currency.EUR,
       created_by: user,
     } as never);
     const category = em.create(Category, {
@@ -538,6 +540,7 @@ describe('draft from AI output (PostgreSQL)', () => {
       const fork = orm.em.fork();
       const other = fork.create(Household, {
         name: 'P14 drafts list',
+        currency: Currency.EUR,
         created_by: fork.getReference(User, userId),
       } as never);
       await fork.flush();

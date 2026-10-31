@@ -1,4 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
+import { Currency } from '../../../types/currency.enum';
 
 export class HouseholdMemberDto {
   @ApiProperty({ format: 'uuid' })
@@ -26,6 +27,9 @@ export class HouseholdResponseDto {
 
   @ApiProperty({ example: 'Family Budget' })
   name!: string;
+
+  @ApiProperty({ enum: Currency, example: Currency.EUR })
+  currency!: Currency;
 
   @ApiProperty({ type: Date })
   created_at!: Date;

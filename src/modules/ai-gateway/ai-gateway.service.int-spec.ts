@@ -40,6 +40,7 @@ import {
   loadAiUsageLimits,
 } from './internal/ai-usage-limits';
 import { User } from '../../entities/user.entity';
+import { Currency } from '../../types/currency.enum';
 
 jest.setTimeout(30_000);
 
@@ -667,6 +668,7 @@ describe('AiGatewayService', () => {
     } as never);
     const household = fork.create(Household, {
       name: 'AI household',
+      currency: Currency.EUR,
       created_by: user,
     } as never);
     await fork.flush();

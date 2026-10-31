@@ -43,10 +43,12 @@ describe('spending breakdown SQL (PostgreSQL)', () => {
     } as never);
     const household = em.create(Household, {
       name: 'Spend',
+      currency: Currency.EUR,
       created_by: user,
     } as never);
     const other = em.create(Household, {
       name: 'Spend other',
+      currency: Currency.EUR,
       created_by: user,
     } as never);
     const deletedAt = new Date('2026-06-01T00:00:00Z');

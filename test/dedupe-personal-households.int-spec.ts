@@ -60,7 +60,7 @@ describe('DedupePersonalHouseholds migration (PostgreSQL)', () => {
   ): Promise<string> => {
     const id = randomUUID();
     await sql(
-      `insert into households (id, name, created_by, created_at) values (?, ?, ?, ?)`,
+      `insert into households (id, name, created_by, created_at, currency) values (?, ?, ?, ?, 'EUR')`,
       [id, name, ownerId, createdAt],
     );
     await sql(

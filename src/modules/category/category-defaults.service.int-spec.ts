@@ -32,6 +32,7 @@ describe('CategoryDefaultsService', () => {
     });
     const h = fork.create(Household, {
       name: `${NAME_PREFIX}${label}`,
+      currency: Currency.EUR,
       created_by: u,
       created_at: new Date(),
     });

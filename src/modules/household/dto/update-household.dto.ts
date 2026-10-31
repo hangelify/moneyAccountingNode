@@ -1,9 +1,16 @@
-import { IsString, Length } from 'class-validator';
-import { ApiProperty } from '@nestjs/swagger';
+import { IsEnum, IsOptional, IsString, Length } from 'class-validator';
+import { ApiPropertyOptional } from '@nestjs/swagger';
+import { Currency } from '../../../types/currency.enum';
 
 export class UpdateHouseholdDto {
-  @ApiProperty({ example: 'Family Budget 2026' })
+  @ApiPropertyOptional({ example: 'Family Budget 2026' })
+  @IsOptional()
   @IsString()
   @Length(1, 255)
-  name!: string;
+  name?: string;
+
+  @ApiPropertyOptional({ enum: Currency })
+  @IsOptional()
+  @IsEnum(Currency)
+  currency?: Currency;
 }

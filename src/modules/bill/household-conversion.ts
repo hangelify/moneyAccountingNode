@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { Connection, EntityManager } from '@mikro-orm/core';
+import { Connection, EntityManager, Transaction } from '@mikro-orm/core';
 import { Currency } from '../../types/currency.enum';
 import { ExchangeRateService } from '../exchange-rate/exchange-rate.service';
 import {
@@ -61,7 +61,8 @@ export function householdConversionJoin(bill = 'b'): string {
 /**
  * Confirmed bills in `[start, end)` that could not be converted, per original
  * currency (by code, bills without a currency last). With `currency`, only
- * bills in that currency are looked at.
+ * bills in that currency are looked at; with `ctx`, it reads in that
+ * transaction.
  */
 export async function fetchUnconverted(
   conn: Connection,
@@ -70,6 +71,7 @@ export async function fetchUnconverted(
   start: string,
   end: string,
   currency?: Currency,
+  ctx?: Transaction,
 ): Promise<UnconvertedDto[]> {
   const params: unknown[] = [source, source, householdId, start, end];
   if (currency) params.push(currency);
@@ -87,6 +89,8 @@ export async function fetchUnconverted(
      GROUP  BY b.currency
      ORDER  BY b.currency::text NULLS LAST`,
     params,
+    'all',
+    ctx,
   )) as Array<{
     currency: Currency | null;
     bill_count: number;

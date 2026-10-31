@@ -111,6 +111,7 @@ export class SpendingBreakdownService {
           range.start,
           range.end,
           dto.currency,
+          tx.getTransactionContext(),
         );
         return { rows, convertedRows, unconverted };
       });

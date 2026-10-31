@@ -341,6 +341,35 @@ describe('household currency conversion (PostgreSQL)', () => {
       expect(await unconverted(Currency.MDL)).toEqual([]);
     });
 
+    it('reads within a transaction when given its context', async () => {
+      const rows = await orm.em
+        .fork()
+        .transactional(async (tx) => {
+          // Seen only inside this transaction, which is rolled back below.
+          await tx
+            .getConnection()
+            .execute(
+              `UPDATE bills SET amount = 32 WHERE id = ?`,
+              [id.none0302],
+              'run',
+              tx.getTransactionContext(),
+            );
+          const inside = await fetchUnconverted(
+            tx.getConnection(),
+            SOURCE,
+            householdId,
+            '2026-03-01',
+            '2026-04-01',
+            undefined,
+            tx.getTransactionContext(),
+          );
+          throw Object.assign(new Error('rollback'), { inside });
+        })
+        .catch((e: { inside: unknown }) => e.inside);
+
+      expect(rows).toEqual([{ currency: null, bill_count: 1, amount: 32 }]);
+    });
+
     it('lists bills whose rate is not saved, by currency', async () => {
       // A source with no saved rates: no MDL bill can be converted.
       const rows = await fetchUnconverted(

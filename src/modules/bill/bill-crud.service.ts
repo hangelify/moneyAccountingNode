@@ -1,6 +1,7 @@
 import {
   Inject,
   Injectable,
+  Logger,
   Optional,
   NotFoundException,
   BadRequestException,
@@ -115,6 +116,8 @@ function toDraftItem(it: ParsedBillItemResponseDto) {
 
 @Injectable()
 export class BillCrudService {
+  private readonly log = new Logger(BillCrudService.name);
+
   constructor(
     @InjectRepository(Bill)
     private readonly billRepository: EntityRepository<Bill>,
@@ -622,13 +625,20 @@ export class BillCrudService {
    */
   private async warmRate(householdId: string, bill: Bill): Promise<void> {
     if (!bill.currency) return;
-    const household = await this.em.findOne(
-      Household,
-      { id: householdId },
-      { fields: ['currency'] },
-    );
-    if (!household || household.currency === bill.currency) return;
-    await this.exchangeRates.ensureDays([bill.bill_date], { max: 1 });
+    // The write has committed: failing here would invite a duplicate retry.
+    try {
+      const household = await this.em.findOne(
+        Household,
+        { id: householdId },
+        { fields: ['currency'] },
+      );
+      if (!household || household.currency === bill.currency) return;
+      await this.exchangeRates.ensureDays([bill.bill_date], { max: 1 });
+    } catch (e) {
+      this.log.warn(
+        `Could not save rates for bill ${bill.id}: ${(e as Error).message}`,
+      );
+    }
   }
 
   /**

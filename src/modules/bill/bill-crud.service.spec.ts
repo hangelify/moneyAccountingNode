@@ -128,6 +128,21 @@ describe('BillCrudService', () => {
       expect(em.flush as jest.Mock).toHaveBeenCalled();
     });
 
+    it('still resolves when the household lookup for the rate fails', async () => {
+      const { service, em } = makeService();
+      (em.findOne as jest.Mock).mockRejectedValue(new Error('db gone'));
+
+      const result = await service.createBill(householdId, userId, {
+        bill_date: '2026-05-19',
+        currency: Currency.MDL,
+        total_amount: 9.99,
+        items: [],
+      });
+
+      expect(result.total_amount).toBe(9.99);
+      expect(em.flush as jest.Mock).toHaveBeenCalled();
+    });
+
     it('throws BadRequestException when market not found for user', async () => {
       const { service, marketRepo } = makeService();
       (marketRepo.findOne as jest.Mock).mockResolvedValue(null);

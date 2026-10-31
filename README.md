@@ -259,6 +259,12 @@ Every call routed through the AI gateway is persisted for auditing and cost trac
 - **npm**
 - **Docker + Docker Compose** (required for PostgreSQL, Redis, and MinIO)
 
+If `docker compose` fails with `permission denied while trying to connect to the docker API at unix:///var/run/docker.sock`, your user is not in the `docker` group. Either prefix the commands with `sudo`, or add yourself to the group and log out and back in (note that `docker` group membership is equivalent to root access):
+
+```bash
+sudo usermod -aG docker $USER
+```
+
 ---
 
 ## Environment Variables
@@ -369,6 +375,9 @@ cp .env.example .env
 # 3. Start PostgreSQL, Redis, and MinIO
 docker compose up -d postgres redis minio
 
+# 3a. First run only: create the S3 bucket ($S3_BUCKET) in MinIO
+docker compose up minio-init
+
 # 4. Apply database migrations
 npm run migration:up
 
@@ -377,6 +386,8 @@ npm run start
 ```
 
 The API will be available at `http://localhost:3000` (or `$PORT`).
+
+MinIO's official images (`minio/minio`, `minio/mc`) are no longer published on Docker Hub, so `docker-compose.yml` uses the community fork's pinned images `pgsty/minio` and `pgsty/mc` instead. They are drop-in replacements: same ports (API `9000`, console `http://localhost:9001`), same `MINIO_ROOT_*` credentials (`S3_ACCESS_KEY` / `S3_SECRET_KEY`, default `minioadmin`), and the same `mc` CLI.
 
 ### Watch mode
 

@@ -723,14 +723,15 @@ describe('household currency conversion (PostgreSQL)', () => {
       expect(res.bills).toHaveLength(5);
     });
 
-    it('a repeat request asks only for the unpublished day', async () => {
+    it('a repeat request asks for no day, not even the unpublished one', async () => {
       await dashboard.getDashboard(householdId, march);
       provider.calls = [];
 
       await dashboard.getDashboard(householdId, march);
 
-      // Saved days are never asked again; 03-09 has no marker by design.
-      expect(provider.calls).toEqual(['2026-03-09']);
+      // Saved days are never asked again; 03-09 is old and empty, so it is
+      // marked as having no rates.
+      expect(provider.calls).toEqual([]);
     });
 
     it('a second identical request makes zero provider calls', async () => {
@@ -809,6 +810,39 @@ describe('household currency conversion (PostgreSQL)', () => {
         await dashboard.getDashboard(hid, jan);
         expect(provider.calls).toEqual([]);
       });
+    });
+
+    it('old empty days do not block a newer day from being fetched', async () => {
+      const empty = Array.from(
+        { length: 10 },
+        (_, i) => `2024-05-${String(i + 1).padStart(2, '0')}`,
+      );
+      const { hid, billIds } = await ownHousehold(Currency.EUR, [
+        ...empty.map(
+          (d) => [d, 100, Currency.MDL] as [string, number, Currency],
+        ),
+        ['2024-05-20', 100, Currency.MDL],
+      ]);
+      const may = { type: 'month', year: 2024, month: 5 } as const;
+      const original = provider.answer;
+      provider.answer = (date) =>
+        Promise.resolve(
+          date < '2024-05-20'
+            ? null
+            : { date, rates: [{ currency: 'EUR', rate: 25, nominal: 1 }] },
+        );
+      try {
+        provider.calls = [];
+        await dashboard.getDashboard(hid, may);
+        expect(provider.calls).toEqual(empty);
+
+        provider.calls = [];
+        const second = await dashboard.getDashboard(hid, may);
+        expect(provider.calls).toEqual(['2024-05-20']);
+        expect(householdAmount(second, billIds[10])).toBe(4);
+      } finally {
+        provider.answer = original;
+      }
     });
 
     it('switching household currency to USD converts everything to USD without a fetch', async () => {

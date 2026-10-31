@@ -4,6 +4,7 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { EntityManager } from '@mikro-orm/core';
 import { Currency } from '../../types/currency.enum';
@@ -24,6 +25,19 @@ function chisinauToday(now: Date = new Date()): string {
     month: '2-digit',
     day: '2-digit',
   }).format(now);
+}
+
+/**
+ * Days a source may still publish late: an empty day older than this is
+ * marked as having no rates and never asked again.
+ */
+const LATE_PUBLISH_DAYS = 7;
+
+/** `date` (`YYYY-MM-DD`) moved by `days` calendar days. */
+function addDays(date: string, days: number): string {
+  const d = new Date(`${date}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
 }
 
 /**
@@ -50,7 +64,9 @@ export class ExchangeRateService {
   /**
    * Loads up to `max` unsaved days (oldest first) so SQL can read their
    * rates. Never throws: a day that could not be loaded is only logged and
-   * returned in `missing`, so a rate problem never fails a request.
+   * returned in `missing`, so a rate problem never fails a request. A day
+   * saved without rates is missing too. The first provider outage stops the
+   * loop, so a down provider costs one call, not one timeout per day.
    */
   async ensureDays(
     dates: string[],
@@ -69,21 +85,31 @@ export class ExchangeRateService {
       let unsaved = candidates;
       if (candidates.length > 0) {
         const saved = (await this.em.getConnection().execute(
-          `SELECT rate_date::text AS rate_date FROM exchange_rate_days
-               WHERE source = ? AND rate_date = ANY(?::date[])`,
+          `SELECT rate_date::text AS rate_date, currency_count
+             FROM exchange_rate_days
+             WHERE source = ? AND rate_date = ANY(?::date[])`,
           [this.provider.source, `{${candidates.join(',')}}`],
-        )) as { rate_date: string }[];
+        )) as { rate_date: string; currency_count: number }[];
         const savedDates = new Set(saved.map((r) => r.rate_date));
         unsaved = candidates.filter((d) => !savedDates.has(d));
+        // Marked empty: the source never published that day.
+        for (const r of saved)
+          if (r.currency_count === 0) missing.add(r.rate_date);
       }
 
-      unsaved.forEach((d, i) => {
-        if (i >= opts.max) missing.add(d);
-      });
-      for (const d of unsaved.slice(0, Math.max(0, opts.max))) {
+      const toFetch = unsaved.slice(0, Math.max(0, opts.max));
+      unsaved.slice(toFetch.length).forEach((d) => missing.add(d));
+      for (const [i, d] of toFetch.entries()) {
         try {
           await this.ensureDay(d);
         } catch (e) {
+          if (e instanceof ServiceUnavailableException) {
+            toFetch.slice(i).forEach((left) => missing.add(left));
+            this.log.warn(
+              `Rates unavailable from ${d}, skipped ${toFetch.length - i} day(s): ${e.message}`,
+            );
+            break;
+          }
           missing.add(d);
           this.log.warn(`No rates for ${d}: ${(e as Error).message}`);
         }
@@ -189,8 +215,12 @@ export class ExchangeRateService {
 
   private async fetchAndSave(date: string): Promise<void> {
     const day = await this.provider.fetchDay(date);
-    // No marker: the day may still be published later.
     if (!day) {
+      // A recent day may still be published later, so it gets no marker; an
+      // old one never will, and its empty marker stops asking again.
+      if (date < addDays(chisinauToday(), -LATE_PUBLISH_DAYS)) {
+        await this.saveDay(date, []);
+      }
       throw new NotFoundException(
         `No ${this.provider.source} rates published for ${date}`,
       );
@@ -203,7 +233,11 @@ export class ExchangeRateService {
         `Skipped ${skipped} currency code(s) outside Currency for ${date}`,
       );
     }
+    await this.saveDay(date, rates);
+  }
 
+  /** Saves `rates` of `date` and its marker; none marks a day without rates. */
+  private async saveDay(date: string, rates: FetchedRate[]): Promise<void> {
     // Other instances may save the same day at once: rows and marker are
     // written together and a duplicate is ignored, never an error.
     await this.em.fork().transactional(async (tx) => {

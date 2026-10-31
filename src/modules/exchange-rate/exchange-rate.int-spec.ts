@@ -22,6 +22,18 @@ describe('ExchangeRateService (PostgreSQL)', () => {
   // Every test uses its own day, so they never see each other's rows.
   let day = 0;
   const nextDate = () => `2001-01-${String(++day).padStart(2, '0')}`;
+  // Recent days (within a week of Chisinau today) are never marked empty.
+  const daysAgo = (n: number) => {
+    const today = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Europe/Chisinau',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(new Date());
+    const d = new Date(`${today}T00:00:00Z`);
+    d.setUTCDate(d.getUTCDate() - n);
+    return d.toISOString().slice(0, 10);
+  };
 
   beforeAll(async () => {
     const mod = await Test.createTestingModule({
@@ -147,8 +159,8 @@ describe('ExchangeRateService (PostgreSQL)', () => {
     expect(provider.calls).toHaveLength(2);
   });
 
-  it('answers 404 for a day with no rates yet, and asks again next time', async () => {
-    const date = nextDate();
+  it('answers 404 for a recent day with no rates yet, and asks again next time', async () => {
+    const date = daysAgo(1);
     provider.answer = () => Promise.resolve(null);
 
     await expect(service.getRate(Currency.EUR, date)).rejects.toBeInstanceOf(
@@ -159,6 +171,20 @@ describe('ExchangeRateService (PostgreSQL)', () => {
     );
 
     expect(provider.calls).toHaveLength(2);
+  });
+
+  it('answers 404 for an old empty day from its marker, without asking again', async () => {
+    const date = nextDate();
+    provider.answer = () => Promise.resolve(null);
+
+    await expect(service.getRate(Currency.EUR, date)).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
+    await expect(service.getRate(Currency.EUR, date)).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
+
+    expect(provider.calls).toEqual([date]);
   });
 
   it('returns 1 for MDL without asking anyone', async () => {
@@ -228,6 +254,57 @@ describe('ExchangeRateService (PostgreSQL)', () => {
       await expect(service.ensureDays([date], { max: 1 })).resolves.toEqual({
         missing: [date],
       });
+    });
+
+    it('asks an old empty day once, then reports it missing without a call', async () => {
+      const date = nextDate();
+      provider.answer = () => Promise.resolve(null);
+
+      await expect(service.ensureDays([date], { max: 1 })).resolves.toEqual({
+        missing: [date],
+      });
+      await expect(service.ensureDays([date], { max: 1 })).resolves.toEqual({
+        missing: [date],
+      });
+
+      expect(provider.calls).toEqual([date]);
+    });
+
+    it('asks a recent empty day again', async () => {
+      const date = daysAgo(2);
+      provider.answer = () => Promise.resolve(null);
+
+      await service.ensureDays([date], { max: 1 });
+      await expect(service.ensureDays([date], { max: 1 })).resolves.toEqual({
+        missing: [date],
+      });
+
+      expect(provider.calls).toEqual([date, date]);
+    });
+
+    it('stops at the first provider failure and reports every day left', async () => {
+      const dates = [nextDate(), nextDate(), nextDate()];
+      provider.answer = () =>
+        Promise.reject(new ServiceUnavailableException('down'));
+
+      await expect(service.ensureDays(dates, { max: 10 })).resolves.toEqual({
+        missing: dates,
+      });
+
+      expect(provider.calls).toEqual([dates[0]]);
+    });
+
+    it('keeps going after an empty day', async () => {
+      const dates = [nextDate(), nextDate(), nextDate()];
+      const answer = provider.answer;
+      provider.answer = (d) =>
+        d === dates[0] ? Promise.resolve(null) : answer(d);
+
+      await expect(service.ensureDays(dates, { max: 10 })).resolves.toEqual({
+        missing: [dates[0]],
+      });
+
+      expect(provider.calls).toEqual(dates);
     });
 
     it('skips future dates without a call', async () => {

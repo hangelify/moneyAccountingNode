@@ -43,6 +43,58 @@ export class ExchangeRateService {
     private readonly provider: ExchangeRateProvider,
   ) {}
 
+  get source(): string {
+    return this.provider.source;
+  }
+
+  /**
+   * Loads up to `max` unsaved days (oldest first) so SQL can read their
+   * rates. Never throws: a day that could not be loaded is only logged and
+   * returned in `missing`, so a rate problem never fails a request.
+   */
+  async ensureDays(
+    dates: string[],
+    opts: { max: number },
+  ): Promise<{ missing: string[] }> {
+    const today = chisinauToday();
+    const unique = [...new Set(dates)].sort();
+    const missing = new Set<string>();
+    const candidates: string[] = [];
+    for (const d of unique) {
+      if (isCalendarDate(d) && d <= today) candidates.push(d);
+      else missing.add(d);
+    }
+
+    try {
+      let unsaved = candidates;
+      if (candidates.length > 0) {
+        const saved = (await this.em.getConnection().execute(
+          `SELECT rate_date::text AS rate_date FROM exchange_rate_days
+               WHERE source = ? AND rate_date = ANY(?::date[])`,
+          [this.provider.source, `{${candidates.join(',')}}`],
+        )) as { rate_date: string }[];
+        const savedDates = new Set(saved.map((r) => r.rate_date));
+        unsaved = candidates.filter((d) => !savedDates.has(d));
+      }
+
+      unsaved.forEach((d, i) => {
+        if (i >= opts.max) missing.add(d);
+      });
+      for (const d of unsaved.slice(0, Math.max(0, opts.max))) {
+        try {
+          await this.ensureDay(d);
+        } catch (e) {
+          missing.add(d);
+          this.log.warn(`No rates for ${d}: ${(e as Error).message}`);
+        }
+      }
+    } catch (e) {
+      this.log.warn(`Could not check saved rate days: ${(e as Error).message}`);
+      candidates.forEach((d) => missing.add(d));
+    }
+    return { missing: [...missing].sort() };
+  }
+
   /** MDL for one unit of `currency` on `date` (`YYYY-MM-DD`). */
   async getRate(currency: Currency, date: string): Promise<number> {
     this.assertDate(date);

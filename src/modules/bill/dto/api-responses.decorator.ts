@@ -23,6 +23,7 @@ import {
   DraftListResponseDto,
 } from './bill-detail-response.dto';
 import { BillDashboardResponseDto } from './bill-dashboard.dto';
+import { SpendingBreakdownResponseDto } from './spending-breakdown.dto';
 import { BillListResponseDto } from './bill-list-response.dto';
 
 export function ApiParsePhotoResponses(): MethodDecorator & ClassDecorator {
@@ -206,4 +207,27 @@ export const ApiDashboardResponses = () =>
       description: 'Dashboard data retrieved',
     }),
     ApiResponse({ status: 401, description: 'Unauthorized' }),
+  );
+
+export const ApiSpendingBreakdownResponses = () =>
+  applyDecorators(
+    ApiResponse({
+      status: 200,
+      type: SpendingBreakdownResponseDto,
+      description:
+        'Spending as a category → sub-category tree per currency. Totals ' +
+        'are sums of receipt line amounts, not of bill totals, and can ' +
+        'differ from them by a few cents.',
+    }),
+    ApiResponse({
+      status: 400,
+      description:
+        'Invalid query: unknown period, malformed date, custom without ' +
+        'from/to, from after to, or a custom range over 10 years',
+    }),
+    ApiResponse({ status: 401, description: 'Unauthorized' }),
+    ApiResponse({
+      status: 403,
+      description: 'The user is not a member of the household',
+    }),
   );

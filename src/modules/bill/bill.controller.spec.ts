@@ -1,8 +1,10 @@
 import { Test } from '@nestjs/testing';
 import {
+  BadRequestException,
   Logger,
   UnprocessableEntityException,
   UnsupportedMediaTypeException,
+  ValidationPipe,
 } from '@nestjs/common';
 import {
   EXCEPTION_FILTERS_METADATA,
@@ -16,6 +18,8 @@ import { BillPhotoService } from './bill-photo.service';
 import { BillCrudService } from './bill-crud.service';
 import { BillDashboardService } from './bill-dashboard.service';
 import { BillDashboardQueryDto } from './dto/bill-dashboard.dto';
+import { SpendingBreakdownService } from './spending-breakdown.service';
+import { SpendingBreakdownQueryDto } from './dto/spending-breakdown.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { HouseholdMemberGuard } from '../household/guards/household-member.guard';
 import { AiGatewayErrorFilter } from './filters/ai-gateway-error.filter';
@@ -49,10 +53,12 @@ describe('BillController', () => {
   };
 
   const getSignedUrl = jest.fn();
+  const getSpendingBreakdown = jest.fn();
 
   beforeEach(async () => {
     parseAndCategorize.mockReset();
     getSignedUrl.mockReset();
+    getSpendingBreakdown.mockReset();
     Object.values(billCrudMock).forEach((fn) => fn.mockReset());
     billDashboardMock?.getDashboard?.mockReset?.();
     const mod = await Test.createTestingModule({
@@ -65,6 +71,10 @@ describe('BillController', () => {
           useValue: { getDashboard: jest.fn() },
         },
         { provide: STORAGE_SERVICE, useValue: { getSignedUrl } },
+        {
+          provide: SpendingBreakdownService,
+          useValue: { getSpendingBreakdown },
+        },
         { provide: APP_FILTER, useClass: AiGatewayErrorFilter },
       ],
     })
@@ -397,6 +407,118 @@ describe('BillController', () => {
         query,
       );
       expect(result).toBe(response);
+    });
+  });
+
+  describe('getSpendingBreakdown', () => {
+    it('delegates to SpendingBreakdownService with the household', async () => {
+      const response = {
+        range: { period: 'month', start: '2026-10-01', end: '2026-11-01' },
+        by_currency: [],
+      };
+      getSpendingBreakdown.mockResolvedValue(response);
+      const query: SpendingBreakdownQueryDto = {
+        period: 'month',
+        anchor: '2026-10-31',
+      };
+
+      const result = await controller.getSpendingBreakdown(
+        { householdId: 'hh-1', role: 'owner' } as never,
+        query,
+      );
+
+      expect(getSpendingBreakdown).toHaveBeenCalledWith('hh-1', query);
+      expect(result).toBe(response);
+    });
+
+    describe('query validation', () => {
+      // The same options as the global pipe in app.setup.ts.
+      const pipe = new ValidationPipe({
+        whitelist: true,
+        transform: true,
+        forbidNonWhitelisted: true,
+      });
+      const validate = (query: Record<string, string>) =>
+        pipe.transform(query, {
+          type: 'query',
+          metatype: SpendingBreakdownQueryDto,
+        }) as Promise<SpendingBreakdownQueryDto>;
+      const messages = async (query: Record<string, string>) => {
+        const err = (await validate(query).catch((e: unknown) => e)) as
+          | BadRequestException
+          | undefined;
+        expect(err).toBeInstanceOf(BadRequestException);
+        return (err!.getResponse() as { message: string[] }).message;
+      };
+
+      it.each(['week', 'month', 'quarter', 'year', '5y'])(
+        'accepts period=%s without anchor',
+        async (period) => {
+          await expect(validate({ period })).resolves.toMatchObject({
+            period,
+          });
+        },
+      );
+
+      it('accepts a custom range of exactly 10 years', async () => {
+        await expect(
+          validate({ period: 'custom', from: '2016-11-01', to: '2026-10-31' }),
+        ).resolves.toMatchObject({ from: '2016-11-01', to: '2026-10-31' });
+      });
+
+      it('accepts a single-day custom range', async () => {
+        await expect(
+          validate({ period: 'custom', from: '2026-10-31', to: '2026-10-31' }),
+        ).resolves.toBeDefined();
+      });
+
+      it('rejects a missing or unknown period', async () => {
+        expect((await messages({})).join()).toMatch(/period/);
+        expect(await messages({ period: 'decade' })).toEqual([
+          'period must be one of the following values: week, month, quarter, year, 5y, custom',
+        ]);
+      });
+
+      it('rejects custom without from and to', async () => {
+        const msgs = await messages({ period: 'custom' });
+        expect(msgs.some((m) => m.startsWith('from'))).toBe(true);
+        expect(msgs.some((m) => m.startsWith('to'))).toBe(true);
+      });
+
+      it('rejects custom with only from', async () => {
+        const msgs = await messages({ period: 'custom', from: '2026-01-01' });
+        expect(msgs.some((m) => m.startsWith('to'))).toBe(true);
+      });
+
+      it('rejects from after to', async () => {
+        expect(
+          await messages({
+            period: 'custom',
+            from: '2026-03-02',
+            to: '2026-03-01',
+          }),
+        ).toEqual(['to must not be before from']);
+      });
+
+      it('rejects a custom range over 10 years', async () => {
+        expect(
+          await messages({
+            period: 'custom',
+            from: '2016-11-01',
+            to: '2026-11-01',
+          }),
+        ).toEqual(['to must be at most 10 years after from']);
+      });
+
+      it.each([
+        ['anchor', { period: 'month', anchor: '2026-02-30' }],
+        ['anchor', { period: 'month', anchor: '2026-10-31T00:00:00Z' }],
+        ['from', { period: 'custom', from: '2026/01/01', to: '2026-01-02' }],
+        ['currency', { period: 'month', currency: 'XXX' }],
+      ])('rejects an invalid %s', async (field, query) => {
+        const msgs = await messages(query);
+        expect(msgs.some((m) => m.startsWith(field))).toBe(true);
+      });
     });
   });
 });

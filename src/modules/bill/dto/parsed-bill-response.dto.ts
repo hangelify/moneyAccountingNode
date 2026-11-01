@@ -66,6 +66,15 @@ export class ParsedBillResponseDto {
   @ApiProperty({ nullable: true, example: 23.45 })
   total_amount!: number | null;
 
+  @ApiProperty({ nullable: true, example: 'J403001234' })
+  fiscal_register_id!: string | null;
+
+  @ApiProperty({ nullable: true, example: '0042' })
+  fiscal_receipt_number!: string | null;
+
+  @ApiProperty({ nullable: true, example: '14:05' })
+  purchase_time!: string | null;
+
   @ApiProperty({ type: [ParsedBillItemResponseDto] })
   items!: ParsedBillItemResponseDto[];
 }

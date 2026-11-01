@@ -12,6 +12,8 @@ import {
   ValidateNested,
   Min,
   Max,
+  Length,
+  Matches,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
@@ -19,7 +21,11 @@ import { Currency } from '../../../types/currency.enum';
 import { MAX_MONEY_AMOUNT } from '../../../common/utils/money.util';
 import { IsCalendarDate } from '../../../common/validators/is-calendar-date';
 import { MaxDecimalPlaces } from '../../../common/validators/max-decimal-places';
-import { MAX_WEIGHT_KG } from '../tasks/schemas/parsed-bill.schema';
+import {
+  MAX_FISCAL_ID_LENGTH,
+  MAX_WEIGHT_KG,
+  PURCHASE_TIME_PATTERN,
+} from '../tasks/schemas/parsed-bill.schema';
 
 export const MAX_BILL_ITEMS = 200;
 
@@ -79,6 +85,30 @@ export class CreateBillDto {
   @IsString()
   @IsOptional()
   description?: string;
+
+  @ApiPropertyOptional({
+    example: 'J403001234',
+    description: 'Cash register / fiscal device id printed on the receipt',
+  })
+  @IsString()
+  @Length(1, MAX_FISCAL_ID_LENGTH)
+  @IsOptional()
+  fiscal_register_id?: string;
+
+  @ApiPropertyOptional({
+    example: '0042',
+    description: 'Receipt number printed on the receipt',
+  })
+  @IsString()
+  @Length(1, MAX_FISCAL_ID_LENGTH)
+  @IsOptional()
+  fiscal_receipt_number?: string;
+
+  @ApiPropertyOptional({ example: '14:05', description: 'HH:MM, 24-hour' })
+  @IsString()
+  @Matches(PURCHASE_TIME_PATTERN)
+  @IsOptional()
+  purchase_time?: string;
 
   @ApiProperty({
     type: [CreateBillItemDto],

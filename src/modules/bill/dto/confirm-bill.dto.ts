@@ -11,6 +11,7 @@ import {
   IsPositive,
   Max,
   Length,
+  Matches,
   ValidateIf,
 } from 'class-validator';
 import { Type } from 'class-transformer';
@@ -20,6 +21,10 @@ import { MAX_MONEY_AMOUNT } from '../../../common/utils/money.util';
 import { IsCalendarDate } from '../../../common/validators/is-calendar-date';
 import { MaxDecimalPlaces } from '../../../common/validators/max-decimal-places';
 import { CreateBillItemDto, MAX_BILL_ITEMS } from './create-bill.dto';
+import {
+  MAX_FISCAL_ID_LENGTH,
+  PURCHASE_TIME_PATTERN,
+} from '../tasks/schemas/parsed-bill.schema';
 
 export class NewMarketDto {
   @ApiProperty({ example: 'Lidl' })
@@ -118,6 +123,30 @@ export class ConfirmBillDto {
   @IsString()
   @IsOptional()
   description?: string;
+
+  @ApiPropertyOptional({
+    example: 'J403001234',
+    description: 'Cash register / fiscal device id printed on the receipt',
+  })
+  @IsString()
+  @Length(1, MAX_FISCAL_ID_LENGTH)
+  @IsOptional()
+  fiscal_register_id?: string;
+
+  @ApiPropertyOptional({
+    example: '0042',
+    description: 'Receipt number printed on the receipt',
+  })
+  @IsString()
+  @Length(1, MAX_FISCAL_ID_LENGTH)
+  @IsOptional()
+  fiscal_receipt_number?: string;
+
+  @ApiPropertyOptional({ example: '14:05', description: 'HH:MM, 24-hour' })
+  @IsString()
+  @Matches(PURCHASE_TIME_PATTERN)
+  @IsOptional()
+  purchase_time?: string;
 
   @ApiProperty({
     type: [ConfirmBillItemDto],

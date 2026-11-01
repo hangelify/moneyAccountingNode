@@ -62,6 +62,15 @@ export class BillDetailResponseDto extends BillResponseDto {
   })
   bill_date_inferred!: boolean;
 
+  @ApiProperty({ nullable: true, example: 'J403001234' })
+  fiscal_register_id!: string | null;
+
+  @ApiProperty({ nullable: true, example: '0042' })
+  fiscal_receipt_number!: string | null;
+
+  @ApiProperty({ nullable: true, example: '14:05', description: 'HH:MM' })
+  purchase_time!: string | null;
+
   @ApiProperty({ type: [BillItemResponseDto] })
   items!: BillItemResponseDto[];
 

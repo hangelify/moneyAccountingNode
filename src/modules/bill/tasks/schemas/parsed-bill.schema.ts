@@ -19,6 +19,11 @@ export const MAX_WEIGHT_KG = 9_999_999.999;
 /** bill_sub_categories.product_count is int4; quantities of a category add up. */
 export const MAX_QUANTITY = 1_000_000;
 
+/** bills.fiscal_register_id and fiscal_receipt_number are varchar(64). */
+export const MAX_FISCAL_ID_LENGTH = 64;
+/** 24-hour HH:MM, the form bills.purchase_time reads back in. */
+export const PURCHASE_TIME_PATTERN = /^([01]\d|2[0-3]):[0-5]\d$/;
+
 export const ITEM_UNITS = ['kg', 'g', 'l', 'ml', 'piece'] as const;
 
 const bounded = (max: number) => z.number().min(-max).max(max);
@@ -46,6 +51,11 @@ export const ParsedBillItemSchema = z.object({
   ),
 });
 
+// An over-long id becomes null instead of being cut: a truncated id could
+// match another receipt.
+const fiscalId = () =>
+  z.string().trim().min(1).max(MAX_FISCAL_ID_LENGTH).nullable().catch(null);
+
 export const ParsedBillSchema = z.object({
   // A malformed verdict counts as a receipt: an empty item list still
   // rejects a non-receipt, and a real receipt's paid parse is not lost.
@@ -68,6 +78,19 @@ export const ParsedBillSchema = z.object({
     .catch(null)
     .describe('ISO-4217 currency code'),
   total_amount: bounded(MAX_AMOUNT).nullable().catch(null),
+  fiscal_register_id: fiscalId().describe(
+    'Cash register / fiscal device id, exactly as printed',
+  ),
+  fiscal_receipt_number: fiscalId().describe(
+    'Receipt (check) number, exactly as printed',
+  ),
+  purchase_time: z
+    .string()
+    .trim()
+    .regex(PURCHASE_TIME_PATTERN)
+    .nullable()
+    .catch(null)
+    .describe('24-hour time of purchase (HH:MM) from the receipt timestamp'),
   items: z.array(ParsedBillItemSchema),
 });
 export type ParsedBill = z.infer<typeof ParsedBillSchema>;

@@ -159,6 +159,9 @@ export class BillCrudService {
     bill.amount = dto.total_amount;
     bill.description = dto.description;
     bill.currency = dto.currency;
+    bill.fiscal_register_id = dto.fiscal_register_id;
+    bill.fiscal_receipt_number = dto.fiscal_receipt_number;
+    bill.purchase_time = dto.purchase_time;
     if (market) bill.market = market;
 
     const subCats = await this.findSubCategories(householdId, dto.items);
@@ -351,6 +354,11 @@ export class BillCrudService {
     if (dto.currency !== undefined) bill.currency = dto.currency;
     if (dto.total_amount !== undefined) bill.amount = dto.total_amount;
     if (dto.description !== undefined) bill.description = dto.description;
+    if (dto.fiscal_register_id !== undefined)
+      bill.fiscal_register_id = dto.fiscal_register_id;
+    if (dto.fiscal_receipt_number !== undefined)
+      bill.fiscal_receipt_number = dto.fiscal_receipt_number;
+    if (dto.purchase_time !== undefined) bill.purchase_time = dto.purchase_time;
 
     await this.em.persist(bill).flush();
     await this.warmRate(householdId, bill);
@@ -395,6 +403,9 @@ export class BillCrudService {
     }
     bill.amount = inRange(dto.total_amount, MAX_AMOUNT) ?? 0;
     bill.currency = toCurrency(dto.currency);
+    bill.fiscal_register_id = dto.fiscal_register_id ?? undefined;
+    bill.fiscal_receipt_number = dto.fiscal_receipt_number ?? undefined;
+    bill.purchase_time = dto.purchase_time ?? undefined;
     this.em.persist(bill);
 
     // One row per receipt line, even when lines share a sub-category.
@@ -460,6 +471,9 @@ export class BillCrudService {
         bill_date: bill.bill_date_inferred ? null : bill.bill_date,
         currency: bill.currency ?? null,
         total_amount: Number(bill.amount),
+        fiscal_register_id: bill.fiscal_register_id ?? null,
+        fiscal_receipt_number: bill.fiscal_receipt_number ?? null,
+        purchase_time: bill.purchase_time ?? null,
         items: bill.billSubCategories.getItems().map(
           (bsc): ParsedBillItemResponseDto => ({
             id: bsc.id,
@@ -602,6 +616,12 @@ export class BillCrudService {
       bill.amount = dto.total_amount;
       if (dto.currency !== undefined) bill.currency = dto.currency;
       if (dto.description !== undefined) bill.description = dto.description;
+      if (dto.fiscal_register_id !== undefined)
+        bill.fiscal_register_id = dto.fiscal_register_id;
+      if (dto.fiscal_receipt_number !== undefined)
+        bill.fiscal_receipt_number = dto.fiscal_receipt_number;
+      if (dto.purchase_time !== undefined)
+        bill.purchase_time = dto.purchase_time;
 
       const bscEntities = await this.confirmItems(em, bill, dto.items, subCats);
 
@@ -806,6 +826,9 @@ export class BillCrudService {
       status: bill.status,
       market_name_raw: bill.market_name_raw ?? undefined,
       bill_date_inferred: bill.bill_date_inferred,
+      fiscal_register_id: bill.fiscal_register_id ?? null,
+      fiscal_receipt_number: bill.fiscal_receipt_number ?? null,
+      purchase_time: bill.purchase_time ?? null,
       items: items.map(
         (bsc): BillItemResponseDto => ({
           id: bsc.id,

@@ -49,6 +49,40 @@ describe('ParsedBillSchema', () => {
     expect(r.bill_date).toBe('2026-05-07');
   });
 
+  describe('receipt identity', () => {
+    it('keeps receipt identity when valid', () => {
+      const r = ParsedBillSchema.parse({
+        ...bill,
+        fiscal_register_id: ' J403001234 ',
+        fiscal_receipt_number: '0042',
+        purchase_time: '14:05',
+      });
+      expect(r.fiscal_register_id).toBe('J403001234');
+      expect(r.fiscal_receipt_number).toBe('0042');
+      expect(r.purchase_time).toBe('14:05');
+    });
+
+    it('nulls garbled receipt identity', () => {
+      const r = ParsedBillSchema.parse({
+        ...bill,
+        fiscal_register_id: 'x'.repeat(65),
+        fiscal_receipt_number: 42,
+        purchase_time: '25:99',
+      });
+      expect(r.fiscal_register_id).toBeNull();
+      expect(r.fiscal_receipt_number).toBeNull();
+      expect(r.purchase_time).toBeNull();
+      expect(r.items).toHaveLength(1);
+    });
+
+    it('nulls identity the model left out', () => {
+      const r = ParsedBillSchema.parse(bill);
+      expect(r.fiscal_register_id).toBeNull();
+      expect(r.fiscal_receipt_number).toBeNull();
+      expect(r.purchase_time).toBeNull();
+    });
+  });
+
   describe('is_receipt', () => {
     it('keeps the model verdict that the photo is not a receipt', () => {
       const r = ParsedBillSchema.parse({ ...bill, is_receipt: false });

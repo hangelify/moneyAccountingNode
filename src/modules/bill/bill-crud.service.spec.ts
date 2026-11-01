@@ -522,6 +522,9 @@ describe('BillCrudService', () => {
         bill_date: '2026-05-19',
         currency: 'EUR',
         total_amount: 9.99,
+        fiscal_register_id: null,
+        fiscal_receipt_number: null,
+        purchase_time: null,
         items: [],
       };
 
@@ -618,6 +621,9 @@ describe('BillCrudService', () => {
         bill_date: null,
         currency: null,
         total_amount: 28.2,
+        fiscal_register_id: null,
+        fiscal_receipt_number: null,
+        purchase_time: null,
         items: [
           {
             name: 'Paine Pumpern',
@@ -654,6 +660,9 @@ describe('BillCrudService', () => {
         bill_date: null,
         currency: null,
         total_amount: 88.39,
+        fiscal_register_id: null,
+        fiscal_receipt_number: null,
+        purchase_time: null,
         items: [
           {
             name: 'Carnaciori Ki',
@@ -705,6 +714,9 @@ describe('BillCrudService', () => {
         bill_date: null,
         currency: null,
         total_amount: 60,
+        fiscal_register_id: null,
+        fiscal_receipt_number: null,
+        purchase_time: null,
         items: [line('Lapte 1L', 27.5), line('Lapte 0.5L', 32.5)],
       };
 
@@ -727,6 +739,9 @@ describe('BillCrudService', () => {
         bill_date: null,
         currency: null,
         total_amount: 100,
+        fiscal_register_id: null,
+        fiscal_receipt_number: null,
+        purchase_time: null,
         items: [
           {
             name: 'Lapte 1L',
@@ -789,6 +804,9 @@ describe('BillCrudService', () => {
         bill_date: '2026-05-07',
         currency: 'EUR',
         total_amount: 1.2,
+        fiscal_register_id: null,
+        fiscal_receipt_number: null,
+        purchase_time: null,
         items: [item],
       };
 

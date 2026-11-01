@@ -163,6 +163,14 @@ describe('BillDuplicatesService (PostgreSQL)', () => {
     });
   });
 
+  it('rounds the probe amount to cents', async () => {
+    const found = await service.findCandidates(householdId, {
+      ...probe,
+      amount: 100.004,
+    });
+    expect(found.map((f) => f.id)).toEqual([ids.original]);
+  });
+
   it('respects the date tolerance in SQL', async () => {
     const near = { ...probe, bill_date: '2026-10-04' };
     expect(await service.findCandidates(householdId, near)).toEqual([]);
@@ -292,6 +300,58 @@ describe('possible duplicates on bill reads and writes (PostgreSQL)', () => {
     expect(res.possible_duplicates?.map((d) => d.id)).toEqual([ids.original]);
     const saved = await orm.em.fork().findOneOrFail(Bill, res.id);
     expect(saved.status).toBe(BillStatus.CONFIRMED);
+  });
+
+  it('a dismissed pair no longer lists each other on bill reads', async () => {
+    const a = await draft({ status: BillStatus.CONFIRMED, amount: 78 });
+    const b = await draft({ status: BillStatus.CONFIRMED, amount: 78 });
+    const c = await draft({ status: BillStatus.CONFIRMED, amount: 78 });
+    const idsOf = async (id: string) =>
+      (await crud().getBill(id, householdId)).possible_duplicates
+        ?.map((d) => d.id)
+        .sort();
+    expect(await idsOf(a)).toEqual([b, c].sort());
+
+    await new BillDuplicatesService(orm.em.fork()).dismiss(
+      a,
+      householdId,
+      userId,
+      b,
+    );
+
+    expect(await idsOf(a)).toEqual([c]);
+    expect(await idsOf(b)).toEqual([c]);
+  });
+
+  it('an inferred-date draft matches by fiscal ids only', async () => {
+    const weak = await draft({
+      status: BillStatus.CONFIRMED,
+      amount: 79,
+      bill_date: '2026-10-04',
+    });
+    const fiscal = await draft({
+      status: BillStatus.CONFIRMED,
+      amount: 5,
+      bill_date: '2026-09-01',
+      fiscal_register_id: 'R9',
+      fiscal_receipt_number: '9',
+    });
+    const inferred = await draft({
+      amount: 79,
+      bill_date: '2026-10-04',
+      bill_date_inferred: true,
+      fiscal_register_id: 'r9',
+      fiscal_receipt_number: '9',
+    });
+    const plain = await draft({ amount: 79, bill_date: '2026-10-04' });
+
+    const found = (await crud().getBill(inferred, householdId))
+      .possible_duplicates;
+    expect(found?.map((d) => [d.id, d.match])).toEqual([[fiscal, 'fiscal']]);
+    // The same draft with a trusted date still weak-matches.
+    const trusted = (await crud().getBill(plain, householdId))
+      .possible_duplicates;
+    expect(trusted?.map((d) => d.id)).toContain(weak);
   });
 
   it('confirmBill returns possible_duplicates excluding itself', async () => {
@@ -464,6 +524,20 @@ describe('marking duplicates (PostgreSQL)', () => {
       status: BillStatus.DUPLICATE,
       of: a,
     });
+  });
+
+  it('re-pointing a duplicate advances its updated_at', async () => {
+    const a = await bill();
+    const b = await bill();
+    const c = await bill();
+    await mark(c, b);
+    const stamp = async () =>
+      (await orm.em.fork().findOneOrFail(Bill, c)).updated_at.getTime();
+    const before = await stamp();
+
+    await mark(b, a);
+
+    expect(await stamp()).toBeGreaterThan(before);
   });
 
   it('refuses a cycle and leaves both bills unchanged', async () => {
@@ -681,6 +755,21 @@ describe('marking duplicates (PostgreSQL)', () => {
       expect(await load(c)).toEqual({ status: BillStatus.CONFIRMED, of: null });
       expect(await load(b)).toEqual({ status: BillStatus.DUPLICATE, of: c });
       expect(await monthTotal()).toBe(before + 60);
+    });
+
+    it('re-pointing on promotion advances updated_at', async () => {
+      const a = await dated(0);
+      const b = await dated(1);
+      const c = await dated(2);
+      await mark(b, a);
+      await mark(c, a);
+      const stamp = async () =>
+        (await orm.em.fork().findOneOrFail(Bill, c)).updated_at.getTime();
+      const before = await stamp();
+
+      await crud().softDeleteBill(a, householdId);
+
+      expect(await stamp()).toBeGreaterThan(before);
     });
 
     it('leaves the original alone when a duplicate is deleted', async () => {
@@ -955,6 +1044,76 @@ describe('duplicate suggestions (PostgreSQL)', () => {
     await expect(dismiss(foreign, a)).rejects.toMatchObject({ status: 404 });
   });
 
+  it('matches a fiscal pair on different dates', async () => {
+    const a = await bill({
+      amount: 12,
+      bill_date: '2026-01-01',
+      fiscal_register_id: 'R2',
+      fiscal_receipt_number: '9',
+    });
+    const b = await bill({
+      amount: 13,
+      bill_date: '2026-03-01',
+      fiscal_register_id: ' r2',
+      fiscal_receipt_number: '9 ',
+    });
+    // Same date range filter applies to both sides.
+    const res = await suggest();
+    expect(idsOf(res)).toEqual([sorted(a, b)]);
+    expect(res.pairs[0].match).toBe('fiscal');
+    expect((await suggest({ date_to: '2026-02-01' })).pairs).toEqual([]);
+  });
+
+  it('lists a pair matching on both fiscal ids and amount once', async () => {
+    const fiscal = { fiscal_register_id: 'R3', fiscal_receipt_number: '1' };
+    const a = await bill({ amount: 14, ...fiscal });
+    const b = await bill({ amount: 14, ...fiscal });
+    expect(idsOf(await suggest())).toEqual([sorted(a, b)]);
+  });
+
+  it('orders ties by ids', async () => {
+    const created = [
+      await bill({ amount: 15 }),
+      await bill({ amount: 15 }),
+      await bill({ amount: 15 }),
+    ];
+    const [x, y, z] = [...created].sort();
+    // Same match, same date: the order falls to bill id, then other id.
+    expect(idsOf(await suggest())).toEqual([
+      [x, y],
+      [x, z],
+      [y, z],
+    ]);
+  });
+
+  it('finds the right pairs among hundreds of bills', async () => {
+    const conn = orm.em.fork().getConnection();
+    // 300 bills, each with its own amount, plus a twin for every tenth one.
+    await conn.execute(
+      `INSERT INTO bills (household_id, created_by_user_id, status, currency, bill_date, amount)
+       SELECT ?, ?, 'confirmed', 'MDL', '2026-10-03',
+              1000 + g
+         FROM generate_series(1, 300) g`,
+      [householdId, userId],
+    );
+    await conn.execute(
+      `INSERT INTO bills (household_id, created_by_user_id, status, currency, bill_date, amount)
+       SELECT household_id, created_by_user_id, status, currency, bill_date, amount
+         FROM bills WHERE household_id = ? AND amount % 10 = 0`,
+      [householdId],
+    );
+
+    const res = await suggest();
+
+    // Amounts 1010, 1020, ..., 1300: 30 twins.
+    expect(res.pairs).toHaveLength(30);
+    expect(new Set(res.pairs.map((p) => p.bill.total_amount)).size).toBe(30);
+    for (const p of res.pairs) {
+      expect(p.bill.total_amount).toBe(p.other.total_amount);
+      expect(p.bill.id < p.other.id).toBe(true);
+    }
+  });
+
   it('caps at 100 pairs', async () => {
     // 15 identical bills make 105 pairs.
     for (let i = 0; i < 15; i++) await bill({ amount: 27 });
@@ -1107,11 +1266,12 @@ describe('totals and the bill list with a duplicate (PostgreSQL)', () => {
     // MarketService.listMarkets passes an array to `ANY(?)`, which the driver
     // expands into a value list and Postgres rejects (the same known bug as the
     // skipped market_names test in bill-queries.int-spec.ts). Hand the SQL its
-    // array as a Postgres array literal so the status filter is what is tested.
+    // array as a Postgres array literal so the status filter is what is tested
+    // (only uuid arrays are expected, so joining by comma is safe).
     const fork = orm.em.fork();
     const conn = fork.getConnection();
     const execute = conn.execute.bind(conn);
-    jest.spyOn(conn, 'execute').mockImplementation(((
+    const spy = jest.spyOn(conn, 'execute').mockImplementation(((
       sql: string,
       params: unknown[] = [],
       ...rest: unknown[]
@@ -1123,9 +1283,13 @@ describe('totals and the bill list with a duplicate (PostgreSQL)', () => {
       )) as never);
     const markets = new MarketService(fork.getRepository(Market), fork);
 
-    const list = await markets.listMarkets(householdId);
+    try {
+      const list = await markets.listMarkets(householdId);
 
-    expect(list.find((m) => m.id === marketId)!.bill_count).toBe(1);
+      expect(list.find((m) => m.id === marketId)!.bill_count).toBe(1);
+    } finally {
+      spy.mockRestore();
+    }
   });
 
   it('GET /bills hides the duplicate by default', async () => {

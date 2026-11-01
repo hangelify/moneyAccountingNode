@@ -76,7 +76,7 @@ function classify(
 export function rankCandidates(
   probe: DuplicateProbe,
   rows: CandidateRow[],
-  opts: { dateToleranceDays: number; limit: number },
+  opts: { dateToleranceDays: number; limit: number; fiscalOnly?: boolean },
 ): Array<{ row: CandidateRow; match: DuplicateMatch }> {
   const ranked: Array<{
     row: CandidateRow;
@@ -85,11 +85,14 @@ export function rankCandidates(
   }> = [];
   for (const row of rows) {
     const match = classify(probe, row, opts.dateToleranceDays);
-    if (match) {
+    // Fiscal-only probes have no reliable date or total to rank by.
+    if (match && (!opts.fiscalOnly || match === 'fiscal')) {
       ranked.push({
         row,
         match,
-        distance: dayDistance(probe.bill_date, row.bill_date),
+        distance: opts.fiscalOnly
+          ? 0
+          : dayDistance(probe.bill_date, row.bill_date),
       });
     }
   }

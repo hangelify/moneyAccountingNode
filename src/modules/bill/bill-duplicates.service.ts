@@ -72,7 +72,12 @@ type RawOriginal = Pick<
 export class BillDuplicatesService {
   constructor(private readonly em: EntityManager) {}
 
-  /** Live confirmed bills of the household that may be the same purchase as `probe`. */
+  /**
+   * Live confirmed bills of the household that may be the same purchase as
+   * `probe`. Pairs the user dismissed are left out when `excludeBillId` names
+   * the bill being looked at. `fiscalOnly` keeps receipt identity matches
+   * only, for probes whose date or total is not reliable.
+   */
   async findCandidates(
     householdId: string,
     probe: DuplicateProbe,
@@ -80,44 +85,74 @@ export class BillDuplicatesService {
       excludeBillId?: string;
       dateToleranceDays?: number;
       limit?: number;
+      fiscalOnly?: boolean;
     } = {},
   ): Promise<PossibleDuplicateDto[]> {
     const dateToleranceDays = opts.dateToleranceDays ?? 0;
     const limit = opts.limit ?? 5;
-    const params: unknown[] = [householdId];
-    let exclude = '';
-    if (opts.excludeBillId) {
-      exclude = 'AND b.id <> ?';
-      params.push(opts.excludeBillId);
-    }
+    const fiscalOnly = opts.fiscalOnly ?? false;
     // Same normalization as the ranking: trimmed, case-insensitive.
     const register = probe.fiscal_register_id ?? '';
     const receipt = probe.fiscal_receipt_number ?? '';
-    params.push(
-      register,
-      receipt,
-      register,
-      receipt,
-      probe.amount,
-      probe.currency,
-      probe.bill_date,
-      dateToleranceDays,
-      probe.bill_date,
-      dateToleranceDays,
-    );
+    if (fiscalOnly && (!register.trim() || !receipt.trim())) return [];
+    // Stored amounts have cents; compare like with like.
+    const amount = Math.round(probe.amount * 100) / 100;
+    const ranked = { ...probe, amount };
 
-    const raw = await this.fetchRaw(exclude, params);
+    const params: unknown[] = [householdId];
+    let exclude = '';
+    if (opts.excludeBillId) {
+      exclude = `AND b.id <> ?
+          AND NOT EXISTS (
+            SELECT 1 FROM bill_duplicate_dismissals d
+             WHERE d.bill_id = least(?::uuid, b.id)
+               AND d.other_bill_id = greatest(?::uuid, b.id))`;
+      params.push(opts.excludeBillId, opts.excludeBillId, opts.excludeBillId);
+    }
+    params.push(register, receipt, register, receipt);
+    let weak = '';
+    if (!fiscalOnly) {
+      weak = `OR (b.amount = ?
+              AND b.currency::text IS NOT DISTINCT FROM ?::text
+              AND b.bill_date BETWEEN ?::date - ?::int AND ?::date + ?::int)`;
+      params.push(
+        amount,
+        probe.currency,
+        probe.bill_date,
+        dateToleranceDays,
+        probe.bill_date,
+        dateToleranceDays,
+      );
+    }
 
-    const rows = raw.map(toCandidateRow);
-    return rankCandidates(probe, rows, { dateToleranceDays, limit }).map(
-      ({ row, match }) => ({ ...toPossibleDuplicate(row), match }),
-    );
+    const raw = (await this.em.getConnection().execute(
+      `${CANDIDATE_SELECT}
+        WHERE b.household_id = ?
+          AND b.status = 'confirmed'
+          AND b.deleted_at IS NULL
+          ${exclude}
+          AND (
+            (nullif(trim(?), '') IS NOT NULL
+              AND nullif(trim(?), '') IS NOT NULL
+              AND lower(trim(b.fiscal_register_id)) = lower(trim(?))
+              AND lower(trim(b.fiscal_receipt_number)) = lower(trim(?)))
+            ${weak}
+          )`,
+      params,
+    )) as RawCandidate[];
+
+    return rankCandidates(ranked, raw.map(toCandidateRow), {
+      dateToleranceDays,
+      limit,
+      fiscalOnly,
+    }).map(({ row, match }) => ({ ...toPossibleDuplicate(row), match }));
   }
 
   /**
    * Pairs of live confirmed bills that look like the same purchase and were
    * not dismissed. SQL only prefilters (a superset of what the ranker
-   * accepts); the ranker decides and rates each pair.
+   * accepts); the ranker decides and rates each pair. Two equi-joins (same
+   * amount, currency and day; same receipt) keep it from comparing every pair.
    */
   async suggestions(
     householdId: string,
@@ -127,41 +162,42 @@ export class BillDuplicatesService {
       throw new BadRequestException('date_from must not be later than date_to');
     }
     const conn = this.em.getConnection();
-    // The same range applies to both bills of a pair, so its params repeat.
+    // The range applies to both bills of a pair, so both come from `live`.
     let range = '';
     const rangeParams: string[] = [];
     if (query.date_from) {
-      range += ' AND {t}.bill_date >= ?';
+      range += ' AND bill_date >= ?';
       rangeParams.push(query.date_from);
     }
     if (query.date_to) {
-      range += ' AND {t}.bill_date <= ?';
+      range += ' AND bill_date <= ?';
       rangeParams.push(query.date_to);
     }
-    const rangeFor = (t: string) => range.split('{t}').join(t);
     const pairs = (await conn.execute(
-      `SELECT a.id AS a_id, b.id AS b_id
-         FROM bills a
-         JOIN bills b ON b.id > a.id
-          AND b.household_id = a.household_id
-          AND b.status = 'confirmed' AND b.deleted_at IS NULL
-         LEFT JOIN bill_duplicate_dismissals d
-           ON d.bill_id = a.id AND d.other_bill_id = b.id
-        WHERE a.household_id = ?
-          AND a.status = 'confirmed' AND a.deleted_at IS NULL
-          AND d.id IS NULL
-          ${rangeFor('a')}
-          ${rangeFor('b')}
-          AND (
-            (nullif(trim(a.fiscal_register_id), '') IS NOT NULL
-              AND nullif(trim(a.fiscal_receipt_number), '') IS NOT NULL
-              AND lower(trim(a.fiscal_register_id)) = lower(trim(b.fiscal_register_id))
-              AND lower(trim(a.fiscal_receipt_number)) = lower(trim(b.fiscal_receipt_number)))
-            OR (a.amount = b.amount
-              AND a.currency::text IS NOT DISTINCT FROM b.currency::text
-              AND a.bill_date = b.bill_date)
-          )`,
-      [householdId, ...rangeParams, ...rangeParams],
+      `WITH live AS (
+         SELECT id, amount, currency::text AS currency, bill_date,
+                nullif(lower(trim(fiscal_register_id)), '') AS register,
+                nullif(lower(trim(fiscal_receipt_number)), '') AS receipt
+           FROM bills
+          WHERE household_id = ?
+            AND status = 'confirmed' AND deleted_at IS NULL${range}
+       ), candidate AS (
+         SELECT a.id AS a_id, b.id AS b_id
+           FROM live a
+           JOIN live b ON a.amount = b.amount AND a.bill_date = b.bill_date
+            AND a.currency IS NOT DISTINCT FROM b.currency AND a.id < b.id
+         UNION
+         SELECT a.id, b.id
+           FROM live a
+           JOIN live b ON a.register = b.register AND a.receipt = b.receipt
+            AND a.id < b.id
+       )
+       SELECT c.a_id, c.b_id
+         FROM candidate c
+        WHERE NOT EXISTS (
+          SELECT 1 FROM bill_duplicate_dismissals d
+           WHERE d.bill_id = c.a_id AND d.other_bill_id = c.b_id)`,
+      [householdId, ...rangeParams],
     )) as Array<{ a_id: string; b_id: string }>;
     if (pairs.length === 0) return { pairs: [] };
 
@@ -322,7 +358,7 @@ export class BillDuplicatesService {
     await em.nativeUpdate(
       Bill,
       { duplicate_of: originalId },
-      { duplicate_of: promoted.id },
+      { duplicate_of: promoted.id, updated_at: new Date() },
     );
   }
 
@@ -377,7 +413,7 @@ export class BillDuplicatesService {
     await em.nativeUpdate(
       Bill,
       { duplicate_of: bill.id, household: { id: householdId } },
-      { duplicate_of: original.id },
+      { duplicate_of: original.id, updated_at: new Date() },
     );
     bill.status = BillStatus.DUPLICATE;
     bill.duplicate_of = original;
@@ -411,30 +447,6 @@ export class BillDuplicatesService {
       fiscal_receipt_number: bill.fiscal_receipt_number ?? null,
       purchase_time: bill.purchase_time ?? null,
     };
-  }
-
-  private fetchRaw(
-    exclude: string,
-    params: unknown[],
-  ): Promise<RawCandidate[]> {
-    const conn = this.em.getConnection();
-    return conn.execute(
-      `${CANDIDATE_SELECT}
-        WHERE b.household_id = ?
-          AND b.status = 'confirmed'
-          AND b.deleted_at IS NULL
-          ${exclude}
-          AND (
-            (nullif(trim(?), '') IS NOT NULL
-              AND nullif(trim(?), '') IS NOT NULL
-              AND lower(trim(b.fiscal_register_id)) = lower(trim(?))
-              AND lower(trim(b.fiscal_receipt_number)) = lower(trim(?)))
-            OR (b.amount = ?
-              AND b.currency::text IS NOT DISTINCT FROM ?::text
-              AND b.bill_date BETWEEN ?::date - ?::int AND ?::date + ?::int)
-          )`,
-      params,
-    );
   }
 }
 

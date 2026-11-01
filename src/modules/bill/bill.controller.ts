@@ -250,28 +250,35 @@ export class BillController {
 
   /**
    * Look-alikes of a parsed draft. Never fails the request: the AI call is
-   * already paid for, and a draft without a read date has no reliable date
-   * to match on.
+   * already paid for. Without a read date or total only the receipt ids can
+   * match, so the lookup narrows to those.
    */
   private async possibleDuplicates(
     householdId: string,
     draft: ParsedBillResponseDto,
   ): Promise<PossibleDuplicateDto[]> {
-    if (!draft.bill_date) return [];
+    const fiscalOnly = !draft.bill_date || draft.total_amount === null;
+    if (
+      fiscalOnly &&
+      !(draft.fiscal_register_id && draft.fiscal_receipt_number)
+    ) {
+      return [];
+    }
     try {
       return await this.billDuplicates.findCandidates(
         householdId,
         {
+          // Ignored by a fiscal-only lookup.
           amount: draft.total_amount ?? 0,
           currency: (draft.currency as Currency | null) ?? null,
-          bill_date: draft.bill_date,
+          bill_date: draft.bill_date ?? '',
           market_id: null,
           market_name: draft.market_name,
           fiscal_register_id: draft.fiscal_register_id,
           fiscal_receipt_number: draft.fiscal_receipt_number,
           purchase_time: draft.purchase_time,
         },
-        { excludeBillId: draft.draft_id },
+        { excludeBillId: draft.draft_id, ...(fiscalOnly && { fiscalOnly }) },
       );
     } catch (err) {
       this.log.error(

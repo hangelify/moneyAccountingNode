@@ -237,7 +237,54 @@ describe('BillController', () => {
       expect(res.possible_duplicates).toEqual([candidate]);
     });
 
-    it('skips the lookup for a draft without a read date', async () => {
+    it('looks up by fiscal ids only when the date was not read', async () => {
+      const fiscal = {
+        fiscal_register_id: 'R1',
+        fiscal_receipt_number: '7',
+      };
+      billCrudMock.findDraftByImageHash.mockResolvedValue({
+        parsed: { ...draft, ...fiscal, bill_date: null },
+        requestId: 'req-old',
+      });
+      findCandidates.mockResolvedValue([candidate]);
+
+      const res = await controller.parsePhoto(user, ctx, {
+        buffer: await makeImage('png'),
+        mimetype: 'image/png',
+      } as never);
+
+      expect(res.possible_duplicates).toEqual([candidate]);
+      expect(findCandidates).toHaveBeenCalledWith(
+        'hh-1',
+        expect.objectContaining(fiscal),
+        { excludeBillId: 'draft-1', fiscalOnly: true },
+      );
+    });
+
+    it('looks up by fiscal ids only when the total was not read', async () => {
+      billCrudMock.findDraftByImageHash.mockResolvedValue({
+        parsed: {
+          ...draft,
+          fiscal_register_id: 'R1',
+          fiscal_receipt_number: '7',
+          total_amount: null,
+        },
+        requestId: 'req-old',
+      });
+
+      await controller.parsePhoto(user, ctx, {
+        buffer: await makeImage('png'),
+        mimetype: 'image/png',
+      } as never);
+
+      expect(findCandidates).toHaveBeenCalledWith(
+        'hh-1',
+        expect.objectContaining({ fiscal_register_id: 'R1' }),
+        { excludeBillId: 'draft-1', fiscalOnly: true },
+      );
+    });
+
+    it('skips the lookup for a draft without a read date or fiscal ids', async () => {
       billCrudMock.findDraftByImageHash.mockResolvedValue({
         parsed: { ...draft, bill_date: null },
         requestId: 'req-old',

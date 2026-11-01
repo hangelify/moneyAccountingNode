@@ -104,7 +104,12 @@ export const ApiCreateBillResponses = () =>
     }),
     ApiResponse({
       status: 400,
-      description: 'Invalid market or sub-category reference',
+      description:
+        'Invalid market or sub-category reference, or a duplicate_of_id that is the bill itself, would make a cycle, or names an original that is not confirmed',
+    }),
+    ApiResponse({
+      status: 404,
+      description: 'duplicate_of_id names no bill of the household',
     }),
     ApiResponse({ status: 401, description: 'Unauthorized' }),
   );
@@ -191,7 +196,7 @@ export const ApiConfirmBillResponses = () =>
     }),
     ApiResponse({
       status: 404,
-      description: 'Draft bill not found',
+      description: 'Draft bill not found, or duplicate_of_id names no bill',
     }),
     ApiResponse({
       status: 409,
@@ -199,7 +204,8 @@ export const ApiConfirmBillResponses = () =>
     }),
     ApiResponse({
       status: 400,
-      description: 'Invalid market or sub-category reference',
+      description:
+        'Invalid market or sub-category reference, or a duplicate_of_id that is the bill itself, would make a cycle, or names an original that is not confirmed',
     }),
     ApiResponse({ status: 401, description: 'Unauthorized' }),
   );

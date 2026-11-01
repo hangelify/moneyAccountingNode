@@ -705,7 +705,11 @@ export class BillCrudService {
     };
   }
 
-  /** Never throws: the write stands even if the look-alike lookup fails. */
+  /**
+   * Never throws: the write stands even if the look-alike lookup fails. A
+   * draft whose date was inferred has no reliable date, so only its receipt
+   * ids can match.
+   */
   private async candidatesOf(
     householdId: string,
     bill: Bill,
@@ -714,7 +718,11 @@ export class BillCrudService {
       return await this.duplicates.findCandidates(
         householdId,
         this.duplicates.probeOf(bill),
-        { excludeBillId: bill.id },
+        {
+          excludeBillId: bill.id,
+          fiscalOnly:
+            bill.status === BillStatus.DRAFT && bill.bill_date_inferred,
+        },
       );
     } catch (err) {
       this.log.error(

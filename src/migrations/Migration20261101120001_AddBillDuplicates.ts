@@ -81,6 +81,11 @@ export class Migration20261101120001_AddBillDuplicates extends Migration {
   }
 
   override down(): void {
+    // Rows still marked as duplicates would fail the enum/column drops; they
+    // go back to being ordinary confirmed bills.
+    this.addSql(
+      `update "bills" set "status" = 'confirmed', "duplicate_of_id" = null where "status"::text = 'duplicate';`,
+    );
     this.addSql(`drop table if exists "bill_duplicate_dismissals";`);
     this.addSql(`drop index if exists "bills_household_fiscal_index";`);
     this.addSql(`drop index if exists "bills_duplicate_of_id_index";`);

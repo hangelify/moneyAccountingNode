@@ -674,7 +674,7 @@ describe('BillCrudService', () => {
       ).rejects.toBeInstanceOf(NotFoundException);
     });
 
-    it('throws ConflictException when the bill is already confirmed', async () => {
+    it('throws ConflictException when the bill is not a draft', async () => {
       const { service, subCategoryRepo, em } = makeService();
       (subCategoryRepo.find as jest.Mock).mockResolvedValue([]);
       (em.findOne as jest.Mock).mockResolvedValue({

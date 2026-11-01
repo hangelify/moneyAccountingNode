@@ -170,9 +170,19 @@ export class BillCrudService {
     const subCats = await this.findSubCategories(householdId, dto.items);
     const bscEntities = this.toBillItems(bill, dto.items, subCats);
 
-    this.em.persist(bill);
-    for (const bsc of bscEntities) this.em.persist(bsc);
-    await this.em.flush();
+    await this.em.transactional(async (em) => {
+      em.persist(bill);
+      for (const bsc of bscEntities) em.persist(bsc);
+      if (dto.duplicate_of_id) {
+        await this.duplicates.linkAsDuplicate(
+          em,
+          bill,
+          dto.duplicate_of_id,
+          householdId,
+        );
+      }
+      await em.flush();
+    });
     await this.warmRate(householdId, bill);
     return {
       ...this.toDetailDto(bill, bscEntities),
@@ -586,7 +596,7 @@ export class BillCrudService {
       if (!bill)
         throw new NotFoundException(`Draft bill with ID ${id} not found`);
       if (bill.status !== BillStatus.DRAFT)
-        throw new ConflictException(`Bill with ID ${id} is already confirmed`);
+        throw new ConflictException(`Bill with ID ${id} is not a draft`);
 
       bill.confirmed_by = em.getReference(User, userId);
       bill.confirmed_at = new Date();
@@ -630,7 +640,16 @@ export class BillCrudService {
 
       const bscEntities = await this.confirmItems(em, bill, dto.items, subCats);
 
-      bill.status = BillStatus.CONFIRMED;
+      if (dto.duplicate_of_id) {
+        await this.duplicates.linkAsDuplicate(
+          em,
+          bill,
+          dto.duplicate_of_id,
+          householdId,
+        );
+      } else {
+        bill.status = BillStatus.CONFIRMED;
+      }
       await em.flush();
 
       return { bill, dto: this.toDetailDto(bill, bscEntities) };

@@ -54,6 +54,8 @@ describe('BillController', () => {
   };
 
   const findCandidates = jest.fn();
+  const markDuplicate = jest.fn();
+  const unmarkDuplicate = jest.fn();
   const getSignedUrl = jest.fn();
   const getSpendingBreakdown = jest.fn();
 
@@ -61,6 +63,8 @@ describe('BillController', () => {
     parseAndCategorize.mockReset();
     getSignedUrl.mockReset();
     findCandidates.mockReset();
+    markDuplicate.mockReset();
+    unmarkDuplicate.mockReset();
     findCandidates.mockResolvedValue([]);
     getSpendingBreakdown.mockReset();
     Object.values(billCrudMock).forEach((fn) => fn.mockReset());
@@ -70,7 +74,10 @@ describe('BillController', () => {
       providers: [
         { provide: BillPhotoService, useValue: { parseAndCategorize } },
         { provide: BillCrudService, useValue: billCrudMock },
-        { provide: BillDuplicatesService, useValue: { findCandidates } },
+        {
+          provide: BillDuplicatesService,
+          useValue: { findCandidates, markDuplicate, unmarkDuplicate },
+        },
         {
           provide: BillDashboardService,
           useValue: { getDashboard: jest.fn() },
@@ -507,6 +514,41 @@ describe('BillController', () => {
       ) as unknown[];
       expect(filters).toContain(AiUsageLimitFilter);
       expect(filters).toContain(AiGatewayErrorFilter);
+    });
+  });
+
+  describe('mark and unmark duplicate', () => {
+    const user = { id: 'user-1' } as never;
+    const ctx = { householdId: 'household-1' } as never;
+
+    it('marks, then answers with the bill detail', async () => {
+      const detail = { id: 'bill-1', status: 'duplicate' };
+      billCrudMock.getBill.mockResolvedValue(detail);
+
+      const res = await controller.markDuplicate(user, ctx, 'bill-1', {
+        duplicate_of_id: 'bill-0',
+      });
+
+      expect(markDuplicate).toHaveBeenCalledWith(
+        'bill-1',
+        'household-1',
+        'bill-0',
+      );
+      expect(billCrudMock.getBill).toHaveBeenCalledWith(
+        'bill-1',
+        'household-1',
+      );
+      expect(res).toBe(detail);
+    });
+
+    it('unmarks, then answers with the bill detail', async () => {
+      const detail = { id: 'bill-1', status: 'confirmed' };
+      billCrudMock.getBill.mockResolvedValue(detail);
+
+      const res = await controller.unmarkDuplicate(user, ctx, 'bill-1');
+
+      expect(unmarkDuplicate).toHaveBeenCalledWith('bill-1', 'household-1');
+      expect(res).toBe(detail);
     });
   });
 

@@ -53,7 +53,10 @@ import {
   DraftListResponseDto,
 } from './dto/bill-detail-response.dto';
 import { ListDraftsQueryDto } from './dto/list-drafts-query.dto';
-import { PossibleDuplicateDto } from './dto/bill-duplicates.dto';
+import {
+  MarkDuplicateDto,
+  PossibleDuplicateDto,
+} from './dto/bill-duplicates.dto';
 import { Currency } from '../../types/currency.enum';
 import { BillListResponseDto } from './dto/bill-list-response.dto';
 import {
@@ -74,6 +77,8 @@ import {
   ApiListDraftsResponses,
   ApiDraftImageResponses,
   ApiConfirmBillResponses,
+  ApiMarkDuplicateResponses,
+  ApiUnmarkDuplicateResponses,
   ApiDashboardResponses,
   ApiSpendingBreakdownResponses,
 } from './dto/api-responses.decorator';
@@ -411,6 +416,49 @@ export class BillController {
     @Body() dto: ConfirmBillDto,
   ): Promise<BillDetailResponseDto> {
     return this.billCrud.confirmBill(id, ctx.householdId, user.id, dto);
+  }
+
+  @Post(':id/mark-duplicate')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Mark a confirmed bill as a duplicate of another bill',
+  })
+  @ApiParam({
+    name: 'id',
+    description: 'Bill unique identifier',
+    example: '123e4567-e89b-12d3-a456-426614174000',
+  })
+  @ApiMarkDuplicateResponses()
+  async markDuplicate(
+    @CurrentUser() _user: AuthenticatedUser,
+    @CurrentHousehold() ctx: HouseholdContext,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: MarkDuplicateDto,
+  ): Promise<BillDetailResponseDto> {
+    await this.billDuplicates.markDuplicate(
+      id,
+      ctx.householdId,
+      dto.duplicate_of_id,
+    );
+    return this.billCrud.getBill(id, ctx.householdId);
+  }
+
+  @Post(':id/unmark-duplicate')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Count a duplicate bill again' })
+  @ApiParam({
+    name: 'id',
+    description: 'Bill unique identifier',
+    example: '123e4567-e89b-12d3-a456-426614174000',
+  })
+  @ApiUnmarkDuplicateResponses()
+  async unmarkDuplicate(
+    @CurrentUser() _user: AuthenticatedUser,
+    @CurrentHousehold() ctx: HouseholdContext,
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<BillDetailResponseDto> {
+    await this.billDuplicates.unmarkDuplicate(id, ctx.householdId);
+    return this.billCrud.getBill(id, ctx.householdId);
   }
 
   @Put(':id')

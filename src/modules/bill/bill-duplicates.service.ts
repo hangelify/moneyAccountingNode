@@ -1,6 +1,12 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
-import { EntityManager } from '@mikro-orm/core';
-import type { Bill } from '../../entities/bill.entity';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import { EntityManager, LockMode } from '@mikro-orm/core';
+import { Bill } from '../../entities/bill.entity';
+import { BillStatus } from '../../types/bill-status.enum';
 import type { Currency } from '../../types/currency.enum';
 import {
   rankCandidates,
@@ -102,6 +108,111 @@ export class BillDuplicatesService {
       market_name: row.market_name,
       created_by_name: row.created_by_name,
     };
+  }
+
+  /**
+   * Marks a confirmed bill as a duplicate of another bill. Both rows are
+   * locked in id order, so two opposite marks cannot deadlock or both win.
+   */
+  async markDuplicate(
+    id: string,
+    householdId: string,
+    duplicateOfId: string,
+  ): Promise<void> {
+    await this.em.transactional(async (em) => {
+      const locked = await em.find(
+        Bill,
+        {
+          id: { $in: [id, duplicateOfId] },
+          household: { id: householdId },
+          deleted_at: null,
+        },
+        { lockMode: LockMode.PESSIMISTIC_WRITE, orderBy: { id: 'asc' } },
+      );
+      const bill = locked.find((b) => b.id === id);
+      if (!bill) throw new NotFoundException(`Bill with ID ${id} not found`);
+      if (bill.status !== BillStatus.CONFIRMED) {
+        throw new ConflictException(
+          bill.status === BillStatus.DUPLICATE
+            ? `Bill with ID ${id} is already a duplicate; unmark it first`
+            : `Bill with ID ${id} is not confirmed`,
+        );
+      }
+      await this.linkAsDuplicate(em, bill, duplicateOfId, householdId);
+      await em.flush();
+    });
+  }
+
+  async unmarkDuplicate(id: string, householdId: string): Promise<void> {
+    await this.em.transactional(async (em) => {
+      const bill = await em.findOne(
+        Bill,
+        { id, household: { id: householdId }, deleted_at: null },
+        { lockMode: LockMode.PESSIMISTIC_WRITE },
+      );
+      if (!bill) throw new NotFoundException(`Bill with ID ${id} not found`);
+      if (bill.status !== BillStatus.DUPLICATE) {
+        throw new BadRequestException(`Bill with ID ${id} is not a duplicate`);
+      }
+      bill.status = BillStatus.CONFIRMED;
+      bill.duplicate_of = null;
+      await em.flush();
+    });
+  }
+
+  /**
+   * Makes `bill` a duplicate of `duplicateOfId`, or of that bill's original
+   * when it is a duplicate itself, so a duplicate never points at a
+   * duplicate. Runs inside the caller's transaction; the caller flushes.
+   */
+  async linkAsDuplicate(
+    em: EntityManager,
+    bill: Bill,
+    duplicateOfId: string,
+    householdId: string,
+  ): Promise<void> {
+    if (duplicateOfId === bill.id) {
+      throw new BadRequestException('A bill cannot be a duplicate of itself');
+    }
+    const lock = (billId: string) =>
+      em.findOne(
+        Bill,
+        { id: billId, household: { id: householdId }, deleted_at: null },
+        { lockMode: LockMode.PESSIMISTIC_WRITE },
+      );
+    const target = await lock(duplicateOfId);
+    if (!target) {
+      throw new NotFoundException(`Bill with ID ${duplicateOfId} not found`);
+    }
+    let original: Bill = target;
+    if (target.status === BillStatus.DUPLICATE && target.duplicate_of) {
+      const resolved = await lock(target.duplicate_of.id);
+      if (!resolved) {
+        throw new NotFoundException(
+          `Bill with ID ${target.duplicate_of.id} not found`,
+        );
+      }
+      original = resolved;
+    }
+    // The cycle case: this bill is already a duplicate of the target.
+    if (original.id === bill.id) {
+      throw new BadRequestException(
+        `Bill with ID ${duplicateOfId} is already a duplicate of this bill`,
+      );
+    }
+    if (original.status !== BillStatus.CONFIRMED) {
+      throw new BadRequestException(
+        `Bill with ID ${original.id} is not confirmed, so it cannot be an original`,
+      );
+    }
+    // Deleted bills included: restoring or reading them must not find a chain.
+    await em.nativeUpdate(
+      Bill,
+      { duplicate_of: bill.id, household: { id: householdId } },
+      { duplicate_of: original.id },
+    );
+    bill.status = BillStatus.DUPLICATE;
+    bill.duplicate_of = original;
   }
 
   private fetchOriginal(

@@ -1,6 +1,12 @@
+import { randomUUID } from 'node:crypto';
 import { MikroORM, EntityManager } from '@mikro-orm/core';
 import { MikroOrmModule } from '@mikro-orm/nestjs';
 import { Test } from '@nestjs/testing';
+import {
+  BadRequestException,
+  ConflictException,
+  NotFoundException,
+} from '@nestjs/common';
 import { createMikroOrmConfig } from '../../mikro-orm.config';
 import { Bill } from '../../entities/bill.entity';
 import { Household } from '../../entities/household.entity';
@@ -14,6 +20,8 @@ import { ExchangeRateService } from '../exchange-rate/exchange-rate.service';
 import { StubProvider } from '../exchange-rate/testing/stub-exchange-rate.provider';
 import { BillConversionService } from './household-conversion';
 import { SubCategory } from '../../entities/sub-category.entity';
+import { BillSubCategory } from '../../entities/bill-sub-category.entity';
+import { BillDashboardService } from './bill-dashboard.service';
 import type { DuplicateProbe } from './bill-duplicates';
 
 describe('BillDuplicatesService (PostgreSQL)', () => {
@@ -295,5 +303,325 @@ describe('possible duplicates on bill reads and writes (PostgreSQL)', () => {
     const found = res.possible_duplicates?.map((d) => d.id) ?? [];
     expect(found).toContain(ids.original);
     expect(found).not.toContain(id);
+  });
+});
+
+describe('marking duplicates (PostgreSQL)', () => {
+  let orm: MikroORM;
+  let householdId: string;
+  let otherHouseholdId: string;
+  let userId: string;
+  let foreignBillId: string;
+
+  function services() {
+    const fork = orm.em.fork();
+    const rates = new ExchangeRateService(fork, new StubProvider());
+    const duplicates = new BillDuplicatesService(fork);
+    const crud = new BillCrudService(
+      fork.getRepository(Bill),
+      fork.getRepository(Market),
+      fork.getRepository(SubCategory),
+      fork,
+      rates,
+      new BillConversionService(fork, rates),
+      duplicates,
+    );
+    return {
+      crud,
+      duplicates,
+      dashboard: new BillDashboardService(fork, rates),
+    };
+  }
+  const crud = () => services().crud;
+  const mark = (id: string, of: string) =>
+    services().duplicates.markDuplicate(id, householdId, of);
+
+  async function bill(data: Record<string, unknown> = {}): Promise<string> {
+    const fork = orm.em.fork();
+    const b = fork.create(Bill, {
+      household: householdId,
+      created_by: userId,
+      status: BillStatus.CONFIRMED,
+      currency: Currency.MDL,
+      bill_date: '2026-10-03',
+      amount: 100,
+      ...data,
+    } as never);
+    await fork.flush();
+    return b.id;
+  }
+
+  async function load(id: string) {
+    const b = await orm.em.fork().findOneOrFail(Bill, id);
+    return { status: b.status, of: b.duplicate_of?.id ?? null };
+  }
+
+  const required = {
+    bill_date: '2026-10-03',
+    total_amount: 100,
+    currency: Currency.MDL,
+  };
+
+  beforeAll(async () => {
+    const mod = await Test.createTestingModule({
+      imports: [
+        MikroOrmModule.forRoot({
+          ...createMikroOrmConfig(),
+          allowGlobalContext: true,
+        }),
+      ],
+    }).compile();
+    orm = mod.get(MikroORM);
+    const em = orm.em.fork();
+    const ana = em.create(User, {
+      first_name: 'Ana',
+      email: 'bill-duplicates-mark@example.com',
+      password: 'x',
+    } as never);
+    const household = em.create(Household, {
+      name: 'Dups mark',
+      currency: Currency.MDL,
+      created_by: ana,
+    } as never);
+    const other = em.create(Household, {
+      name: 'Dups mark other',
+      currency: Currency.MDL,
+      created_by: ana,
+    } as never);
+    const foreign = em.create(Bill, {
+      household: other,
+      created_by: ana,
+      status: BillStatus.CONFIRMED,
+      currency: Currency.MDL,
+      bill_date: '2026-10-03',
+      amount: 100,
+    } as never);
+    await em.flush();
+    householdId = household.id;
+    otherHouseholdId = other.id;
+    userId = ana.id;
+    foreignBillId = foreign.id;
+  });
+
+  afterAll(async () => {
+    await orm.close();
+  });
+
+  it('marks a confirmed bill as a duplicate and counts the purchase once', async () => {
+    const a = await bill({ amount: 40, bill_date: '2026-11-10' });
+    const b = await bill({ amount: 40, bill_date: '2026-11-10' });
+    const total = async () => {
+      const res = await services().dashboard.getDashboard(householdId, {
+        type: 'month',
+        year: 2026,
+        month: 11,
+      });
+      const series = res.by_currency.find((s) => s.currency === Currency.MDL)!;
+      return series.period_totals.reduce((sum, p) => sum + p.total, 0);
+    };
+    expect(await total()).toBe(80);
+
+    await mark(b, a);
+
+    expect(await load(b)).toEqual({ status: BillStatus.DUPLICATE, of: a });
+    expect(await load(a)).toEqual({ status: BillStatus.CONFIRMED, of: null });
+    expect(await total()).toBe(40);
+  });
+
+  it('links to the original when the target is itself a duplicate', async () => {
+    const a = await bill();
+    const b = await bill();
+    const c = await bill();
+    await mark(b, a);
+
+    await mark(c, b);
+
+    expect(await load(c)).toEqual({ status: BillStatus.DUPLICATE, of: a });
+  });
+
+  it("re-points this bill's duplicates to the new original", async () => {
+    const a = await bill();
+    const b = await bill();
+    const c = await bill();
+    const deletedChild = await bill();
+    await mark(c, b);
+    await mark(deletedChild, b);
+    await orm.em
+      .fork()
+      .getConnection()
+      .execute('UPDATE bills SET deleted_at = now() WHERE id = ?', [
+        deletedChild,
+      ]);
+
+    await mark(b, a);
+
+    expect(await load(b)).toEqual({ status: BillStatus.DUPLICATE, of: a });
+    expect(await load(c)).toEqual({ status: BillStatus.DUPLICATE, of: a });
+    expect(await load(deletedChild)).toEqual({
+      status: BillStatus.DUPLICATE,
+      of: a,
+    });
+  });
+
+  it('refuses a cycle and leaves both bills unchanged', async () => {
+    const a = await bill();
+    const b = await bill();
+    await mark(a, b);
+
+    await expect(mark(b, a)).rejects.toBeInstanceOf(BadRequestException);
+
+    expect(await load(a)).toEqual({ status: BillStatus.DUPLICATE, of: b });
+    expect(await load(b)).toEqual({ status: BillStatus.CONFIRMED, of: null });
+  });
+
+  it('refuses self (400), a draft bill (409), a deleted or other-household target (404)', async () => {
+    const a = await bill();
+    const draft = await bill({ status: BillStatus.DRAFT });
+    const deleted = await bill({ deleted_at: new Date() });
+
+    await expect(mark(a, a)).rejects.toBeInstanceOf(BadRequestException);
+    await expect(mark(draft, a)).rejects.toBeInstanceOf(ConflictException);
+    await expect(mark(a, deleted)).rejects.toBeInstanceOf(NotFoundException);
+    await expect(mark(a, foreignBillId)).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
+    await expect(mark(a, randomUUID())).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
+    await expect(mark(foreignBillId, a)).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
+    await expect(mark(a, draft)).rejects.toBeInstanceOf(BadRequestException);
+    expect(await load(a)).toEqual({ status: BillStatus.CONFIRMED, of: null });
+    expect(otherHouseholdId).toBeDefined();
+  });
+
+  it('refuses to mark a bill that is already a duplicate', async () => {
+    const a = await bill();
+    const b = await bill();
+    const c = await bill();
+    await mark(b, a);
+
+    await expect(mark(b, c)).rejects.toBeInstanceOf(ConflictException);
+    expect(await load(b)).toEqual({ status: BillStatus.DUPLICATE, of: a });
+  });
+
+  it('unmark returns the bill to confirmed', async () => {
+    const a = await bill();
+    const b = await bill();
+    await mark(b, a);
+
+    await services().duplicates.unmarkDuplicate(b, householdId);
+
+    expect(await load(b)).toEqual({ status: BillStatus.CONFIRMED, of: null });
+  });
+
+  it('unmark of a confirmed bill is 400, of a missing bill 404', async () => {
+    const a = await bill();
+    const { duplicates } = services();
+
+    await expect(
+      duplicates.unmarkDuplicate(a, householdId),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    await expect(
+      duplicates.unmarkDuplicate(randomUUID(), householdId),
+    ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('confirm with duplicate_of_id saves a duplicate', async () => {
+    const original = await bill();
+    const draft = await bill({ status: BillStatus.DRAFT });
+
+    const res = await crud().confirmBill(draft, householdId, userId, {
+      ...required,
+      items: [],
+      duplicate_of_id: original,
+    });
+
+    expect(res.status).toBe(BillStatus.DUPLICATE);
+    expect(res.duplicate_of?.id).toBe(original);
+    expect(await load(draft)).toEqual({
+      status: BillStatus.DUPLICATE,
+      of: original,
+    });
+  });
+
+  it('create with duplicate_of_id saves a duplicate', async () => {
+    const original = await bill();
+
+    const res = await crud().createBill(householdId, userId, {
+      ...required,
+      items: [],
+      duplicate_of_id: original,
+    });
+
+    expect(res.status).toBe(BillStatus.DUPLICATE);
+    expect(res.duplicate_of?.id).toBe(original);
+    expect(await load(res.id)).toEqual({
+      status: BillStatus.DUPLICATE,
+      of: original,
+    });
+  });
+
+  it('create with a bad duplicate_of_id saves nothing', async () => {
+    const before = await orm.em.fork().count(Bill, { household: householdId });
+
+    await expect(
+      crud().createBill(householdId, userId, {
+        ...required,
+        items: [],
+        duplicate_of_id: foreignBillId,
+      }),
+    ).rejects.toBeInstanceOf(NotFoundException);
+
+    expect(await orm.em.fork().count(Bill, { household: householdId })).toBe(
+      before,
+    );
+  });
+
+  it('confirm with a bad duplicate_of_id rolls back', async () => {
+    const fork = orm.em.fork();
+    const draftBill = fork.create(Bill, {
+      household: householdId,
+      created_by: userId,
+      status: BillStatus.DRAFT,
+      bill_date: '2026-10-03',
+      amount: 10,
+    } as never);
+    fork.create(BillSubCategory, {
+      bill: draftBill,
+      raw_name: 'LAPTE 1L',
+      product_count: 2,
+      amount: 10,
+    } as never);
+    await fork.flush();
+
+    await expect(
+      crud().confirmBill(draftBill.id, householdId, userId, {
+        ...required,
+        items: [{ raw_name: 'PAINE', product_count: 1, amount: 1 }],
+        duplicate_of_id: foreignBillId,
+      }),
+    ).rejects.toBeInstanceOf(NotFoundException);
+
+    const check = orm.em.fork();
+    const saved = await check.findOneOrFail(Bill, draftBill.id);
+    expect(saved.status).toBe(BillStatus.DRAFT);
+    expect(saved.confirmed_at).toBeNull();
+    const lines = await check.find(BillSubCategory, { bill: draftBill.id });
+    expect(lines.map((l) => l.raw_name)).toEqual(['LAPTE 1L']);
+  });
+
+  it('editing a duplicate keeps it a duplicate', async () => {
+    const a = await bill();
+    const b = await bill();
+    await mark(b, a);
+
+    await crud().updateBill(b, householdId, { description: 'edited' });
+
+    const saved = await orm.em.fork().findOneOrFail(Bill, b);
+    expect(saved.description).toBe('edited');
+    expect(saved.status).toBe(BillStatus.DUPLICATE);
+    expect(saved.duplicate_of?.id).toBe(a);
   });
 });

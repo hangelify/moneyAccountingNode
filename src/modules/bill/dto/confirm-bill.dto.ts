@@ -148,6 +148,15 @@ export class ConfirmBillDto {
   @IsOptional()
   purchase_time?: string;
 
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description:
+      'Save the bill as a duplicate of this confirmed bill (or of its original, when it is a duplicate itself)',
+  })
+  @IsUUID()
+  @IsOptional()
+  duplicate_of_id?: string;
+
   @ApiProperty({
     type: [ConfirmBillItemDto],
     minItems: 1,

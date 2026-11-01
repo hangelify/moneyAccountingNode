@@ -285,7 +285,7 @@ describe('confirm and create bill (PostgreSQL)', () => {
       expect(savedIds).toEqual(wonIds);
     });
 
-    it('answers 409 when the bill is already confirmed', async () => {
+    it('answers 409 when the bill is not a draft', async () => {
       const id = await makeDraft();
       await crud().confirmBill(id, householdId, userId, {
         ...required,

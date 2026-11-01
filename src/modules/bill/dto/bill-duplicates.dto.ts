@@ -1,3 +1,4 @@
+import { IsUUID } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Currency } from '../../../types/currency.enum';
 import type { DuplicateMatch } from '../bill-duplicates';
@@ -27,4 +28,14 @@ export class PossibleDuplicateDto {
       'fiscal: same receipt ids; strong: same amount, date and market or time; weak: same amount and date',
   })
   match?: DuplicateMatch;
+}
+
+export class MarkDuplicateDto {
+  @ApiProperty({
+    format: 'uuid',
+    description:
+      'The bill this one is a copy of; when it is a duplicate itself, the link goes to its original',
+  })
+  @IsUUID()
+  duplicate_of_id!: string;
 }

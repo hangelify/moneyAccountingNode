@@ -194,12 +194,48 @@ export const ApiConfirmBillResponses = () =>
     }),
     ApiResponse({
       status: 409,
-      description: 'Bill is already confirmed',
+      description: 'Bill is not a draft',
     }),
     ApiResponse({
       status: 400,
       description: 'Invalid market or sub-category reference',
     }),
+    ApiResponse({ status: 401, description: 'Unauthorized' }),
+  );
+
+export const ApiMarkDuplicateResponses = () =>
+  applyDecorators(
+    ApiResponse({
+      status: 200,
+      type: BillDetailResponseDto,
+      description:
+        'Bill marked as a duplicate; duplicate_of names the original',
+    }),
+    ApiResponse({
+      status: 400,
+      description:
+        'The bill is its own original, would make a cycle, or the original is a draft',
+    }),
+    ApiResponse({
+      status: 404,
+      description: 'Bill or original not found',
+    }),
+    ApiResponse({
+      status: 409,
+      description: 'Bill is not confirmed (drafts are marked through confirm)',
+    }),
+    ApiResponse({ status: 401, description: 'Unauthorized' }),
+  );
+
+export const ApiUnmarkDuplicateResponses = () =>
+  applyDecorators(
+    ApiResponse({
+      status: 200,
+      type: BillDetailResponseDto,
+      description: 'Bill is confirmed again and counts in totals',
+    }),
+    ApiResponse({ status: 400, description: 'Bill is not a duplicate' }),
+    ApiResponse({ status: 404, description: 'Bill not found' }),
     ApiResponse({ status: 401, description: 'Unauthorized' }),
   );
 

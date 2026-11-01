@@ -112,7 +112,8 @@ export class BillDuplicatesService {
 
   /**
    * Marks a confirmed bill as a duplicate of another bill. Both rows are
-   * locked in id order, so two opposite marks cannot deadlock or both win.
+   * locked in id order, which stops two opposite marks from deadlocking.
+   * A confirm that links can still deadlock with a mark; Postgres aborts one.
    */
   async markDuplicate(
     id: string,
@@ -171,6 +172,8 @@ export class BillDuplicatesService {
     duplicateOfId: string,
     householdId: string,
   ): Promise<void> {
+    // A bill without an id would turn the re-point below into an unscoped update.
+    if (!bill.id) throw new Error('linkAsDuplicate needs a flushed bill');
     if (duplicateOfId === bill.id) {
       throw new BadRequestException('A bill cannot be a duplicate of itself');
     }

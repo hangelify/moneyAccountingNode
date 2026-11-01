@@ -693,3 +693,269 @@ describe('marking duplicates (PostgreSQL)', () => {
     });
   });
 });
+
+describe('duplicate suggestions (PostgreSQL)', () => {
+  let orm: MikroORM;
+  let householdId: string;
+  let otherHouseholdId: string;
+  let userId: string;
+
+  const service = () => new BillDuplicatesService(orm.em.fork());
+  const suggest = (query: { date_from?: string; date_to?: string } = {}) =>
+    service().suggestions(householdId, query);
+  const dismiss = (id: string, other: string, hid = householdId) =>
+    service().dismiss(id, hid, userId, other);
+
+  async function bill(
+    data: Record<string, unknown> = {},
+    hid = householdId,
+  ): Promise<string> {
+    const fork = orm.em.fork();
+    const b = fork.create(Bill, {
+      household: hid,
+      created_by: userId,
+      status: BillStatus.CONFIRMED,
+      currency: Currency.MDL,
+      bill_date: '2026-10-03',
+      amount: 100,
+      ...data,
+    } as never);
+    await fork.flush();
+    return b.id;
+  }
+  const idsOf = (res: Awaited<ReturnType<typeof suggest>>) =>
+    res.pairs.map((p) => [p.bill.id, p.other.id]);
+  const sorted = (a: string, b: string) => (a < b ? [a, b] : [b, a]);
+
+  beforeAll(async () => {
+    const mod = await Test.createTestingModule({
+      imports: [
+        MikroOrmModule.forRoot({
+          ...createMikroOrmConfig(),
+          allowGlobalContext: true,
+        }),
+      ],
+    }).compile();
+    orm = mod.get(MikroORM);
+    const em = orm.em.fork();
+    const ana = em.create(User, {
+      first_name: 'Ana',
+      email: 'bill-duplicates-suggest@example.com',
+      password: 'x',
+    } as never);
+    const household = em.create(Household, {
+      name: 'Dups suggest',
+      currency: Currency.MDL,
+      created_by: ana,
+    } as never);
+    const other = em.create(Household, {
+      name: 'Dups suggest other',
+      currency: Currency.MDL,
+      created_by: ana,
+    } as never);
+    await em.flush();
+    householdId = household.id;
+    otherHouseholdId = other.id;
+    userId = ana.id;
+  });
+
+  beforeEach(async () => {
+    await orm.em
+      .fork()
+      .getConnection()
+      .execute('DELETE FROM bill_duplicate_dismissals');
+    await orm.em
+      .fork()
+      .getConnection()
+      .execute('DELETE FROM bills WHERE household_id IN (?, ?)', [
+        householdId,
+        otherHouseholdId,
+      ]);
+  });
+
+  afterAll(async () => {
+    await orm.close();
+  });
+
+  it('lists each matching pair once, ranked, newest first', async () => {
+    const weakOld = [
+      await bill({ amount: 10, bill_date: '2026-01-05' }),
+      await bill({ amount: 10, bill_date: '2026-01-05' }),
+    ];
+    const weakNew = [
+      await bill({ amount: 20, bill_date: '2026-02-05' }),
+      await bill({ amount: 20, bill_date: '2026-02-05' }),
+    ];
+    const strong = [
+      await bill({
+        amount: 30,
+        bill_date: '2026-01-01',
+        market_name_raw: 'Lidl',
+      }),
+      await bill({
+        amount: 30,
+        bill_date: '2026-01-01',
+        market_name_raw: 'lidl ',
+      }),
+    ];
+    const fiscal = [
+      await bill({
+        amount: 40,
+        bill_date: '2025-05-01',
+        fiscal_register_id: 'R1',
+        fiscal_receipt_number: '7',
+      }),
+      await bill({
+        amount: 41,
+        bill_date: '2025-05-01',
+        fiscal_register_id: ' r1',
+        fiscal_receipt_number: '7 ',
+      }),
+    ];
+    // Not pairs: different amount, different date, a duplicate, a draft.
+    await bill({ amount: 50 });
+    await bill({ amount: 51 });
+    await bill({ amount: 60, bill_date: '2026-03-01' });
+    await bill({ amount: 60, bill_date: '2026-03-02' });
+    await bill({ amount: 70, status: BillStatus.DRAFT });
+    await bill({ amount: 70, status: BillStatus.DRAFT });
+    await bill({ amount: 80, deleted_at: new Date() });
+    await bill({ amount: 80 });
+    await bill({ amount: 90 }, otherHouseholdId);
+    await bill({ amount: 90 });
+
+    const res = await suggest();
+
+    expect(idsOf(res)).toEqual([
+      sorted(...(fiscal as [string, string])),
+      sorted(...(strong as [string, string])),
+      sorted(...(weakNew as [string, string])),
+      sorted(...(weakOld as [string, string])),
+    ]);
+    expect(res.pairs.map((p) => p.match)).toEqual([
+      'fiscal',
+      'strong',
+      'weak',
+      'weak',
+    ]);
+    const first = res.pairs[0];
+    expect(first.bill).toMatchObject({
+      bill_date: '2025-05-01',
+      currency: Currency.MDL,
+      created_by_name: 'Ana',
+    });
+    expect(first.bill).not.toHaveProperty('match');
+    expect(first.other).not.toHaveProperty('match');
+  });
+
+  it('does not pair a bill with a duplicate of itself', async () => {
+    const a = await bill({ amount: 33 });
+    const b = await bill({
+      amount: 33,
+      status: BillStatus.DUPLICATE,
+      duplicate_of: a,
+    });
+    expect(b).toBeDefined();
+    expect((await suggest()).pairs).toEqual([]);
+  });
+
+  it('respects date_from/date_to', async () => {
+    await bill({ amount: 11, bill_date: '2026-01-10' });
+    await bill({ amount: 11, bill_date: '2026-01-10' });
+    const late = [
+      await bill({ amount: 12, bill_date: '2026-06-10' }),
+      await bill({ amount: 12, bill_date: '2026-06-10' }),
+    ];
+
+    expect(idsOf(await suggest({ date_from: '2026-06-10' }))).toEqual([
+      sorted(...(late as [string, string])),
+    ]);
+    expect((await suggest({ date_to: '2026-01-09' })).pairs).toEqual([]);
+    expect(
+      (await suggest({ date_from: '2026-01-10', date_to: '2026-06-10' })).pairs,
+    ).toHaveLength(2);
+  });
+
+  it('rejects date_from later than date_to with 400', async () => {
+    await expect(
+      suggest({ date_from: '2026-02-01', date_to: '2026-01-01' }),
+    ).rejects.toMatchObject({
+      status: 400,
+      message: 'date_from must not be later than date_to',
+    });
+  });
+
+  it('hides a dismissed pair whichever bill it was dismissed from', async () => {
+    const a = await bill({ amount: 21 });
+    const b = await bill({ amount: 21 });
+    const c = await bill({ amount: 22 });
+    const d = await bill({ amount: 22 });
+
+    await dismiss(a, b);
+    await dismiss(d, c);
+
+    expect((await suggest()).pairs).toEqual([]);
+  });
+
+  it('keeps other pairs of a dismissed bill', async () => {
+    const a = await bill({ amount: 23 });
+    const b = await bill({ amount: 23 });
+    const c = await bill({ amount: 23 });
+    await dismiss(a, b);
+
+    const res = await suggest();
+    expect(res.pairs).toHaveLength(2);
+    expect(idsOf(res)).not.toContainEqual(sorted(a, b));
+    expect(idsOf(res)).toContainEqual(sorted(a, c));
+  });
+
+  it('dismissing twice is a no-op', async () => {
+    const a = await bill({ amount: 24 });
+    const b = await bill({ amount: 24 });
+
+    await dismiss(a, b);
+    await dismiss(b, a);
+
+    const rows = (await orm.em
+      .fork()
+      .getConnection()
+      .execute('SELECT * FROM bill_duplicate_dismissals')) as unknown[];
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      household_id: householdId,
+      bill_id: sorted(a, b)[0],
+      other_bill_id: sorted(a, b)[1],
+      dismissed_by_user_id: userId,
+    });
+  });
+
+  it('can dismiss from a draft view', async () => {
+    const a = await bill({ amount: 25, status: BillStatus.DRAFT });
+    const b = await bill({ amount: 25 });
+    await expect(dismiss(a, b)).resolves.toBeUndefined();
+  });
+
+  it('dismiss refuses self (400) and unknown or other-household bills (404)', async () => {
+    const a = await bill({ amount: 26 });
+    const gone = await bill({ amount: 26, deleted_at: new Date() });
+    const foreign = await bill({ amount: 26 }, otherHouseholdId);
+
+    await expect(dismiss(a, a)).rejects.toMatchObject({ status: 400 });
+    await expect(dismiss(a, randomUUID())).rejects.toMatchObject({
+      status: 404,
+    });
+    await expect(dismiss(randomUUID(), a)).rejects.toMatchObject({
+      status: 404,
+    });
+    await expect(dismiss(a, gone)).rejects.toMatchObject({ status: 404 });
+    await expect(dismiss(a, foreign)).rejects.toMatchObject({ status: 404 });
+    await expect(dismiss(foreign, a)).rejects.toMatchObject({ status: 404 });
+  });
+
+  it('caps at 100 pairs', async () => {
+    // 15 identical bills make 105 pairs.
+    for (let i = 0; i < 15; i++) await bill({ amount: 27 });
+
+    expect((await suggest()).pairs).toHaveLength(100);
+  });
+});

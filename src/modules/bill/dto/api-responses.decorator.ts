@@ -25,6 +25,7 @@ import {
 import { BillDashboardResponseDto } from './bill-dashboard.dto';
 import { SpendingBreakdownResponseDto } from './spending-breakdown.dto';
 import { BillListResponseDto } from './bill-list-response.dto';
+import { DuplicateSuggestionsResponseDto } from './bill-duplicates.dto';
 
 export function ApiParsePhotoResponses(): MethodDecorator & ClassDecorator {
   return applyDecorators(
@@ -236,6 +237,35 @@ export const ApiUnmarkDuplicateResponses = () =>
     }),
     ApiResponse({ status: 400, description: 'Bill is not a duplicate' }),
     ApiResponse({ status: 404, description: 'Bill not found' }),
+    ApiResponse({ status: 401, description: 'Unauthorized' }),
+  );
+
+export const ApiDuplicateSuggestionsResponses = () =>
+  applyDecorators(
+    ApiResponse({
+      status: 200,
+      type: DuplicateSuggestionsResponseDto,
+      description: 'Pairs of confirmed bills that look like the same purchase',
+    }),
+    ApiResponse({
+      status: 400,
+      description: 'Invalid date or date_from is after date_to',
+    }),
+    ApiResponse({ status: 401, description: 'Unauthorized' }),
+  );
+
+export const ApiDismissDuplicateResponses = () =>
+  applyDecorators(
+    ApiResponse({
+      status: 204,
+      description:
+        'The pair is no longer suggested (also when already dismissed)',
+    }),
+    ApiResponse({
+      status: 400,
+      description: 'other_bill_id is the bill itself',
+    }),
+    ApiResponse({ status: 404, description: 'Either bill not found' }),
     ApiResponse({ status: 401, description: 'Unauthorized' }),
   );
 

@@ -1,5 +1,7 @@
-import { IsUUID } from 'class-validator';
+import { IsOptional, IsUUID } from 'class-validator';
+import { Transform, Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { IsCalendarDate } from '../../../common/validators/is-calendar-date';
 import { Currency } from '../../../types/currency.enum';
 import type { DuplicateMatch } from '../bill-duplicates';
 
@@ -38,4 +40,67 @@ export class MarkDuplicateDto {
   })
   @IsUUID()
   duplicate_of_id!: string;
+}
+
+export class DismissDuplicateDto {
+  @ApiProperty({
+    format: 'uuid',
+    description:
+      'The other bill of the pair that is kept as a separate purchase',
+  })
+  @IsUUID()
+  other_bill_id!: string;
+}
+
+export class DuplicateSuggestionsQueryDto {
+  @ApiPropertyOptional({
+    example: '2026-01-01',
+    format: 'date',
+    description:
+      'Only pairs of bills with bill_date >= this date (YYYY-MM-DD). Omit to start from the beginning.',
+  })
+  @Transform(({ value }: { value: unknown }) =>
+    value === '' ? undefined : value,
+  )
+  @IsOptional()
+  @IsCalendarDate()
+  date_from?: string;
+
+  @ApiPropertyOptional({
+    example: '2026-12-31',
+    format: 'date',
+    description:
+      'Only pairs of bills with bill_date <= this date (YYYY-MM-DD). Omit for no upper bound.',
+  })
+  @Transform(({ value }: { value: unknown }) =>
+    value === '' ? undefined : value,
+  )
+  @IsOptional()
+  @IsCalendarDate()
+  date_to?: string;
+}
+
+export class DuplicatePairDto {
+  @ApiProperty({
+    type: () => PossibleDuplicateDto,
+    description: 'The bill with the smaller id of the pair',
+  })
+  @Type(() => PossibleDuplicateDto)
+  bill!: PossibleDuplicateDto;
+
+  @ApiProperty({ type: () => PossibleDuplicateDto })
+  @Type(() => PossibleDuplicateDto)
+  other!: PossibleDuplicateDto;
+
+  @ApiProperty({ enum: ['fiscal', 'strong', 'weak'] })
+  match!: DuplicateMatch;
+}
+
+export class DuplicateSuggestionsResponseDto {
+  @ApiProperty({
+    type: [DuplicatePairDto],
+    description:
+      'At most 100 pairs, best match first, then newest purchase first',
+  })
+  pairs!: DuplicatePairDto[];
 }

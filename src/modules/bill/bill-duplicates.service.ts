@@ -13,7 +13,41 @@ import {
   type CandidateRow,
   type DuplicateProbe,
 } from './bill-duplicates';
-import { PossibleDuplicateDto } from './dto/bill-duplicates.dto';
+import {
+  DuplicateSuggestionsResponseDto,
+  PossibleDuplicateDto,
+  type DuplicatePairDto,
+} from './dto/bill-duplicates.dto';
+
+const MAX_SUGGESTIONS = 100;
+const MATCH_ORDER = { fiscal: 0, strong: 1, weak: 2 } as const;
+
+/** A bill (`b`) as a `CandidateRow`; the caller adds the WHERE. */
+const CANDIDATE_SELECT = `SELECT b.id, b.amount::text AS amount, b.currency::text AS currency,
+              b.bill_date::text AS bill_date, b.market_id,
+              COALESCE(m.name, b.market_name_raw) AS market_name,
+              b.fiscal_register_id, b.fiscal_receipt_number,
+              to_char(b.purchase_time, 'HH24:MI') AS purchase_time,
+              to_char(b.created_at AT TIME ZONE 'UTC',
+                      'YYYY-MM-DD"T"HH24:MI:SS.US') AS created_at,
+              u.first_name AS created_by_name
+         FROM bills b
+         LEFT JOIN markets m ON m.id = b.market_id
+         LEFT JOIN users u ON u.id = b.created_by_user_id`;
+
+const toCandidateRow = (r: RawCandidate): CandidateRow => ({
+  ...r,
+  amount: Number(r.amount),
+});
+
+const toPossibleDuplicate = (row: CandidateRow): PossibleDuplicateDto => ({
+  id: row.id,
+  bill_date: row.bill_date,
+  total_amount: row.amount,
+  currency: row.currency,
+  market_name: row.market_name,
+  created_by_name: row.created_by_name,
+});
 
 interface RawCandidate {
   id: string;
@@ -74,20 +108,122 @@ export class BillDuplicatesService {
 
     const raw = await this.fetchRaw(exclude, params);
 
-    const rows: CandidateRow[] = raw.map((r) => ({
-      ...r,
-      amount: Number(r.amount),
-    }));
+    const rows = raw.map(toCandidateRow);
     return rankCandidates(probe, rows, { dateToleranceDays, limit }).map(
-      ({ row, match }) => ({
-        id: row.id,
-        bill_date: row.bill_date,
-        total_amount: row.amount,
-        currency: row.currency,
-        market_name: row.market_name,
-        created_by_name: row.created_by_name,
-        match,
-      }),
+      ({ row, match }) => ({ ...toPossibleDuplicate(row), match }),
+    );
+  }
+
+  /**
+   * Pairs of live confirmed bills that look like the same purchase and were
+   * not dismissed. SQL only prefilters (a superset of what the ranker
+   * accepts); the ranker decides and rates each pair.
+   */
+  async suggestions(
+    householdId: string,
+    query: { date_from?: string; date_to?: string },
+  ): Promise<DuplicateSuggestionsResponseDto> {
+    if (query.date_from && query.date_to && query.date_from > query.date_to) {
+      throw new BadRequestException('date_from must not be later than date_to');
+    }
+    const conn = this.em.getConnection();
+    // The same range applies to both bills of a pair, so its params repeat.
+    let range = '';
+    const rangeParams: string[] = [];
+    if (query.date_from) {
+      range += ' AND {t}.bill_date >= ?';
+      rangeParams.push(query.date_from);
+    }
+    if (query.date_to) {
+      range += ' AND {t}.bill_date <= ?';
+      rangeParams.push(query.date_to);
+    }
+    const rangeFor = (t: string) => range.split('{t}').join(t);
+    const pairs = (await conn.execute(
+      `SELECT a.id AS a_id, b.id AS b_id
+         FROM bills a
+         JOIN bills b ON b.id > a.id
+          AND b.household_id = a.household_id
+          AND b.status = 'confirmed' AND b.deleted_at IS NULL
+         LEFT JOIN bill_duplicate_dismissals d
+           ON d.bill_id = a.id AND d.other_bill_id = b.id
+        WHERE a.household_id = ?
+          AND a.status = 'confirmed' AND a.deleted_at IS NULL
+          AND d.id IS NULL
+          ${rangeFor('a')}
+          ${rangeFor('b')}
+          AND (
+            (nullif(trim(a.fiscal_register_id), '') IS NOT NULL
+              AND nullif(trim(a.fiscal_receipt_number), '') IS NOT NULL
+              AND lower(trim(a.fiscal_register_id)) = lower(trim(b.fiscal_register_id))
+              AND lower(trim(a.fiscal_receipt_number)) = lower(trim(b.fiscal_receipt_number)))
+            OR (a.amount = b.amount
+              AND a.currency::text IS NOT DISTINCT FROM b.currency::text
+              AND a.bill_date = b.bill_date)
+          )`,
+      [householdId, ...rangeParams, ...rangeParams],
+    )) as Array<{ a_id: string; b_id: string }>;
+    if (pairs.length === 0) return { pairs: [] };
+
+    const ids = [...new Set(pairs.flatMap((p) => [p.a_id, p.b_id]))];
+    const raw = (await conn.execute(
+      `${CANDIDATE_SELECT} WHERE b.id = ANY(?::uuid[])`,
+      [`{${ids.join(',')}}`],
+    )) as RawCandidate[];
+    const byId = new Map(raw.map((r) => [r.id, toCandidateRow(r)]));
+
+    const ranked: DuplicatePairDto[] = [];
+    for (const { a_id, b_id } of pairs) {
+      const a = byId.get(a_id);
+      const b = byId.get(b_id);
+      if (!a || !b) continue;
+      const [hit] = rankCandidates(a, [b], { dateToleranceDays: 0, limit: 1 });
+      if (!hit) continue;
+      ranked.push({
+        bill: toPossibleDuplicate(a),
+        other: toPossibleDuplicate(b),
+        match: hit.match,
+      });
+    }
+    ranked.sort(
+      (x, y) =>
+        MATCH_ORDER[x.match] - MATCH_ORDER[y.match] ||
+        newest(y).localeCompare(newest(x)) ||
+        x.bill.id.localeCompare(y.bill.id) ||
+        x.other.id.localeCompare(y.other.id),
+    );
+    return { pairs: ranked.slice(0, MAX_SUGGESTIONS) };
+  }
+
+  /** Keeps both bills: the pair stops being suggested. Idempotent. */
+  async dismiss(
+    id: string,
+    householdId: string,
+    userId: string,
+    otherBillId: string,
+  ): Promise<void> {
+    if (otherBillId === id) {
+      throw new BadRequestException(
+        'A bill cannot be dismissed against itself',
+      );
+    }
+    const conn = this.em.getConnection();
+    const found = (await conn.execute(
+      `SELECT id FROM bills
+        WHERE id IN (?, ?) AND household_id = ? AND deleted_at IS NULL`,
+      [id, otherBillId, householdId],
+    )) as Array<{ id: string }>;
+    for (const billId of [id, otherBillId]) {
+      if (!found.some((r) => r.id === billId)) {
+        throw new NotFoundException(`Bill with ID ${billId} not found`);
+      }
+    }
+    await conn.execute(
+      `INSERT INTO bill_duplicate_dismissals
+              (household_id, bill_id, other_bill_id, dismissed_by_user_id)
+       VALUES (?, least(?::uuid, ?::uuid), greatest(?::uuid, ?::uuid), ?)
+       ON CONFLICT DO NOTHING`,
+      [householdId, id, otherBillId, id, otherBillId, userId],
     );
   }
 
@@ -283,17 +419,7 @@ export class BillDuplicatesService {
   ): Promise<RawCandidate[]> {
     const conn = this.em.getConnection();
     return conn.execute(
-      `SELECT b.id, b.amount::text AS amount, b.currency::text AS currency,
-              b.bill_date::text AS bill_date, b.market_id,
-              COALESCE(m.name, b.market_name_raw) AS market_name,
-              b.fiscal_register_id, b.fiscal_receipt_number,
-              to_char(b.purchase_time, 'HH24:MI') AS purchase_time,
-              to_char(b.created_at AT TIME ZONE 'UTC',
-                      'YYYY-MM-DD"T"HH24:MI:SS.US') AS created_at,
-              u.first_name AS created_by_name
-         FROM bills b
-         LEFT JOIN markets m ON m.id = b.market_id
-         LEFT JOIN users u ON u.id = b.created_by_user_id
+      `${CANDIDATE_SELECT}
         WHERE b.household_id = ?
           AND b.status = 'confirmed'
           AND b.deleted_at IS NULL
@@ -310,4 +436,11 @@ export class BillDuplicatesService {
       params,
     );
   }
+}
+
+/** The later bill_date of a pair (ISO days compare as strings). */
+function newest(p: DuplicatePairDto): string {
+  return p.bill.bill_date > p.other.bill_date
+    ? p.bill.bill_date
+    : p.other.bill_date;
 }

@@ -54,6 +54,9 @@ import {
 } from './dto/bill-detail-response.dto';
 import { ListDraftsQueryDto } from './dto/list-drafts-query.dto';
 import {
+  DismissDuplicateDto,
+  DuplicateSuggestionsQueryDto,
+  DuplicateSuggestionsResponseDto,
   MarkDuplicateDto,
   PossibleDuplicateDto,
 } from './dto/bill-duplicates.dto';
@@ -79,6 +82,8 @@ import {
   ApiConfirmBillResponses,
   ApiMarkDuplicateResponses,
   ApiUnmarkDuplicateResponses,
+  ApiDuplicateSuggestionsResponses,
+  ApiDismissDuplicateResponses,
   ApiDashboardResponses,
   ApiSpendingBreakdownResponses,
 } from './dto/api-responses.decorator';
@@ -382,6 +387,19 @@ export class BillController {
     return this.spendingBreakdown.getSpendingBreakdown(ctx.householdId, query);
   }
 
+  @Get('duplicate-suggestions')
+  @ApiOperation({
+    summary:
+      'Pairs of confirmed bills that look like the same purchase, best match first',
+  })
+  @ApiDuplicateSuggestionsResponses()
+  async duplicateSuggestions(
+    @CurrentHousehold() ctx: HouseholdContext,
+    @Query() query: DuplicateSuggestionsQueryDto,
+  ): Promise<DuplicateSuggestionsResponseDto> {
+    return this.billDuplicates.suggestions(ctx.householdId, query);
+  }
+
   @Get(':id')
   @ApiOperation({ summary: 'Get a bill by ID with line items' })
   @ApiParam({
@@ -459,6 +477,31 @@ export class BillController {
   ): Promise<BillDetailResponseDto> {
     await this.billDuplicates.unmarkDuplicate(id, ctx.householdId);
     return this.billCrud.getBill(id, ctx.householdId);
+  }
+
+  @Post(':id/dismiss-duplicate')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({
+    summary: 'Keep both bills of a pair: stop suggesting it as a duplicate',
+  })
+  @ApiParam({
+    name: 'id',
+    description: 'Bill unique identifier',
+    example: '123e4567-e89b-12d3-a456-426614174000',
+  })
+  @ApiDismissDuplicateResponses()
+  async dismissDuplicate(
+    @CurrentUser() user: AuthenticatedUser,
+    @CurrentHousehold() ctx: HouseholdContext,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: DismissDuplicateDto,
+  ): Promise<void> {
+    await this.billDuplicates.dismiss(
+      id,
+      ctx.householdId,
+      user.id,
+      dto.other_bill_id,
+    );
   }
 
   @Put(':id')

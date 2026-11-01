@@ -1,5 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Currency } from '../../../types/currency.enum';
+import { BillStatus } from '../../../types/bill-status.enum';
 
 export class BillMarketRefDto {
   @ApiProperty({ format: 'uuid' })
@@ -54,4 +55,22 @@ export class BillResponseDto {
       'total_amount in household_currency at the official rate of bill_date; null when the bill has no currency or no rate is saved',
   })
   household_amount?: number | null;
+}
+
+export class BillListItemDto extends BillResponseDto {
+  @ApiProperty({
+    enum: BillStatus,
+    enumName: 'BillStatus',
+    description:
+      '"duplicate" only appears when the list is asked for include_duplicates',
+  })
+  status!: BillStatus;
+
+  @ApiProperty({
+    type: String,
+    format: 'uuid',
+    nullable: true,
+    description: 'The original bill when status is "duplicate", else null',
+  })
+  duplicate_of_id!: string | null;
 }

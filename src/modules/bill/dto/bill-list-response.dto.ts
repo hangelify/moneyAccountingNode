@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { BillResponseDto } from './bill-response.dto';
+import { BillListItemDto } from './bill-response.dto';
 
 export class PaginationMetaDto {
   @ApiProperty({ example: 42 })
@@ -16,8 +16,8 @@ export class PaginationMetaDto {
 }
 
 export class BillListResponseDto {
-  @ApiProperty({ type: [BillResponseDto] })
-  data!: BillResponseDto[];
+  @ApiProperty({ type: [BillListItemDto] })
+  data!: BillListItemDto[];
 
   @ApiProperty({ type: PaginationMetaDto })
   meta!: PaginationMetaDto;

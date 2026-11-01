@@ -40,7 +40,11 @@ import {
   MAX_QUANTITY,
   MAX_WEIGHT_KG,
 } from './tasks/schemas/parsed-bill.schema';
-import { BillResponseDto, BillMarketRefDto } from './dto/bill-response.dto';
+import {
+  BillResponseDto,
+  BillListItemDto,
+  BillMarketRefDto,
+} from './dto/bill-response.dto';
 import {
   BILL_ITEM_TOLERANCE,
   DEFAULT_BILL_ITEM_TOLERANCE,
@@ -207,7 +211,9 @@ export class BillCrudService {
 
     const conditions: string[] = [
       `b.household_id = ?`,
-      `b.status     = 'confirmed'`,
+      filters.include_duplicates
+        ? `b.status IN ('confirmed', 'duplicate')`
+        : `b.status     = 'confirmed'`,
       `b.deleted_at IS NULL`,
     ];
     const params: unknown[] = [householdId];
@@ -256,7 +262,7 @@ export class BillCrudService {
       ) as Promise<Array<{ count: string }>>,
       this.em.getConnection().execute(
         `SELECT b.id, b.bill_date::text, b.currency, b.amount::text, b.description,
-                b.created_at::text,
+                b.status, b.duplicate_of_id, b.created_at::text,
                 m.id AS market_id, m.name AS market_name, m.city AS market_city,
                 abs(b.amount - i.total) > ? * i.count AS amount_mismatch,
                 h.currency AS household_currency,
@@ -280,6 +286,8 @@ export class BillCrudService {
           currency: string | null;
           amount: string;
           description: string | null;
+          status: BillStatus;
+          duplicate_of_id: string | null;
           market_id: string | null;
           market_name: string | null;
           market_city: string | null;
@@ -300,13 +308,15 @@ export class BillCrudService {
     };
 
     const data = dataRows.map(
-      (r): BillResponseDto => ({
+      (r): BillListItemDto => ({
         id: r.id,
         bill_date: r.bill_date,
         currency: (r.currency ?? undefined) as Currency | undefined,
         total_amount: Number(r.amount),
         amount_mismatch: r.amount_mismatch,
         description: r.description ?? undefined,
+        status: r.status,
+        duplicate_of_id: r.duplicate_of_id,
         market: r.market_id
           ? {
               id: r.market_id,

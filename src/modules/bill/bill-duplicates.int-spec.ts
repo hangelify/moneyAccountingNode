@@ -23,6 +23,9 @@ import { SubCategory } from '../../entities/sub-category.entity';
 import { BillSubCategory } from '../../entities/bill-sub-category.entity';
 import { BillDashboardService } from './bill-dashboard.service';
 import type { DuplicateProbe } from './bill-duplicates';
+import { Category } from '../../entities/category.entity';
+import { SpendingBreakdownService } from './spending-breakdown.service';
+import { MarketService } from '../market/market.service';
 
 describe('BillDuplicatesService (PostgreSQL)', () => {
   let orm: MikroORM;
@@ -957,5 +960,197 @@ describe('duplicate suggestions (PostgreSQL)', () => {
     for (let i = 0; i < 15; i++) await bill({ amount: 27 });
 
     expect((await suggest()).pairs).toHaveLength(100);
+  });
+});
+
+describe('totals and the bill list with a duplicate (PostgreSQL)', () => {
+  let orm: MikroORM;
+  let householdId: string;
+  let marketId: string;
+  let originalId: string;
+  let duplicateId: string;
+
+  function services() {
+    const fork = orm.em.fork();
+    const rates = new ExchangeRateService(fork, new StubProvider());
+    const duplicates = new BillDuplicatesService(fork);
+    const crud = new BillCrudService(
+      fork.getRepository(Bill),
+      fork.getRepository(Market),
+      fork.getRepository(SubCategory),
+      fork,
+      rates,
+      new BillConversionService(fork, rates),
+      duplicates,
+    );
+    return {
+      crud,
+      duplicates,
+      dashboard: new BillDashboardService(fork, rates),
+      breakdown: new SpendingBreakdownService(fork, rates),
+      markets: new MarketService(fork.getRepository(Market), fork),
+    };
+  }
+
+  beforeAll(async () => {
+    const mod = await Test.createTestingModule({
+      imports: [
+        MikroOrmModule.forRoot({
+          ...createMikroOrmConfig(),
+          allowGlobalContext: true,
+        }),
+      ],
+    }).compile();
+    orm = mod.get(MikroORM);
+    const em = orm.em.fork();
+    const ana = em.create(User, {
+      first_name: 'Ana',
+      email: 'bill-duplicates-totals@example.com',
+      password: 'x',
+    } as never);
+    const household = em.create(Household, {
+      name: 'Dups totals',
+      currency: Currency.EUR,
+      created_by: ana,
+    } as never);
+    const market = em.create(Market, {
+      name: 'Linella',
+      city: 'Chisinau',
+      household,
+    } as never);
+    const food = em.create(Category, { name: 'Food', household } as never);
+    const bread = em.create(SubCategory, {
+      name: 'bread',
+      category: food,
+    } as never);
+    const milk = em.create(SubCategory, {
+      name: 'milk',
+      category: food,
+    } as never);
+
+    // The same receipt saved twice.
+    const copy = () => {
+      const b = em.create(Bill, {
+        household,
+        created_by: ana,
+        market,
+        status: BillStatus.CONFIRMED,
+        currency: Currency.EUR,
+        bill_date: '2026-09-10',
+        amount: 30,
+      } as never);
+      for (const [s, amount] of [
+        [bread, 20],
+        [milk, 10],
+      ] as const) {
+        em.create(BillSubCategory, {
+          bill: b,
+          sub_category: s,
+          raw_name: 'item',
+          product_count: 1,
+          amount,
+        } as never);
+      }
+      return b;
+    };
+    const a = copy();
+    const b = copy();
+    await em.flush();
+    householdId = household.id;
+    marketId = market.id;
+    originalId = a.id;
+    duplicateId = b.id;
+    await services().duplicates.markDuplicate(b.id, householdId, a.id);
+  });
+
+  afterAll(async () => {
+    await orm.close();
+  });
+
+  const sum = (rows: Array<{ total: number }>) =>
+    rows.reduce((s, r) => s + r.total, 0);
+
+  it('the dashboard counts the receipt once, per currency and in the household currency', async () => {
+    const res = await services().dashboard.getDashboard(householdId, {
+      type: 'month',
+      year: 2026,
+      month: 9,
+    });
+    const eur = res.by_currency.find((s) => s.currency === Currency.EUR)!;
+    expect(sum(eur.period_totals)).toBe(30);
+    expect(
+      sum(eur.category_stats.map((c) => ({ total: c.total_amount }))),
+    ).toBe(30);
+    expect(sum(res.in_household_currency.period_totals)).toBe(30);
+    expect(
+      sum(
+        res.in_household_currency.category_stats.map((c) => ({
+          total: c.total_amount,
+        })),
+      ),
+    ).toBe(30);
+    expect(res.bills.map((x) => x.id)).toEqual([originalId]);
+  });
+
+  it('the spending breakdown counts the receipt once', async () => {
+    const res = await services().breakdown.getSpendingBreakdown(householdId, {
+      period: 'month',
+      anchor: '2026-09-15',
+    } as never);
+    const eur = res.by_currency.find((s) => s.currency === Currency.EUR)!;
+    expect(eur.total).toBe(30);
+    expect(eur.lines).toBe(2);
+    expect(res.in_household_currency.total).toBe(30);
+  });
+
+  it('the market bill count counts the receipt once', async () => {
+    // MarketService.listMarkets passes an array to `ANY(?)`, which the driver
+    // expands into a value list and Postgres rejects (the same known bug as the
+    // skipped market_names test in bill-queries.int-spec.ts). Hand the SQL its
+    // array as a Postgres array literal so the status filter is what is tested.
+    const fork = orm.em.fork();
+    const conn = fork.getConnection();
+    const execute = conn.execute.bind(conn);
+    jest.spyOn(conn, 'execute').mockImplementation(((
+      sql: string,
+      params: unknown[] = [],
+      ...rest: unknown[]
+    ) =>
+      (execute as (...a: unknown[]) => unknown)(
+        sql,
+        params.map((p) => (Array.isArray(p) ? `{${p.join(',')}}` : p)),
+        ...rest,
+      )) as never);
+    const markets = new MarketService(fork.getRepository(Market), fork);
+
+    const list = await markets.listMarkets(householdId);
+
+    expect(list.find((m) => m.id === marketId)!.bill_count).toBe(1);
+  });
+
+  it('GET /bills hides the duplicate by default', async () => {
+    const res = await services().crud.listBills(householdId, {});
+    expect(res.data.map((r) => r.id)).toEqual([originalId]);
+    expect(res.meta.total).toBe(1);
+    expect(res.data[0]).toMatchObject({
+      status: BillStatus.CONFIRMED,
+      duplicate_of_id: null,
+    });
+  });
+
+  it('include_duplicates returns both, flagged', async () => {
+    const res = await services().crud.listBills(householdId, {
+      include_duplicates: true,
+    });
+    expect(res.meta.total).toBe(2);
+    const byId = new Map(res.data.map((r) => [r.id, r]));
+    expect(byId.get(duplicateId)).toMatchObject({
+      status: BillStatus.DUPLICATE,
+      duplicate_of_id: originalId,
+    });
+    expect(byId.get(originalId)).toMatchObject({
+      status: BillStatus.CONFIRMED,
+      duplicate_of_id: null,
+    });
   });
 });

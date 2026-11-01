@@ -52,6 +52,7 @@ import {
   DraftListResponseDto,
 } from './dto/bill-detail-response.dto';
 import { ListDraftsQueryDto } from './dto/list-drafts-query.dto';
+import { PossibleDuplicateDto } from './dto/bill-duplicates.dto';
 import { BillDuplicatesService } from './bill-duplicates.service';
 import { ExchangeRateService } from '../exchange-rate/exchange-rate.service';
 import {
@@ -662,13 +663,29 @@ export class BillCrudService {
       };
     }
     return {
-      possible_duplicates: await this.duplicates.findCandidates(
+      possible_duplicates: await this.candidatesOf(householdId, bill),
+      duplicate_of: null,
+    };
+  }
+
+  /** Never throws: the write stands even if the look-alike lookup fails. */
+  private async candidatesOf(
+    householdId: string,
+    bill: Bill,
+  ): Promise<PossibleDuplicateDto[]> {
+    try {
+      return await this.duplicates.findCandidates(
         householdId,
         this.duplicates.probeOf(bill),
         { excludeBillId: bill.id },
-      ),
-      duplicate_of: null,
-    };
+      );
+    } catch (err) {
+      this.log.error(
+        `Looking up possible duplicates of bill ${bill.id} failed`,
+        err instanceof Error ? err.stack : String(err),
+      );
+      return [];
+    }
   }
 
   /**

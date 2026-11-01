@@ -3,6 +3,7 @@ import {
   NotFoundException,
   BadRequestException,
   ConflictException,
+  Logger,
 } from '@nestjs/common';
 import { EntityManager, EntityRepository } from '@mikro-orm/core';
 import { BillCrudService } from './bill-crud.service';
@@ -71,7 +72,13 @@ function makeService() {
   (em as unknown as { transactional: jest.Mock }).transactional = jest.fn(
     (cb: (em: EntityManager) => unknown) => cb(em),
   );
+  const duplicates = {
+    findCandidates: jest.fn().mockResolvedValue([]),
+    probeOf: jest.fn().mockReturnValue({}),
+    originalOf: jest.fn(),
+  };
   return {
+    duplicates,
     service: new BillCrudService(
       billRepo,
       marketRepo,
@@ -81,11 +88,7 @@ function makeService() {
       {
         forBills: jest.fn().mockResolvedValue(new Map()),
       } as unknown as BillConversionService,
-      {
-        findCandidates: jest.fn().mockResolvedValue([]),
-        probeOf: jest.fn().mockReturnValue({}),
-        originalOf: jest.fn(),
-      } as unknown as BillDuplicatesService,
+      duplicates as unknown as BillDuplicatesService,
     ),
     billRepo,
     marketRepo,
@@ -132,6 +135,25 @@ describe('BillCrudService', () => {
       const result = await service.createBill(householdId, userId, dto);
       expect(result.total_amount).toBe(9.99);
       expect(em.flush as jest.Mock).toHaveBeenCalled();
+    });
+
+    it('still resolves when the duplicate lookup fails', async () => {
+      const { service, duplicates } = makeService();
+      duplicates.findCandidates.mockRejectedValue(new Error('db gone'));
+      const logSpy = jest
+        .spyOn(Logger.prototype, 'error')
+        .mockImplementation(() => undefined);
+
+      const result = await service.createBill(householdId, userId, {
+        bill_date: '2026-05-19',
+        total_amount: 9.99,
+        items: [],
+      });
+
+      expect(result.possible_duplicates).toEqual([]);
+      expect(result.duplicate_of).toBeNull();
+      expect(logSpy).toHaveBeenCalled();
+      logSpy.mockRestore();
     });
 
     it('still resolves when the household lookup for the rate fails', async () => {
@@ -494,6 +516,30 @@ describe('BillCrudService', () => {
     });
   });
 
+  describe('getBill duplicate lookup', () => {
+    it('returns the bill with no candidates when the lookup fails', async () => {
+      const { service, billRepo, duplicates } = makeService();
+      (billRepo.findOne as jest.Mock).mockResolvedValue({
+        id: billId,
+        status: BillStatus.CONFIRMED,
+        amount: 9.99,
+        bill_date: '2026-05-19',
+        created_at: new Date(),
+        billSubCategories: { getItems: () => [] },
+      });
+      duplicates.findCandidates.mockRejectedValue(new Error('db gone'));
+      const logSpy = jest
+        .spyOn(Logger.prototype, 'error')
+        .mockImplementation(() => undefined);
+
+      const result = await service.getBill(billId, householdId);
+
+      expect(result.possible_duplicates).toEqual([]);
+      expect(result.duplicate_of).toBeNull();
+      logSpy.mockRestore();
+    });
+  });
+
   describe('softDeleteBill', () => {
     it('sets deleted_at on the bill', async () => {
       const { service, billRepo, em } = makeService();
@@ -583,6 +629,35 @@ describe('BillCrudService', () => {
       expect(bill.status).toBe(BillStatus.CONFIRMED);
       expect(result.total_amount).toBe(12);
       expect(em.flush as jest.Mock).toHaveBeenCalled();
+    });
+
+    it('still resolves when the duplicate lookup fails', async () => {
+      const { service, em, duplicates } = makeService();
+      const bill = {
+        id: billId,
+        status: BillStatus.DRAFT,
+        amount: 9.99,
+        bill_date: '2026-05-19',
+        created_at: new Date(),
+        deleted_at: undefined,
+        market: undefined,
+      } as unknown as Bill;
+      (em.findOne as jest.Mock).mockResolvedValue(bill);
+      duplicates.findCandidates.mockRejectedValue(new Error('db gone'));
+      const logSpy = jest
+        .spyOn(Logger.prototype, 'error')
+        .mockImplementation(() => undefined);
+
+      const result = await service.confirmBill(billId, householdId, userId, {
+        bill_date: '2026-05-19',
+        total_amount: 12,
+        items: [],
+      });
+
+      expect(result.status).toBe(BillStatus.CONFIRMED);
+      expect(result.possible_duplicates).toEqual([]);
+      expect(result.duplicate_of).toBeNull();
+      logSpy.mockRestore();
     });
 
     it('throws NotFoundException when draft not found', async () => {

@@ -16,6 +16,7 @@ import { NotFoundException } from '@nestjs/common';
 import { BillCrudService } from './bill-crud.service';
 import { ExchangeRateService } from '../exchange-rate/exchange-rate.service';
 import { StubProvider } from '../exchange-rate/testing/stub-exchange-rate.provider';
+import { BillDuplicatesService } from './bill-duplicates.service';
 import { BillConversionService } from './household-conversion';
 import { BillPhotoService } from './bill-photo.service';
 import type { BillAiOrchestrator } from './bill-ai.orchestrator';
@@ -107,6 +108,7 @@ describe('draft from AI output (PostgreSQL)', () => {
       fork,
       rates,
       new BillConversionService(fork, rates),
+      new BillDuplicatesService(fork),
     );
   }
 

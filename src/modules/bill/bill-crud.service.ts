@@ -52,6 +52,7 @@ import {
   DraftListResponseDto,
 } from './dto/bill-detail-response.dto';
 import { ListDraftsQueryDto } from './dto/list-drafts-query.dto';
+import { BillDuplicatesService } from './bill-duplicates.service';
 import { ExchangeRateService } from '../exchange-rate/exchange-rate.service';
 import {
   BillConversionService,
@@ -128,6 +129,7 @@ export class BillCrudService {
     private readonly em: EntityManager,
     private readonly exchangeRates: ExchangeRateService,
     private readonly conversion: BillConversionService,
+    private readonly duplicates: BillDuplicatesService,
     @Optional()
     @Inject(BILL_ITEM_TOLERANCE)
     private readonly itemTolerance: number = DEFAULT_BILL_ITEM_TOLERANCE,
@@ -174,6 +176,7 @@ export class BillCrudService {
     return {
       ...this.toDetailDto(bill, bscEntities),
       ...(await this.conversion.forBills(householdId, [bill.id])).get(bill.id),
+      ...(await this.duplicateInfo(householdId, bill)),
     };
   }
 
@@ -320,6 +323,7 @@ export class BillCrudService {
     return {
       ...this.toDetailDto(bill, bill.billSubCategories.getItems()),
       ...conversion.get(id),
+      ...(await this.duplicateInfo(householdId, bill)),
     };
   }
 
@@ -634,6 +638,36 @@ export class BillCrudService {
     return {
       ...confirmed.dto,
       ...(await this.conversion.forBills(householdId, [id])).get(id),
+      ...(await this.duplicateInfo(householdId, confirmed.bill)),
+    };
+  }
+
+  /**
+   * Candidates for a bill that is already saved, or its original when it was
+   * marked as a duplicate. Runs after the write has committed.
+   */
+  private async duplicateInfo(
+    householdId: string,
+    bill: Bill,
+  ): Promise<
+    Pick<BillDetailResponseDto, 'possible_duplicates' | 'duplicate_of'>
+  > {
+    if (bill.status === BillStatus.DUPLICATE && bill.duplicate_of) {
+      return {
+        possible_duplicates: [],
+        duplicate_of: await this.duplicates.originalOf(
+          householdId,
+          bill.duplicate_of.id,
+        ),
+      };
+    }
+    return {
+      possible_duplicates: await this.duplicates.findCandidates(
+        householdId,
+        this.duplicates.probeOf(bill),
+        { excludeBillId: bill.id },
+      ),
+      duplicate_of: null,
     };
   }
 

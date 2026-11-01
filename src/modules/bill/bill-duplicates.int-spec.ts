@@ -8,7 +8,12 @@ import { Market } from '../../entities/market.entity';
 import { User } from '../../entities/user.entity';
 import { BillStatus } from '../../types/bill-status.enum';
 import { Currency } from '../../types/currency.enum';
+import { BillCrudService } from './bill-crud.service';
 import { BillDuplicatesService } from './bill-duplicates.service';
+import { ExchangeRateService } from '../exchange-rate/exchange-rate.service';
+import { StubProvider } from '../exchange-rate/testing/stub-exchange-rate.provider';
+import { BillConversionService } from './household-conversion';
+import { SubCategory } from '../../entities/sub-category.entity';
 import type { DuplicateProbe } from './bill-duplicates';
 
 describe('BillDuplicatesService (PostgreSQL)', () => {
@@ -154,5 +159,141 @@ describe('BillDuplicatesService (PostgreSQL)', () => {
       dateToleranceDays: 1,
     });
     expect(found.map((f) => f.id)).toEqual([ids.original]);
+  });
+});
+
+describe('possible duplicates on bill reads and writes (PostgreSQL)', () => {
+  let orm: MikroORM;
+  let householdId: string;
+  let userId: string;
+  const ids: Record<string, string> = {};
+
+  function crud() {
+    const fork = orm.em.fork();
+    const rates = new ExchangeRateService(fork, new StubProvider());
+    return new BillCrudService(
+      fork.getRepository(Bill),
+      fork.getRepository(Market),
+      fork.getRepository(SubCategory),
+      fork,
+      rates,
+      new BillConversionService(fork, rates),
+      new BillDuplicatesService(fork),
+    );
+  }
+
+  async function draft(data: Record<string, unknown>): Promise<string> {
+    const fork = orm.em.fork();
+    const b = fork.create(Bill, {
+      household: householdId,
+      created_by: userId,
+      status: BillStatus.DRAFT,
+      currency: Currency.MDL,
+      bill_date: '2026-10-03',
+      amount: 77,
+      ...data,
+    } as never);
+    await fork.flush();
+    return b.id;
+  }
+
+  beforeAll(async () => {
+    const mod = await Test.createTestingModule({
+      imports: [
+        MikroOrmModule.forRoot({
+          ...createMikroOrmConfig(),
+          allowGlobalContext: true,
+        }),
+      ],
+    }).compile();
+    orm = mod.get(MikroORM);
+    const em = orm.em.fork();
+    const ana = em.create(User, {
+      first_name: 'Ana',
+      email: 'bill-duplicates-reads@example.com',
+      password: 'x',
+    } as never);
+    const household = em.create(Household, {
+      name: 'Dups reads',
+      currency: Currency.MDL,
+      created_by: ana,
+    } as never);
+    const original = em.create(Bill, {
+      household,
+      created_by: ana,
+      status: BillStatus.CONFIRMED,
+      currency: Currency.MDL,
+      bill_date: '2026-10-03',
+      amount: 77,
+      market_name_raw: 'Corner shop',
+    } as never);
+    await em.flush();
+    householdId = household.id;
+    userId = ana.id;
+    ids.original = original.id;
+    ids.dupe = await draft({
+      status: BillStatus.DUPLICATE,
+      duplicate_of: original,
+    });
+  });
+
+  afterAll(async () => {
+    await orm.close();
+  });
+
+  it('getBill of a draft lists confirmed look-alikes', async () => {
+    const id = await draft({});
+    const res = await crud().getBill(id, householdId);
+    expect(res.duplicate_of).toBeNull();
+    expect(res.possible_duplicates).toEqual([
+      expect.objectContaining({
+        id: ids.original,
+        total_amount: 77,
+        market_name: 'Corner shop',
+        created_by_name: 'Ana',
+        match: 'weak',
+      }),
+    ]);
+  });
+
+  it('getBill of a duplicate returns duplicate_of and no candidates', async () => {
+    const res = await crud().getBill(ids.dupe, householdId);
+    expect(res.possible_duplicates).toEqual([]);
+    expect(res.duplicate_of).toEqual({
+      id: ids.original,
+      bill_date: '2026-10-03',
+      total_amount: 77,
+      currency: Currency.MDL,
+      market_name: 'Corner shop',
+      created_by_name: 'Ana',
+    });
+  });
+
+  it('createBill returns possible_duplicates and still saves the bill as confirmed', async () => {
+    const res = await crud().createBill(householdId, userId, {
+      bill_date: '2026-10-03',
+      total_amount: 77,
+      currency: Currency.MDL,
+      items: [],
+    });
+    expect(res.status).toBe(BillStatus.CONFIRMED);
+    expect(res.duplicate_of).toBeNull();
+    expect(res.possible_duplicates?.map((d) => d.id)).toEqual([ids.original]);
+    const saved = await orm.em.fork().findOneOrFail(Bill, res.id);
+    expect(saved.status).toBe(BillStatus.CONFIRMED);
+  });
+
+  it('confirmBill returns possible_duplicates excluding itself', async () => {
+    const id = await draft({});
+    const res = await crud().confirmBill(id, householdId, userId, {
+      bill_date: '2026-10-03',
+      total_amount: 77,
+      currency: Currency.MDL,
+      items: [],
+    });
+    expect(res.status).toBe(BillStatus.CONFIRMED);
+    const found = res.possible_duplicates?.map((d) => d.id) ?? [];
+    expect(found).toContain(ids.original);
+    expect(found).not.toContain(id);
   });
 });

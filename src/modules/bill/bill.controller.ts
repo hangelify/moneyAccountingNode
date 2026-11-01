@@ -37,6 +37,7 @@ import type { HouseholdContext } from '../household/guards/household-member.guar
 import { CurrentHousehold } from '../household/decorators/current-household.decorator';
 import { BillPhotoService } from './bill-photo.service';
 import { BillCrudService } from './bill-crud.service';
+import { BillDuplicatesService } from './bill-duplicates.service';
 import { BillDashboardService } from './bill-dashboard.service';
 import { SpendingBreakdownService } from './spending-breakdown.service';
 import {
@@ -52,6 +53,8 @@ import {
   DraftListResponseDto,
 } from './dto/bill-detail-response.dto';
 import { ListDraftsQueryDto } from './dto/list-drafts-query.dto';
+import { PossibleDuplicateDto } from './dto/bill-duplicates.dto';
+import { Currency } from '../../types/currency.enum';
 import { BillListResponseDto } from './dto/bill-list-response.dto';
 import {
   BillDashboardResponseDto,
@@ -98,6 +101,7 @@ export class BillController {
   constructor(
     private readonly billPhoto: BillPhotoService,
     private readonly billCrud: BillCrudService,
+    private readonly billDuplicates: BillDuplicatesService,
     private readonly billDashboard: BillDashboardService,
     private readonly spendingBreakdown: SpendingBreakdownService,
     @Inject(STORAGE_SERVICE) private readonly storage: StorageService,
@@ -144,7 +148,9 @@ export class BillController {
       ctx.householdId,
       imageSha256,
     );
-    if (existing) return this.duplicateResponse(existing);
+    if (existing) {
+      return this.duplicateResponse(ctx.householdId, existing);
+    }
 
     const { parsed, requestId, isReceipt } =
       await this.billPhoto.parseAndCategorize(
@@ -198,22 +204,72 @@ export class BillController {
         ...stored.parsed,
         request_id: stored.requestId,
         duplicate: draft.duplicate,
+        possible_duplicates: await this.possibleDuplicates(
+          ctx.householdId,
+          stored.parsed,
+        ),
       };
     }
     // Confirmed or deleted in the meantime.
+    const saved = { ...parsed, draft_id: draft.id };
     return {
-      ...parsed,
-      draft_id: draft.id,
+      ...saved,
       request_id: requestId,
       duplicate: draft.duplicate,
+      possible_duplicates: await this.possibleDuplicates(
+        ctx.householdId,
+        saved,
+      ),
     };
   }
 
-  private duplicateResponse(draft: {
-    parsed: ParsedBillResponseDto;
-    requestId: string | null;
-  }): ParsePhotoResponseDto {
-    return { ...draft.parsed, request_id: draft.requestId, duplicate: true };
+  private async duplicateResponse(
+    householdId: string,
+    draft: { parsed: ParsedBillResponseDto; requestId: string | null },
+  ): Promise<ParsePhotoResponseDto> {
+    return {
+      ...draft.parsed,
+      request_id: draft.requestId,
+      duplicate: true,
+      possible_duplicates: await this.possibleDuplicates(
+        householdId,
+        draft.parsed,
+      ),
+    };
+  }
+
+  /**
+   * Look-alikes of a parsed draft. Never fails the request: the AI call is
+   * already paid for, and a draft without a read date has no reliable date
+   * to match on.
+   */
+  private async possibleDuplicates(
+    householdId: string,
+    draft: ParsedBillResponseDto,
+  ): Promise<PossibleDuplicateDto[]> {
+    if (!draft.bill_date) return [];
+    try {
+      return await this.billDuplicates.findCandidates(
+        householdId,
+        {
+          amount: draft.total_amount ?? 0,
+          currency: (draft.currency as Currency | null) ?? null,
+          bill_date: draft.bill_date,
+          market_id: null,
+          market_name: draft.market_name,
+          fiscal_register_id: draft.fiscal_register_id,
+          fiscal_receipt_number: draft.fiscal_receipt_number,
+          purchase_time: draft.purchase_time,
+        },
+        { excludeBillId: draft.draft_id },
+      );
+    } catch (err) {
+      this.log.error(
+        `Looking up possible duplicates of draft ${draft.draft_id} failed`,
+        err instanceof Error ? err.stack : String(err),
+      );
+      return [];
+    }
   }
 
   @Post()

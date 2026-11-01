@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { EntityManager, EntityRepository } from '@mikro-orm/core';
 import { BillCrudService } from './bill-crud.service';
+import { BillDuplicatesService } from './bill-duplicates.service';
 import type { BillConversionService } from './household-conversion';
 import type { ExchangeRateService } from '../exchange-rate/exchange-rate.service';
 import { Bill } from '../../entities/bill.entity';
@@ -80,6 +81,11 @@ function makeService() {
       {
         forBills: jest.fn().mockResolvedValue(new Map()),
       } as unknown as BillConversionService,
+      {
+        findCandidates: jest.fn().mockResolvedValue([]),
+        probeOf: jest.fn().mockReturnValue({}),
+        originalOf: jest.fn(),
+      } as unknown as BillDuplicatesService,
     ),
     billRepo,
     marketRepo,

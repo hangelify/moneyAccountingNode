@@ -32,7 +32,8 @@ export function ApiParsePhotoResponses(): MethodDecorator & ClassDecorator {
       type: ParsePhotoResponseDto,
       description:
         'The recognized bill, saved as a draft; request_id identifies the AI request. ' +
-        'If this photo already has an open draft, that draft is returned with duplicate: true and no AI call is made.',
+        'If this photo already has an open draft, that draft is returned with duplicate: true and no AI call is made. ' +
+        'possible_duplicates lists confirmed bills that may be the same purchase; nothing is blocked.',
     }),
     // Every error of this endpoint has the AiErrorResponseDto body.
     ApiBadRequestResponse({
@@ -97,7 +98,8 @@ export const ApiCreateBillResponses = () =>
     ApiResponse({
       status: 201,
       type: BillDetailResponseDto,
-      description: 'Bill created',
+      description:
+        'Bill created; possible_duplicates lists other confirmed bills that may be the same purchase (the bill is saved regardless)',
     }),
     ApiResponse({
       status: 400,
@@ -125,7 +127,8 @@ export const ApiGetBillResponses = () =>
     ApiResponse({
       status: 200,
       type: BillDetailResponseDto,
-      description: 'Bill retrieved',
+      description:
+        'Bill retrieved; a draft or confirmed bill lists possible_duplicates, a bill marked as a duplicate returns duplicate_of',
     }),
     ApiResponse({ status: 404, description: 'Bill not found' }),
     ApiResponse({ status: 401, description: 'Unauthorized' }),
@@ -182,7 +185,8 @@ export const ApiConfirmBillResponses = () =>
     ApiResponse({
       status: 200,
       type: BillDetailResponseDto,
-      description: 'Bill confirmed',
+      description:
+        'Bill confirmed; possible_duplicates lists other confirmed bills that may be the same purchase (the bill is confirmed regardless)',
     }),
     ApiResponse({
       status: 404,

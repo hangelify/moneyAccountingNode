@@ -15,6 +15,7 @@ import { BillStatus } from '../../types/bill-status.enum';
 import { BillCrudService } from './bill-crud.service';
 import { ExchangeRateService } from '../exchange-rate/exchange-rate.service';
 import { StubProvider } from '../exchange-rate/testing/stub-exchange-rate.provider';
+import { BillDuplicatesService } from './bill-duplicates.service';
 import { BillConversionService } from './household-conversion';
 import type { CreateBillItemDto } from './dto/create-bill.dto';
 import type { ConfirmBillItemDto } from './dto/confirm-bill.dto';
@@ -143,6 +144,7 @@ describe('confirm and create bill (PostgreSQL)', () => {
       fork,
       rates,
       new BillConversionService(fork, rates),
+      new BillDuplicatesService(fork),
     );
   }
 

@@ -16,6 +16,7 @@ import sharp from 'sharp';
 import { BillController } from './bill.controller';
 import { BillPhotoService } from './bill-photo.service';
 import { BillCrudService } from './bill-crud.service';
+import { BillDuplicatesService } from './bill-duplicates.service';
 import { BillDashboardService } from './bill-dashboard.service';
 import { BillDashboardQueryDto } from './dto/bill-dashboard.dto';
 import { SpendingBreakdownService } from './spending-breakdown.service';
@@ -52,12 +53,15 @@ describe('BillController', () => {
     confirmBill: jest.fn(),
   };
 
+  const findCandidates = jest.fn();
   const getSignedUrl = jest.fn();
   const getSpendingBreakdown = jest.fn();
 
   beforeEach(async () => {
     parseAndCategorize.mockReset();
     getSignedUrl.mockReset();
+    findCandidates.mockReset();
+    findCandidates.mockResolvedValue([]);
     getSpendingBreakdown.mockReset();
     Object.values(billCrudMock).forEach((fn) => fn.mockReset());
     billDashboardMock?.getDashboard?.mockReset?.();
@@ -66,6 +70,7 @@ describe('BillController', () => {
       providers: [
         { provide: BillPhotoService, useValue: { parseAndCategorize } },
         { provide: BillCrudService, useValue: billCrudMock },
+        { provide: BillDuplicatesService, useValue: { findCandidates } },
         {
           provide: BillDashboardService,
           useValue: { getDashboard: jest.fn() },
@@ -144,6 +149,120 @@ describe('BillController', () => {
       ...saved,
       request_id: 'req-1',
       duplicate: false,
+      possible_duplicates: [],
+    });
+  });
+
+  describe('possible duplicates', () => {
+    const candidate = {
+      id: 'bill-old',
+      bill_date: '2026-05-07',
+      total_amount: 2.4,
+      currency: 'EUR',
+      market_name: 'Lidl',
+      created_by_name: 'Ana',
+      match: 'strong',
+    };
+    const draft = {
+      draft_id: 'draft-1',
+      market_name: 'Lidl',
+      bill_date: '2026-05-07',
+      currency: 'EUR',
+      total_amount: 2.4,
+      fiscal_register_id: null,
+      fiscal_receipt_number: null,
+      purchase_time: null,
+      items: [{ name: 'BREAD' }],
+    };
+    const ctx = { householdId: 'hh-1', role: 'owner' } as never;
+    const user = { id: 'user-xyz' } as never;
+
+    it('parse-photo returns possible_duplicates for the saved draft', async () => {
+      parseAndCategorize.mockResolvedValue({
+        parsed: draft,
+        requestId: 'req-1',
+        isReceipt: true,
+      });
+      billCrudMock.findDraftByImageHash
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce({ parsed: draft, requestId: 'req-1' });
+      billCrudMock.createDraftFromParsed.mockResolvedValue({
+        id: 'draft-1',
+        duplicate: false,
+      });
+      findCandidates.mockResolvedValue([candidate]);
+
+      const res = await controller.parsePhoto(user, ctx, {
+        buffer: await makeImage('png'),
+        mimetype: 'image/png',
+      } as never);
+
+      expect(res.possible_duplicates).toEqual([candidate]);
+      expect(findCandidates).toHaveBeenCalledWith(
+        'hh-1',
+        {
+          amount: 2.4,
+          currency: 'EUR',
+          bill_date: '2026-05-07',
+          market_id: null,
+          market_name: 'Lidl',
+          fiscal_register_id: null,
+          fiscal_receipt_number: null,
+          purchase_time: null,
+        },
+        { excludeBillId: 'draft-1' },
+      );
+    });
+
+    it('a re-uploaded photo still carries possible_duplicates', async () => {
+      billCrudMock.findDraftByImageHash.mockResolvedValue({
+        parsed: draft,
+        requestId: 'req-old',
+      });
+      findCandidates.mockResolvedValue([candidate]);
+
+      const res = await controller.parsePhoto(user, ctx, {
+        buffer: await makeImage('png'),
+        mimetype: 'image/png',
+      } as never);
+
+      expect(res.duplicate).toBe(true);
+      expect(res.possible_duplicates).toEqual([candidate]);
+    });
+
+    it('skips the lookup for a draft without a read date', async () => {
+      billCrudMock.findDraftByImageHash.mockResolvedValue({
+        parsed: { ...draft, bill_date: null },
+        requestId: 'req-old',
+      });
+
+      const res = await controller.parsePhoto(user, ctx, {
+        buffer: await makeImage('png'),
+        mimetype: 'image/png',
+      } as never);
+
+      expect(res.possible_duplicates).toEqual([]);
+      expect(findCandidates).not.toHaveBeenCalled();
+    });
+
+    it('a failing lookup does not fail parse-photo', async () => {
+      billCrudMock.findDraftByImageHash.mockResolvedValue({
+        parsed: draft,
+        requestId: 'req-old',
+      });
+      findCandidates.mockRejectedValue(new Error('db down'));
+      const logSpy = jest
+        .spyOn(Logger.prototype, 'error')
+        .mockImplementation(() => undefined);
+
+      const res = await controller.parsePhoto(user, ctx, {
+        buffer: await makeImage('png'),
+        mimetype: 'image/png',
+      } as never);
+
+      expect(res.possible_duplicates).toEqual([]);
+      expect(logSpy).toHaveBeenCalled();
+      logSpy.mockRestore();
     });
   });
 
@@ -217,6 +336,7 @@ describe('BillController', () => {
         ...stored,
         request_id: 'req-old',
         duplicate: true,
+        possible_duplicates: [],
       });
     });
 
@@ -232,6 +352,7 @@ describe('BillController', () => {
       billCrudMock.createDraftFromParsed.mockResolvedValue({
         id: 'draft-old',
         duplicate: true,
+        possible_duplicates: [],
       });
 
       const res = await controller.parsePhoto(
@@ -244,6 +365,7 @@ describe('BillController', () => {
         ...stored,
         request_id: 'req-old',
         duplicate: true,
+        possible_duplicates: [],
       });
     });
   });
@@ -259,6 +381,7 @@ describe('BillController', () => {
     billCrudMock.createDraftFromParsed.mockResolvedValue({
       id: 'draft-other',
       duplicate: true,
+      possible_duplicates: [],
     });
 
     const res = await controller.parsePhoto(
@@ -272,6 +395,7 @@ describe('BillController', () => {
       draft_id: 'draft-other',
       request_id: 'req-3',
       duplicate: true,
+      possible_duplicates: [],
     });
   });
 

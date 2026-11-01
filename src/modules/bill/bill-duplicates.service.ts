@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { EntityManager } from '@mikro-orm/core';
 import type { Bill } from '../../entities/bill.entity';
 import type { Currency } from '../../types/currency.enum';
@@ -22,6 +22,11 @@ interface RawCandidate {
   created_at: string;
   created_by_name: string | null;
 }
+
+type RawOriginal = Pick<
+  RawCandidate,
+  'id' | 'amount' | 'currency' | 'bill_date' | 'market_name' | 'created_by_name'
+>;
 
 @Injectable()
 export class BillDuplicatesService {
@@ -77,6 +82,42 @@ export class BillDuplicatesService {
         created_by_name: row.created_by_name,
         match,
       }),
+    );
+  }
+
+  /** The bill a duplicate was marked as a copy of, without a match rating. */
+  async originalOf(
+    householdId: string,
+    duplicateOfId: string,
+  ): Promise<PossibleDuplicateDto> {
+    const [row] = await this.fetchOriginal(householdId, duplicateOfId);
+    if (!row) {
+      throw new NotFoundException(`Bill with ID ${duplicateOfId} not found`);
+    }
+    return {
+      id: row.id,
+      bill_date: row.bill_date,
+      total_amount: Number(row.amount),
+      currency: row.currency,
+      market_name: row.market_name,
+      created_by_name: row.created_by_name,
+    };
+  }
+
+  private fetchOriginal(
+    householdId: string,
+    id: string,
+  ): Promise<RawOriginal[]> {
+    return this.em.getConnection().execute(
+      `SELECT b.id, b.amount::text AS amount, b.currency::text AS currency,
+              b.bill_date::text AS bill_date,
+              COALESCE(m.name, b.market_name_raw) AS market_name,
+              u.first_name AS created_by_name
+         FROM bills b
+         LEFT JOIN markets m ON m.id = b.market_id
+         LEFT JOIN users u ON u.id = b.created_by_user_id
+        WHERE b.id = ? AND b.household_id = ?`,
+      [id, householdId],
     );
   }
 

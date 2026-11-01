@@ -13,6 +13,7 @@ import { BillStatus } from '../../types/bill-status.enum';
 import { Currency } from '../../types/currency.enum';
 import { BillCrudService } from './bill-crud.service';
 import { BillDashboardService } from './bill-dashboard.service';
+import { BillDuplicatesService } from './bill-duplicates.service';
 import { BillConversionService } from './household-conversion';
 import { ExchangeRateService } from '../exchange-rate/exchange-rate.service';
 import { EXCHANGE_RATE_PROVIDER } from '../exchange-rate/exchange-rate.provider';
@@ -50,6 +51,7 @@ describe('bill list and dashboard SQL (PostgreSQL)', () => {
         BillCrudService,
         BillDashboardService,
         BillConversionService,
+        BillDuplicatesService,
         ExchangeRateService,
         { provide: EXCHANGE_RATE_PROVIDER, useValue: new StubProvider() },
       ],

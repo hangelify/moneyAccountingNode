@@ -14,9 +14,11 @@ import { AI_CALL_CONFIG } from '../internal/ai-call-config';
 import type { AiCallConfig } from '../internal/ai-call-config';
 import { isTransient, retryAfterMs } from '../internal/transient';
 import {
+  InvalidResponseError,
   RefusalError,
   TruncatedResponseError,
 } from '../internal/error-classifier';
+import { toAnthropicOutputSchema } from '../internal/provider-json-schema';
 
 @Injectable()
 export class AnthropicProvider implements LlmProvider {
@@ -68,23 +70,24 @@ export class AnthropicProvider implements LlmProvider {
         return { role: 'user' as const, content: blocks };
       });
 
+    // No `temperature`: Claude Haiku 5.5 and Sonnet 5.5 answer a 400 to any
+    // non-default value, Opus 5.5 to any value, and API version 2026-10-21
+    // drops it on every model. JSON comes back as structured output, since
+    // Opus 5.5 and Sonnet 5.5 also reject a forced tool call.
     const body: Record<string, unknown> = {
       model,
       max_tokens: req.maxOutputTokens ?? 4096,
-      temperature: req.temperature ?? 0,
       system,
       messages,
     };
 
     if (req.jsonSchema) {
-      body.tools = [
-        {
-          name: 'output',
-          description: 'Return the structured output.',
-          input_schema: req.jsonSchema,
+      body.output_config = {
+        format: {
+          type: 'json_schema',
+          schema: toAnthropicOutputSchema(req.jsonSchema),
         },
-      ];
-      body.tool_choice = { type: 'tool', name: 'output' };
+      };
     }
 
     const { config } = this;
@@ -107,30 +110,17 @@ export class AnthropicProvider implements LlmProvider {
     );
 
     let text = '';
-    let json: unknown;
     const resp = response as {
-      content?: Array<{
-        type: string;
-        text?: string;
-        name?: string;
-        input?: unknown;
-      }>;
+      content?: Array<{ type: string; text?: string }>;
       usage?: { input_tokens?: number; output_tokens?: number };
       model?: string;
       stop_reason?: string | null;
     };
-    let toolUsed = false;
+    // Newer models can open with `thinking` blocks; only text is the answer.
     for (const block of resp.content ?? []) {
       if (block.type === 'text' && typeof block.text === 'string')
         text += block.text;
-      if (block.type === 'tool_use' && block.name === 'output') {
-        json = block.input;
-        toolUsed = true;
-      }
     }
-    // A tool answer has no text block; keep its input as the raw body so the
-    // audit shows what the model returned.
-    if (toolUsed) text = JSON.stringify(json) ?? '';
 
     const usage = toUsage(resp.usage?.input_tokens, resp.usage?.output_tokens);
     const stopReason = resp.stop_reason ?? undefined;
@@ -146,6 +136,18 @@ export class AnthropicProvider implements LlmProvider {
     }
     if (stopReason === 'refusal') {
       throw new RefusalError('Anthropic model refused to answer', text, usage);
+    }
+    let json: unknown;
+    if (req.jsonSchema) {
+      try {
+        json = JSON.parse(text);
+      } catch {
+        throw new InvalidResponseError(
+          'Anthropic returned non-JSON body',
+          text,
+          usage,
+        );
+      }
     }
 
     return {

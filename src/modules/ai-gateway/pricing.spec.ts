@@ -16,6 +16,17 @@ describe('pricing', () => {
     });
   });
 
+  it.each([
+    ['claude-opus-5-5', 4, 20],
+    ['claude-sonnet-5-5', 2, 10],
+    ['claude-haiku-5-5', 0.1, 0.5],
+  ])('prices %s at $%s/$%s per 1M tokens', (model, input, output) => {
+    expect(MODEL_PRICING[model]).toEqual({
+      inputPer1M: input,
+      outputPer1M: output,
+    });
+  });
+
   it('computes cost per 1M tokens correctly', () => {
     const r = computeCostUsd('gpt-4o', 1_000_000, 1_000_000);
     expect(r).toEqual({ inputUsd: 2.5, outputUsd: 10, totalUsd: 12.5 });

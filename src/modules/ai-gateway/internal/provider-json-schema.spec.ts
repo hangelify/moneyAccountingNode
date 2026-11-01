@@ -1,5 +1,8 @@
 import { z } from 'zod';
-import { toProviderJsonSchema } from './provider-json-schema';
+import {
+  toAnthropicOutputSchema,
+  toProviderJsonSchema,
+} from './provider-json-schema';
 import { ParsedBillSchema } from '../../bill/tasks/schemas/parsed-bill.schema';
 import { ParsedAndCategorizedBillSchema } from '../../bill/tasks/schemas/parsed-and-categorized-bill.schema';
 
@@ -33,5 +36,32 @@ describe('toProviderJsonSchema', () => {
     ['ParsedAndCategorizedBillSchema', ParsedAndCategorizedBillSchema],
   ])('compiles %s without `default`', (_name, s) => {
     expect(JSON.stringify(toProviderJsonSchema(s))).not.toContain('"default"');
+  });
+});
+
+describe('toAnthropicOutputSchema', () => {
+  const REJECTED =
+    /"(\$schema|minimum|maximum|exclusiveMinimum|exclusiveMaximum|multipleOf|minLength|maxLength|minItems|maxItems|pattern)"/;
+
+  it.each([
+    ['ParsedBillSchema', ParsedBillSchema],
+    ['ParsedAndCategorizedBillSchema', ParsedAndCategorizedBillSchema],
+  ])('drops the keywords Anthropic rejects from %s', (_name, s) => {
+    const out = toAnthropicOutputSchema(toProviderJsonSchema(s));
+    expect(JSON.stringify(out)).not.toMatch(REJECTED);
+    expect(out).toMatchObject({ additionalProperties: false });
+  });
+
+  it('keeps properties whose names match a dropped keyword', () => {
+    const out = toAnthropicOutputSchema({
+      type: 'object',
+      properties: { pattern: { type: 'string', maxLength: 3 } },
+      required: ['pattern'],
+    });
+    expect(out).toEqual({
+      type: 'object',
+      properties: { pattern: { type: 'string' } },
+      required: ['pattern'],
+    });
   });
 });

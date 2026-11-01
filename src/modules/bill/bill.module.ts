@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { MikroOrmModule } from '@mikro-orm/nestjs';
 import { Bill } from '../../entities/bill.entity';
+import { BillDuplicateDismissal } from '../../entities/bill-duplicate-dismissal.entity';
 import { BillSubCategory } from '../../entities/bill-sub-category.entity';
 import { Market } from '../../entities/market.entity';
 import { User } from '../../entities/user.entity';
@@ -30,6 +31,7 @@ import { BILL_ITEM_TOLERANCE, readBillItemTolerance } from './bill-totals';
   imports: [
     MikroOrmModule.forFeature([
       Bill,
+      BillDuplicateDismissal,
       BillSubCategory,
       Market,
       User,

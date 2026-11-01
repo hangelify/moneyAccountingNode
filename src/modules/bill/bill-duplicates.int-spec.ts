@@ -624,4 +624,72 @@ describe('marking duplicates (PostgreSQL)', () => {
     expect(saved.status).toBe(BillStatus.DUPLICATE);
     expect(saved.duplicate_of?.id).toBe(a);
   });
+
+  describe('deleting an original', () => {
+    const monthTotal = async () => {
+      const res = await services().dashboard.getDashboard(householdId, {
+        type: 'month',
+        year: 2026,
+        month: 12,
+      });
+      const series = res.by_currency.find((s) => s.currency === Currency.MDL);
+      return (series?.period_totals ?? []).reduce((sum, p) => sum + p.total, 0);
+    };
+    // The beforeCreate hook stamps created_at, so pin it for a stable order.
+    const dated = async (n: number) => {
+      const id = await bill({ amount: 60, bill_date: '2026-12-05' });
+      await orm.em
+        .fork()
+        .getConnection()
+        .execute('UPDATE bills SET created_at = ? WHERE id = ?', [
+          new Date(Date.UTC(2026, 11, 5, 10, n)),
+          id,
+        ]);
+      return id;
+    };
+
+    it('promotes the oldest duplicate and re-points the rest', async () => {
+      const before = await monthTotal();
+      const a = await dated(0);
+      const c = await dated(2);
+      const b = await dated(1);
+      await mark(c, a);
+      await mark(b, a);
+      expect(await monthTotal()).toBe(before + 60);
+
+      await crud().softDeleteBill(a, householdId);
+
+      expect(await load(b)).toEqual({ status: BillStatus.CONFIRMED, of: null });
+      expect(await load(c)).toEqual({ status: BillStatus.DUPLICATE, of: b });
+      expect(await monthTotal()).toBe(before + 60);
+    });
+
+    it('never promotes a deleted duplicate', async () => {
+      const before = await monthTotal();
+      const a = await dated(0);
+      const b = await dated(1);
+      const c = await dated(2);
+      await mark(b, a);
+      await mark(c, a);
+      await crud().softDeleteBill(b, householdId);
+
+      await crud().softDeleteBill(a, householdId);
+
+      expect(await load(c)).toEqual({ status: BillStatus.CONFIRMED, of: null });
+      expect(await load(b)).toEqual({ status: BillStatus.DUPLICATE, of: c });
+      expect(await monthTotal()).toBe(before + 60);
+    });
+
+    it('leaves the original alone when a duplicate is deleted', async () => {
+      const before = await monthTotal();
+      const a = await dated(0);
+      const b = await dated(1);
+      await mark(b, a);
+
+      await crud().softDeleteBill(b, householdId);
+
+      expect(await load(a)).toEqual({ status: BillStatus.CONFIRMED, of: null });
+      expect(await monthTotal()).toBe(before + 60);
+    });
+  });
 });

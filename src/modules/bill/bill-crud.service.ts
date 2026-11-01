@@ -390,14 +390,20 @@ export class BillCrudService {
   }
 
   async softDeleteBill(id: string, householdId: string): Promise<void> {
-    const bill = await this.billRepository.findOne({
-      id,
-      household: { id: householdId },
-      deleted_at: null,
+    await this.em.transactional(async (em) => {
+      const bill = await em.findOne(
+        Bill,
+        { id, household: { id: householdId }, deleted_at: null },
+        { lockMode: LockMode.PESSIMISTIC_WRITE },
+      );
+      if (!bill) throw new NotFoundException(`Bill with ID ${id} not found`);
+      bill.deleted_at = new Date();
+      await em.flush();
+      // A confirmed bill may be the original of others; keep the purchase counted.
+      if (bill.status === BillStatus.CONFIRMED) {
+        await this.duplicates.promoteAfterDelete(em, bill.id);
+      }
     });
-    if (!bill) throw new NotFoundException(`Bill with ID ${id} not found`);
-    bill.deleted_at = new Date();
-    await this.em.persist(bill).flush();
   }
 
   async createDraftFromParsed(

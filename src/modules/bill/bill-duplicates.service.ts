@@ -162,6 +162,35 @@ export class BillDuplicatesService {
   }
 
   /**
+   * After an original is soft-deleted, the oldest live duplicate becomes the
+   * confirmed original and every other duplicate (deleted ones included, so
+   * no chain can form) points at it. Runs inside the caller's transaction.
+   */
+  async promoteAfterDelete(
+    em: EntityManager,
+    originalId: string,
+  ): Promise<void> {
+    const live = await em.find(
+      Bill,
+      { duplicate_of: originalId, deleted_at: null },
+      {
+        lockMode: LockMode.PESSIMISTIC_WRITE,
+        orderBy: { created_at: 'asc', id: 'asc' },
+      },
+    );
+    const [promoted] = live;
+    if (!promoted) return;
+    promoted.status = BillStatus.CONFIRMED;
+    promoted.duplicate_of = null;
+    await em.flush();
+    await em.nativeUpdate(
+      Bill,
+      { duplicate_of: originalId },
+      { duplicate_of: promoted.id },
+    );
+  }
+
+  /**
    * Makes `bill` a duplicate of `duplicateOfId`, or of that bill's original
    * when it is a duplicate itself, so a duplicate never points at a
    * duplicate. Runs inside the caller's transaction; the caller flushes.

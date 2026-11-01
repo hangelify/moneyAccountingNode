@@ -76,6 +76,7 @@ function makeService() {
     findCandidates: jest.fn().mockResolvedValue([]),
     probeOf: jest.fn().mockReturnValue({}),
     originalOf: jest.fn(),
+    promoteAfterDelete: jest.fn().mockResolvedValue(undefined),
   };
   return {
     duplicates,
@@ -541,15 +542,42 @@ describe('BillCrudService', () => {
   });
 
   describe('softDeleteBill', () => {
-    it('sets deleted_at on the bill', async () => {
-      const { service, billRepo, em } = makeService();
-      const bill = { id: billId, deleted_at: undefined } as unknown as Bill;
-      (billRepo.findOne as jest.Mock).mockResolvedValue(bill);
+    it('sets deleted_at and promotes a duplicate of a confirmed bill', async () => {
+      const { service, em, duplicates } = makeService();
+      const bill = {
+        id: billId,
+        status: BillStatus.CONFIRMED,
+        deleted_at: undefined,
+      } as unknown as Bill;
+      (em.findOne as jest.Mock).mockResolvedValue(bill);
 
       await service.softDeleteBill(billId, householdId);
 
       expect(bill.deleted_at).toBeInstanceOf(Date);
       expect(em.flush as jest.Mock).toHaveBeenCalled();
+      expect(duplicates.promoteAfterDelete).toHaveBeenCalledWith(em, billId);
+    });
+
+    it('does not promote anything when a draft or duplicate is deleted', async () => {
+      const { service, em, duplicates } = makeService();
+      for (const status of [BillStatus.DRAFT, BillStatus.DUPLICATE]) {
+        (em.findOne as jest.Mock).mockResolvedValue({
+          id: billId,
+          status,
+        });
+        await service.softDeleteBill(billId, householdId);
+      }
+
+      expect(duplicates.promoteAfterDelete).not.toHaveBeenCalled();
+    });
+
+    it('throws NotFoundException when the bill is missing', async () => {
+      const { service, em } = makeService();
+      (em.findOne as jest.Mock).mockResolvedValue(null);
+
+      await expect(
+        service.softDeleteBill(billId, householdId),
+      ).rejects.toBeInstanceOf(NotFoundException);
     });
   });
 

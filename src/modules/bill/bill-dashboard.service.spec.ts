@@ -1,5 +1,6 @@
 import { EntityManager } from '@mikro-orm/core';
 import { BillDashboardService } from './bill-dashboard.service';
+import { ExchangeRateService } from '../exchange-rate/exchange-rate.service';
 import {
   BillDashboardQueryDto,
   BillDashboardResponseDto,
@@ -7,10 +8,25 @@ import {
 
 function makeService() {
   const conn = { execute: jest.fn() };
+  // The household-currency queries are answered here, so `conn` sees only
+  // the by_currency ones, in the order the specs queue them.
+  const routed = {
+    execute: (sql: string, params: unknown[]) => {
+      if (sql.includes('FROM   households h')) {
+        return Promise.resolve([{ currency: 'EUR', bill_date: null }]);
+      }
+      if (/fx\.factor IS (NOT )?NULL/.test(sql)) return Promise.resolve([]);
+      return conn.execute(sql, params) as Promise<unknown>;
+    },
+  };
   const em = {
-    getConnection: jest.fn().mockReturnValue(conn),
+    getConnection: jest.fn().mockReturnValue(routed),
   } as unknown as EntityManager;
-  return { service: new BillDashboardService(em), conn };
+  const rates = {
+    source: 'TEST',
+    ensureDays: jest.fn().mockResolvedValue({ missing: [] }),
+  } as unknown as ExchangeRateService;
+  return { service: new BillDashboardService(em, rates), conn };
 }
 
 const userId = 'user-1';
@@ -224,6 +240,7 @@ describe('BillDashboardService', () => {
             id: 'bill-1',
             bill_date: '2026-04-15',
             total_amount: '1192.21',
+            household_amount: '59.61',
             currency: 'MDL',
             market_name: 'Nr.1 SUPERMARKET',
             items_count: '25',
@@ -241,6 +258,7 @@ describe('BillDashboardService', () => {
         id: 'bill-1',
         bill_date: '2026-04-15',
         total_amount: 1192.21,
+        household_amount: 59.61,
         currency: 'MDL',
         market_name: 'Nr.1 SUPERMARKET',
         items_count: 25,

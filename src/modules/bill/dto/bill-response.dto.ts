@@ -39,4 +39,19 @@ export class BillResponseDto {
 
   @ApiProperty({ type: Date })
   created_at!: Date;
+
+  @ApiPropertyOptional({
+    enum: Currency,
+    description: 'Currency household_amount is in',
+  })
+  household_currency?: Currency;
+
+  @ApiPropertyOptional({
+    type: Number,
+    nullable: true,
+    example: 4.0,
+    description:
+      'total_amount in household_currency at the official rate of bill_date; null when the bill has no currency or no rate is saved',
+  })
+  household_amount?: number | null;
 }

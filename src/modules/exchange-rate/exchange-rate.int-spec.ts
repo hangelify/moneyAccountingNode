@@ -8,37 +8,12 @@ import { PostgreSqlDriver } from '@mikro-orm/postgresql';
 import { MikroOrmModule } from '@mikro-orm/nestjs';
 import { Test } from '@nestjs/testing';
 import { Currency } from '../../types/currency.enum';
-import type {
-  ExchangeRateProvider,
-  FetchedDay,
-} from './exchange-rate.provider';
 import { ExchangeRateService } from './exchange-rate.service';
+import { StubProvider } from './testing/stub-exchange-rate.provider';
 
 jest.setTimeout(30_000);
 
 const SOURCE = 'TEST';
-
-/** A provider whose answer per day is set by the test; counts its calls. */
-class StubProvider implements ExchangeRateProvider {
-  readonly source = SOURCE;
-  calls: string[] = [];
-  answer: (date: string) => Promise<FetchedDay | null> = (date) =>
-    Promise.resolve({
-      date,
-      rates: [
-        { currency: 'EUR', rate: 20.0954, nominal: 1 },
-        { currency: 'USD', rate: 18.0365, nominal: 1 },
-        { currency: 'HUF', rate: 0.0549, nominal: 100 },
-        // Quoted by BNM but not in Currency: skipped.
-        { currency: 'AUD', rate: 12.6824, nominal: 1 },
-      ],
-    });
-
-  fetchDay(date: string): Promise<FetchedDay | null> {
-    this.calls.push(date);
-    return this.answer(date);
-  }
-}
 
 describe('ExchangeRateService (PostgreSQL)', () => {
   let orm: MikroORM;
@@ -47,6 +22,18 @@ describe('ExchangeRateService (PostgreSQL)', () => {
   // Every test uses its own day, so they never see each other's rows.
   let day = 0;
   const nextDate = () => `2001-01-${String(++day).padStart(2, '0')}`;
+  // Recent days (within a week of Chisinau today) are never marked empty.
+  const daysAgo = (n: number) => {
+    const today = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Europe/Chisinau',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(new Date());
+    const d = new Date(`${today}T00:00:00Z`);
+    d.setUTCDate(d.getUTCDate() - n);
+    return d.toISOString().slice(0, 10);
+  };
 
   beforeAll(async () => {
     const mod = await Test.createTestingModule({
@@ -172,8 +159,8 @@ describe('ExchangeRateService (PostgreSQL)', () => {
     expect(provider.calls).toHaveLength(2);
   });
 
-  it('answers 404 for a day with no rates yet, and asks again next time', async () => {
-    const date = nextDate();
+  it('answers 404 for a recent day with no rates yet, and asks again next time', async () => {
+    const date = daysAgo(1);
     provider.answer = () => Promise.resolve(null);
 
     await expect(service.getRate(Currency.EUR, date)).rejects.toBeInstanceOf(
@@ -184,6 +171,20 @@ describe('ExchangeRateService (PostgreSQL)', () => {
     );
 
     expect(provider.calls).toHaveLength(2);
+  });
+
+  it('answers 404 for an old empty day from its marker, without asking again', async () => {
+    const date = nextDate();
+    provider.answer = () => Promise.resolve(null);
+
+    await expect(service.getRate(Currency.EUR, date)).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
+    await expect(service.getRate(Currency.EUR, date)).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
+
+    expect(provider.calls).toEqual([date]);
   });
 
   it('returns 1 for MDL without asking anyone', async () => {
@@ -212,6 +213,129 @@ describe('ExchangeRateService (PostgreSQL)', () => {
     });
     await service.getRatesForDay(date);
     expect(provider.calls).toHaveLength(1);
+  });
+
+  describe('ensureDays', () => {
+    it('fetches only unsaved days, oldest first, up to max', async () => {
+      const [a, b, c] = [nextDate(), nextDate(), nextDate()];
+
+      await expect(service.ensureDays([c, a, b], { max: 2 })).resolves.toEqual({
+        missing: [c],
+      });
+
+      expect(provider.calls).toEqual([a, b]);
+    });
+
+    it('makes no call for saved days', async () => {
+      const date = nextDate();
+      await service.getRate(Currency.EUR, date);
+      provider.calls = [];
+
+      await expect(
+        service.ensureDays([date, date], { max: 5 }),
+      ).resolves.toEqual({ missing: [] });
+      expect(provider.calls).toEqual([]);
+    });
+
+    it('reports a provider failure instead of throwing', async () => {
+      const date = nextDate();
+      provider.answer = () =>
+        Promise.reject(new ServiceUnavailableException('down'));
+
+      await expect(service.ensureDays([date], { max: 1 })).resolves.toEqual({
+        missing: [date],
+      });
+    });
+
+    it('reports an empty day as missing', async () => {
+      const date = nextDate();
+      provider.answer = () => Promise.resolve(null);
+
+      await expect(service.ensureDays([date], { max: 1 })).resolves.toEqual({
+        missing: [date],
+      });
+    });
+
+    it('asks an old empty day once, then reports it missing without a call', async () => {
+      const date = nextDate();
+      provider.answer = () => Promise.resolve(null);
+
+      await expect(service.ensureDays([date], { max: 1 })).resolves.toEqual({
+        missing: [date],
+      });
+      await expect(service.ensureDays([date], { max: 1 })).resolves.toEqual({
+        missing: [date],
+      });
+
+      expect(provider.calls).toEqual([date]);
+    });
+
+    it('asks a recent empty day again', async () => {
+      const date = daysAgo(2);
+      provider.answer = () => Promise.resolve(null);
+
+      await service.ensureDays([date], { max: 1 });
+      await expect(service.ensureDays([date], { max: 1 })).resolves.toEqual({
+        missing: [date],
+      });
+
+      expect(provider.calls).toEqual([date, date]);
+    });
+
+    it('stops at the first provider failure and reports every day left', async () => {
+      const dates = [nextDate(), nextDate(), nextDate()];
+      provider.answer = () =>
+        Promise.reject(new ServiceUnavailableException('down'));
+
+      await expect(service.ensureDays(dates, { max: 10 })).resolves.toEqual({
+        missing: dates,
+      });
+
+      expect(provider.calls).toEqual([dates[0]]);
+    });
+
+    it('keeps going after an empty day', async () => {
+      const dates = [nextDate(), nextDate(), nextDate()];
+      const answer = provider.answer;
+      provider.answer = (d) =>
+        d === dates[0] ? Promise.resolve(null) : answer(d);
+
+      await expect(service.ensureDays(dates, { max: 10 })).resolves.toEqual({
+        missing: [dates[0]],
+      });
+
+      expect(provider.calls).toEqual(dates);
+    });
+
+    it('skips future dates without a call', async () => {
+      const tomorrow = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Europe/Chisinau',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+      }).format(new Date(Date.now() + 24 * 60 * 60 * 1000));
+
+      await expect(service.ensureDays([tomorrow], { max: 1 })).resolves.toEqual(
+        { missing: [tomorrow] },
+      );
+      expect(provider.calls).toEqual([]);
+    });
+
+    it('treats an invalid date as missing without a call', async () => {
+      await expect(
+        service.ensureDays(['2001-02-30'], { max: 1 }),
+      ).resolves.toEqual({ missing: ['2001-02-30'] });
+      expect(provider.calls).toEqual([]);
+    });
+
+    it('makes no call with max 0', async () => {
+      const date = nextDate();
+
+      await expect(service.ensureDays([date], { max: 0 })).resolves.toEqual({
+        missing: [date],
+      });
+      expect(provider.calls).toEqual([]);
+    });
   });
 
   describe('convert', () => {

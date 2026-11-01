@@ -10,6 +10,9 @@ import { SubCategory } from '../../entities/sub-category.entity';
 import { User } from '../../entities/user.entity';
 import { BillStatus } from '../../types/bill-status.enum';
 import { Currency } from '../../types/currency.enum';
+import { ExchangeRateModule } from '../exchange-rate/exchange-rate.module';
+import { EXCHANGE_RATE_PROVIDER } from '../exchange-rate/exchange-rate.provider';
+import { StubProvider } from '../exchange-rate/testing/stub-exchange-rate.provider';
 import { SpendingBreakdownService } from './spending-breakdown.service';
 import { UNCATEGORIZED_NAME } from './spending-breakdown';
 
@@ -29,9 +32,13 @@ describe('spending breakdown SQL (PostgreSQL)', () => {
           ...createMikroOrmConfig(),
           allowGlobalContext: true,
         }),
+        ExchangeRateModule,
       ],
       providers: [SpendingBreakdownService],
-    }).compile();
+    })
+      .overrideProvider(EXCHANGE_RATE_PROVIDER)
+      .useValue(new StubProvider('TEST-SB'))
+      .compile();
     orm = mod.get(MikroORM);
     service = mod.get(SpendingBreakdownService);
 
@@ -43,10 +50,12 @@ describe('spending breakdown SQL (PostgreSQL)', () => {
     } as never);
     const household = em.create(Household, {
       name: 'Spend',
+      currency: Currency.EUR,
       created_by: user,
     } as never);
     const other = em.create(Household, {
       name: 'Spend other',
+      currency: Currency.EUR,
       created_by: user,
     } as never);
     const deletedAt = new Date('2026-06-01T00:00:00Z');
@@ -292,7 +301,7 @@ describe('spending breakdown SQL (PostgreSQL)', () => {
       period: 'year',
       anchor: '2020-06-01',
     });
-    expect(res).toEqual({
+    expect(res).toMatchObject({
       range: { period: 'year', start: '2020-01-01', end: '2021-01-01' },
       by_currency: [],
     });

@@ -250,6 +250,7 @@ export class AuthService implements OnModuleInit {
     const household = new Household();
     household.name = 'Personal';
     household.created_by = user;
+    household.currency = user.currency;
 
     const membership = new HouseholdMember();
     membership.household = household;

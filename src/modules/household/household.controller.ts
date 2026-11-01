@@ -73,15 +73,17 @@ export class HouseholdController {
   @Put(':hid')
   @UseGuards(HouseholdMemberGuard)
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Rename the household (owner only)' })
+  @ApiOperation({
+    summary: 'Rename the household or change its currency (owner only)',
+  })
   @ApiParam({ name: 'hid', description: 'Household ID' })
-  async renameHousehold(
+  async updateHousehold(
     @CurrentHousehold() ctx: HouseholdContext,
     @Param('hid', ParseUUIDPipe) hid: string,
     @Body() dto: UpdateHouseholdDto,
   ): Promise<HouseholdResponseDto> {
     this.householdService.assertOwner(ctx);
-    return this.householdService.renameHousehold(hid, dto);
+    return this.householdService.updateHousehold(hid, dto);
   }
 
   @Delete(':hid')

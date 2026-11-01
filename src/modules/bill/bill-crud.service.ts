@@ -1,6 +1,7 @@
 import {
   Inject,
   Injectable,
+  Logger,
   Optional,
   NotFoundException,
   BadRequestException,
@@ -51,6 +52,11 @@ import {
   DraftListResponseDto,
 } from './dto/bill-detail-response.dto';
 import { ListDraftsQueryDto } from './dto/list-drafts-query.dto';
+import { ExchangeRateService } from '../exchange-rate/exchange-rate.service';
+import {
+  BillConversionService,
+  householdConversionJoin,
+} from './household-conversion';
 import {
   BillListResponseDto,
   PaginationMetaDto,
@@ -110,6 +116,8 @@ function toDraftItem(it: ParsedBillItemResponseDto) {
 
 @Injectable()
 export class BillCrudService {
+  private readonly log = new Logger(BillCrudService.name);
+
   constructor(
     @InjectRepository(Bill)
     private readonly billRepository: EntityRepository<Bill>,
@@ -118,6 +126,8 @@ export class BillCrudService {
     @InjectRepository(SubCategory)
     private readonly subCategoryRepository: EntityRepository<SubCategory>,
     private readonly em: EntityManager,
+    private readonly exchangeRates: ExchangeRateService,
+    private readonly conversion: BillConversionService,
     @Optional()
     @Inject(BILL_ITEM_TOLERANCE)
     private readonly itemTolerance: number = DEFAULT_BILL_ITEM_TOLERANCE,
@@ -157,7 +167,11 @@ export class BillCrudService {
     this.em.persist(bill);
     for (const bsc of bscEntities) this.em.persist(bsc);
     await this.em.flush();
-    return this.toDetailDto(bill, bscEntities);
+    await this.warmRate(householdId, bill);
+    return {
+      ...this.toDetailDto(bill, bscEntities),
+      ...(await this.conversion.forBills(householdId, [bill.id])).get(bill.id),
+    };
   }
 
   async listBills(
@@ -211,6 +225,7 @@ export class BillCrudService {
     const page = filters.page ?? 1;
     const limit = filters.limit ?? 20;
     const offset = (page - 1) * limit;
+    const source = this.exchangeRates.source;
 
     const [countRows, dataRows] = await Promise.all([
       this.em.getConnection().execute(
@@ -224,8 +239,11 @@ export class BillCrudService {
         `SELECT b.id, b.bill_date::text, b.currency, b.amount::text, b.description,
                 b.created_at::text,
                 m.id AS market_id, m.name AS market_name, m.city AS market_city,
-                abs(b.amount - i.total) > ? * i.count AS amount_mismatch
+                abs(b.amount - i.total) > ? * i.count AS amount_mismatch,
+                h.currency AS household_currency,
+                ROUND(b.amount * fx.factor, 2)::text AS household_amount
          FROM   bills b
+         ${householdConversionJoin('b')}
          LEFT   JOIN markets m ON m.id = b.market_id
          CROSS  JOIN LATERAL (
                   SELECT coalesce(sum(amount), 0) AS total, count(*) AS count
@@ -235,7 +253,7 @@ export class BillCrudService {
          WHERE  ${where}
          ORDER  BY b.bill_date DESC
          LIMIT  ? OFFSET ?`,
-        [this.itemTolerance, ...params, limit, offset],
+        [this.itemTolerance, source, source, ...params, limit, offset],
       ) as Promise<
         Array<{
           id: string;
@@ -248,6 +266,8 @@ export class BillCrudService {
           market_city: string | null;
           created_at: string;
           amount_mismatch: boolean;
+          household_currency: Currency;
+          household_amount: string | null;
         }>
       >,
     ]);
@@ -276,6 +296,8 @@ export class BillCrudService {
             }
           : undefined,
         created_at: new Date(r.created_at),
+        household_currency: r.household_currency,
+        household_amount: numberOrNull(r.household_amount),
       }),
     );
 
@@ -291,7 +313,11 @@ export class BillCrudService {
       { populate: ['market', 'billSubCategories.sub_category.category'] },
     );
     if (!bill) throw new NotFoundException(`Bill with ID ${id} not found`);
-    return this.toDetailDto(bill, bill.billSubCategories.getItems());
+    const conversion = await this.conversion.forBills(householdId, [id]);
+    return {
+      ...this.toDetailDto(bill, bill.billSubCategories.getItems()),
+      ...conversion.get(id),
+    };
   }
 
   async updateBill(
@@ -327,7 +353,15 @@ export class BillCrudService {
     if (dto.description !== undefined) bill.description = dto.description;
 
     await this.em.persist(bill).flush();
-    return this.toListDto(bill, bill.billSubCategories.getItems());
+    await this.warmRate(householdId, bill);
+    const { household_currency, household_amount } = (
+      await this.conversion.forBills(householdId, [id])
+    ).get(id)!;
+    return {
+      ...this.toListDto(bill, bill.billSubCategories.getItems()),
+      household_currency,
+      household_amount,
+    };
   }
 
   async softDeleteBill(id: string, householdId: string): Promise<void> {
@@ -522,7 +556,7 @@ export class BillCrudService {
     }
     const subCats = await this.findSubCategories(householdId, dto.items);
 
-    return this.em.transactional(async (em) => {
+    const confirmed = await this.em.transactional(async (em) => {
       // Not filtered by status: a concurrent confirm waits on the row lock,
       // then sees CONFIRMED here and gets 409 instead of writing its items.
       const bill = await em.findOne(
@@ -574,8 +608,37 @@ export class BillCrudService {
       bill.status = BillStatus.CONFIRMED;
       await em.flush();
 
-      return this.toDetailDto(bill, bscEntities);
+      return { bill, dto: this.toDetailDto(bill, bscEntities) };
     });
+    await this.warmRate(householdId, confirmed.bill);
+    return {
+      ...confirmed.dto,
+      ...(await this.conversion.forBills(householdId, [id])).get(id),
+    };
+  }
+
+  /**
+   * Saves the bill's day of rates once the write has committed, so reads
+   * never wait on the provider. A bill in the household's currency or without
+   * one needs no rate. Never throws: the write stands even if the rate API is
+   * down.
+   */
+  private async warmRate(householdId: string, bill: Bill): Promise<void> {
+    if (!bill.currency) return;
+    // The write has committed: failing here would invite a duplicate retry.
+    try {
+      const household = await this.em.findOne(
+        Household,
+        { id: householdId },
+        { fields: ['currency'] },
+      );
+      if (!household || household.currency === bill.currency) return;
+      await this.exchangeRates.ensureDays([bill.bill_date], { max: 1 });
+    } catch (e) {
+      this.log.warn(
+        `Could not save rates for bill ${bill.id}: ${(e as Error).message}`,
+      );
+    }
   }
 
   /**

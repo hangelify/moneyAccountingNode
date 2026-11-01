@@ -13,6 +13,10 @@ import { BillStatus } from '../../types/bill-status.enum';
 import { Currency } from '../../types/currency.enum';
 import { BillCrudService } from './bill-crud.service';
 import { BillDashboardService } from './bill-dashboard.service';
+import { BillConversionService } from './household-conversion';
+import { ExchangeRateService } from '../exchange-rate/exchange-rate.service';
+import { EXCHANGE_RATE_PROVIDER } from '../exchange-rate/exchange-rate.provider';
+import { StubProvider } from '../exchange-rate/testing/stub-exchange-rate.provider';
 import type { ListBillsQueryDto } from './dto/list-bills-query.dto';
 import type {
   BillDashboardQueryDto,
@@ -42,7 +46,13 @@ describe('bill list and dashboard SQL (PostgreSQL)', () => {
         }),
         MikroOrmModule.forFeature([Bill, Market, SubCategory]),
       ],
-      providers: [BillCrudService, BillDashboardService],
+      providers: [
+        BillCrudService,
+        BillDashboardService,
+        BillConversionService,
+        ExchangeRateService,
+        { provide: EXCHANGE_RATE_PROVIDER, useValue: new StubProvider() },
+      ],
     }).compile();
     orm = mod.get(MikroORM);
     crud = mod.get(BillCrudService);
@@ -56,10 +66,12 @@ describe('bill list and dashboard SQL (PostgreSQL)', () => {
     } as never);
     const household = em.create(Household, {
       name: 'Sql',
+      currency: Currency.EUR,
       created_by: user,
     } as never);
     const other = em.create(Household, {
       name: 'Sql other',
+      currency: Currency.EUR,
       created_by: user,
     } as never);
     const lidl = em.create(Market, {
@@ -149,6 +161,7 @@ describe('bill list and dashboard SQL (PostgreSQL)', () => {
     // A household mixing MDL, EUR and bills without a currency on one day.
     const mixed = em.create(Household, {
       name: 'Sql mixed',
+      currency: Currency.EUR,
       created_by: user,
     } as never);
     const may10 = { bill_date: '2026-05-10', household: mixed };
@@ -253,6 +266,8 @@ describe('bill list and dashboard SQL (PostgreSQL)', () => {
           id: ids.march20,
           bill_date: '2026-03-20',
           total_amount: 100,
+          // USD → EUR at the default stub rates (18.0365 / 20.0954).
+          household_amount: 89.75,
           currency: Currency.USD,
           market_name: 'Corner shop',
           items_count: 2,
@@ -261,6 +276,7 @@ describe('bill list and dashboard SQL (PostgreSQL)', () => {
           id: ids.march5,
           bill_date: '2026-03-05',
           total_amount: 10.5,
+          household_amount: 10.5,
           currency: Currency.EUR,
           market_name: 'Lidl',
           items_count: 2,

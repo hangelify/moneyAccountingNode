@@ -6,9 +6,17 @@ import {
   DashboardBillSummaryDto,
   DashboardCategoryStatDto,
   DashboardCurrencySeriesDto,
+  DashboardHouseholdSeriesDto,
   DashboardPeriodTotalDto,
 } from './dto/bill-dashboard.dto';
+import { UnconvertedDto } from './dto/household-conversion.dto';
 import { Currency } from '../../types/currency.enum';
+import { ExchangeRateService } from '../exchange-rate/exchange-rate.service';
+import {
+  fetchUnconverted,
+  householdConversionJoin,
+  loadRateDays,
+} from './household-conversion';
 
 type DbConn = ReturnType<EntityManager['getConnection']>;
 type PeriodRow = { currency: Currency | null; period: string; total: string };
@@ -18,10 +26,22 @@ type CategoryRow = {
   category_name: string;
   total_amount: string;
 };
+type BillRow = {
+  id: string;
+  bill_date: string;
+  total_amount: string;
+  household_amount: string | null;
+  currency: Currency | null;
+  market_name: string | null;
+  items_count: string;
+};
 
 @Injectable()
 export class BillDashboardService {
-  constructor(private readonly em: EntityManager) {}
+  constructor(
+    private readonly em: EntityManager,
+    private readonly exchangeRates: ExchangeRateService,
+  ) {}
 
   async getDashboard(
     householdId: string,
@@ -30,11 +50,38 @@ export class BillDashboardService {
     const { start, end } = this.computeDateRange(dto);
     const granularity = dto.type === 'month' ? 'day' : 'month';
     const conn = this.em.getConnection();
+    const source = this.exchangeRates.source;
 
-    const [periodRows, billRows, categoryRows] = await Promise.all([
+    // Rates first, so the queries below see the days just saved.
+    const householdCurrency = await loadRateDays(
+      conn,
+      this.exchangeRates,
+      householdId,
+      start,
+      end,
+    );
+
+    const [
+      periodRows,
+      billRows,
+      categoryRows,
+      convertedPeriodRows,
+      convertedCategoryRows,
+      unconverted,
+    ] = await Promise.all([
       this.fetchPeriodTotals(conn, householdId, start, end, granularity),
-      this.fetchBills(conn, householdId, start, end),
+      this.fetchBills(conn, source, householdId, start, end),
       this.fetchCategoryStats(conn, householdId, start, end),
+      this.fetchConvertedPeriodTotals(
+        conn,
+        source,
+        householdId,
+        start,
+        end,
+        granularity,
+      ),
+      this.fetchConvertedCategoryStats(conn, source, householdId, start, end),
+      fetchUnconverted(conn, source, householdId, start, end),
     ]);
 
     return {
@@ -45,7 +92,34 @@ export class BillDashboardService {
         end,
         dto.type,
       ),
+      in_household_currency: this.buildHouseholdSeries(
+        householdCurrency,
+        convertedPeriodRows,
+        convertedCategoryRows,
+        unconverted,
+        start,
+        end,
+        dto.type,
+      ),
       bills: this.mapBills(billRows),
+    };
+  }
+
+  // One series of every convertible bill; the rest is listed as unconverted.
+  private buildHouseholdSeries(
+    currency: Currency,
+    periodRows: PeriodRow[],
+    categoryRows: CategoryRow[],
+    unconverted: UnconvertedDto[],
+    start: string,
+    end: string,
+    type: 'month' | 'quarter' | 'year',
+  ): DashboardHouseholdSeriesDto {
+    return {
+      currency,
+      period_totals: this.fillGaps(periodRows, start, end, type),
+      category_stats: this.computePercentages(categoryRows),
+      unconverted,
     };
   }
 
@@ -130,46 +204,31 @@ export class BillDashboardService {
 
   private async fetchBills(
     conn: DbConn,
+    source: string,
     householdId: string,
     start: string,
     end: string,
-  ): Promise<
-    Array<{
-      id: string;
-      bill_date: string;
-      total_amount: string;
-      currency: Currency | null;
-      market_name: string | null;
-      items_count: string;
-    }>
-  > {
+  ): Promise<BillRow[]> {
     return conn.execute(
       `SELECT b.id,
               b.bill_date::text,
               b.amount::text AS total_amount,
+              ROUND(b.amount * fx.factor, 2)::text AS household_amount,
               b.currency,
               COALESCE(m.name, b.market_name_raw) AS market_name,
               COUNT(bsc.id)::text AS items_count
        FROM bills b
+       ${householdConversionJoin('b')}
        LEFT JOIN markets m ON m.id = b.market_id
        LEFT JOIN bill_sub_categories bsc ON bsc.bill_id = b.id
        WHERE b.household_id = ? AND b.status = 'confirmed'
          AND b.bill_date >= ? AND b.bill_date < ?
          AND b.deleted_at IS NULL
-       GROUP BY b.id, m.name, b.market_name_raw
+       GROUP BY b.id, m.name, b.market_name_raw, fx.factor
        ORDER BY b.bill_date DESC
        LIMIT 50`,
-      [householdId, start, end],
-    ) as Promise<
-      Array<{
-        id: string;
-        bill_date: string;
-        total_amount: string;
-        currency: Currency | null;
-        market_name: string | null;
-        items_count: string;
-      }>
-    >;
+      [source, source, householdId, start, end],
+    ) as Promise<BillRow[]>;
   }
 
   private async fetchCategoryStats(
@@ -192,6 +251,63 @@ export class BillDashboardService {
        GROUP BY b.currency, c.id, c.name
        ORDER BY SUM(bsc.amount) DESC, c.name`,
       [householdId, start, end],
+    ) as Promise<CategoryRow[]>;
+  }
+
+  // Same totals as fetchPeriodTotals, every bill converted into the
+  // household currency; bills that can't be are left to fetchUnconverted.
+  private async fetchConvertedPeriodTotals(
+    conn: DbConn,
+    source: string,
+    householdId: string,
+    start: string,
+    end: string,
+    granularity: 'day' | 'month',
+  ): Promise<PeriodRow[]> {
+    if (granularity !== 'day' && granularity !== 'month') {
+      throw new Error(`Invalid granularity: ${granularity as string}`);
+    }
+    const fmt = granularity === 'day' ? 'YYYY-MM-DD' : 'YYYY-MM';
+    return conn.execute(
+      `SELECT h.currency,
+              TO_CHAR(DATE_TRUNC('${granularity}', b.bill_date), '${fmt}') AS period,
+              ROUND(SUM(b.amount * fx.factor), 2)::text AS total
+       FROM bills b
+       ${householdConversionJoin('b')}
+       WHERE b.household_id = ? AND b.status = 'confirmed'
+         AND b.bill_date >= ? AND b.bill_date < ?
+         AND b.deleted_at IS NULL
+         AND fx.factor IS NOT NULL
+       GROUP BY h.currency, DATE_TRUNC('${granularity}', b.bill_date)
+       ORDER BY period`,
+      [source, source, householdId, start, end],
+    ) as Promise<PeriodRow[]>;
+  }
+
+  // Lines are converted, then summed and rounded once.
+  private async fetchConvertedCategoryStats(
+    conn: DbConn,
+    source: string,
+    householdId: string,
+    start: string,
+    end: string,
+  ): Promise<CategoryRow[]> {
+    return conn.execute(
+      `SELECT h.currency, c.id AS category_id, c.name AS category_name,
+              ROUND(SUM(bsc.amount * fx.factor), 2)::text AS total_amount
+       FROM bills b
+       ${householdConversionJoin('b')}
+       JOIN bill_sub_categories bsc ON bsc.bill_id = b.id
+       JOIN sub_categories sc ON sc.id = bsc.sub_category_id
+       JOIN categories c ON c.id = sc.category_id
+       WHERE b.household_id = ? AND b.status = 'confirmed'
+         AND b.bill_date >= ? AND b.bill_date < ?
+         AND b.deleted_at IS NULL
+         AND bsc.sub_category_id IS NOT NULL
+         AND fx.factor IS NOT NULL
+       GROUP BY h.currency, c.id, c.name
+       ORDER BY ROUND(SUM(bsc.amount * fx.factor), 2) DESC, c.name`,
+      [source, source, householdId, start, end],
     ) as Promise<CategoryRow[]>;
   }
 
@@ -240,20 +356,13 @@ export class BillDashboardService {
     return result;
   }
 
-  private mapBills(
-    rows: Array<{
-      id: string;
-      bill_date: string;
-      total_amount: string;
-      currency: Currency | null;
-      market_name: string | null;
-      items_count: string;
-    }>,
-  ): DashboardBillSummaryDto[] {
+  private mapBills(rows: BillRow[]): DashboardBillSummaryDto[] {
     return rows.map((r) => ({
       id: r.id,
       bill_date: r.bill_date.substring(0, 10),
       total_amount: Number(r.total_amount),
+      household_amount:
+        r.household_amount === null ? null : Number(r.household_amount),
       currency: r.currency,
       market_name: r.market_name,
       items_count: Number(r.items_count),

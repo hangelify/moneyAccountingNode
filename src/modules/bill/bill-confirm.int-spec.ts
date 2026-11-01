@@ -13,8 +13,12 @@ import { SubCategory } from '../../entities/sub-category.entity';
 import { User } from '../../entities/user.entity';
 import { BillStatus } from '../../types/bill-status.enum';
 import { BillCrudService } from './bill-crud.service';
+import { ExchangeRateService } from '../exchange-rate/exchange-rate.service';
+import { StubProvider } from '../exchange-rate/testing/stub-exchange-rate.provider';
+import { BillConversionService } from './household-conversion';
 import type { CreateBillItemDto } from './dto/create-bill.dto';
 import type { ConfirmBillItemDto } from './dto/confirm-bill.dto';
+import { Currency } from '../../types/currency.enum';
 
 jest.setTimeout(30_000);
 
@@ -68,10 +72,12 @@ describe('confirm and create bill (PostgreSQL)', () => {
     } as never);
     const household = em.create(Household, {
       name: 'P08 confirm',
+      currency: Currency.EUR,
       created_by: user,
     } as never);
     const other = em.create(Household, {
       name: 'P08 other',
+      currency: Currency.EUR,
       created_by: user,
     } as never);
     const category = em.create(Category, {
@@ -128,11 +134,15 @@ describe('confirm and create bill (PostgreSQL)', () => {
   });
 
   function crud(fork: EntityManager = orm.em.fork()) {
+    // Bill reads never ask the provider; the stub only satisfies DI.
+    const rates = new ExchangeRateService(fork, new StubProvider());
     return new BillCrudService(
       fork.getRepository(Bill),
       fork.getRepository(Market),
       fork.getRepository(SubCategory),
       fork,
+      rates,
+      new BillConversionService(fork, rates),
     );
   }
 

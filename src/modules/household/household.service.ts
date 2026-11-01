@@ -5,6 +5,7 @@ import {
   NotFoundException,
   ConflictException,
   GoneException,
+  BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@mikro-orm/nestjs';
 import { EntityRepository, EntityManager, LockMode } from '@mikro-orm/core';
@@ -60,6 +61,8 @@ export class HouseholdService {
     const household = new Household();
     household.name = dto.name;
     household.created_by = this.em.getReference(User, userId);
+    household.currency =
+      dto.currency ?? (await this.em.findOneOrFail(User, userId)).currency;
 
     const member = new HouseholdMember();
     member.household = household;
@@ -104,16 +107,20 @@ export class HouseholdService {
     return { ...this.toDto(household, members.length), members };
   }
 
-  async renameHousehold(
+  async updateHousehold(
     hid: string,
     dto: UpdateHouseholdDto,
   ): Promise<HouseholdResponseDto> {
+    if (dto.name === undefined && dto.currency === undefined) {
+      throw new BadRequestException('Nothing to update');
+    }
     const household = await this.householdRepo.findOne({
       id: hid,
       deleted_at: null,
     });
     if (!household) throw new NotFoundException(`Household ${hid} not found`);
-    household.name = dto.name;
+    if (dto.name !== undefined) household.name = dto.name;
+    if (dto.currency !== undefined) household.currency = dto.currency;
     await this.em.persist(household).flush();
     const members = await this.memberRepo.find({ household: { id: hid } });
     return this.toDto(household, members.length);
@@ -339,6 +346,7 @@ export class HouseholdService {
     return {
       id: h.id,
       name: h.name,
+      currency: h.currency,
       created_at: h.created_at,
       member_count: memberCount,
     };

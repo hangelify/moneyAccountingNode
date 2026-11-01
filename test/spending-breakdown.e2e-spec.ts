@@ -32,7 +32,7 @@ describe('GET /households/:hid/bills/dashboard/spending-breakdown (e2e)', () => 
       user.householdId,
       'period=quarter&anchor=2026-10-31',
     ).expect(200);
-    expect(res.body).toEqual({
+    expect(res.body).toMatchObject({
       range: { period: 'quarter', start: '2026-10-01', end: '2027-01-01' },
       by_currency: [],
     });

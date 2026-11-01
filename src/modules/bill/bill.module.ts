@@ -17,6 +17,8 @@ import { BillDashboardService } from './bill-dashboard.service';
 import { SpendingBreakdownService } from './spending-breakdown.service';
 import { BillController } from './bill.controller';
 import { StorageModule } from '../storage/storage.module';
+import { ExchangeRateModule } from '../exchange-rate/exchange-rate.module';
+import { BillConversionService } from './household-conversion';
 import { DraftCleanupService } from './draft-cleanup.service';
 import {
   DRAFT_RETENTION_DAYS,
@@ -37,6 +39,7 @@ import { BILL_ITEM_TOLERANCE, readBillItemTolerance } from './bill-totals';
       HouseholdMember,
     ]),
     StorageModule,
+    ExchangeRateModule,
   ],
   controllers: [BillController],
   providers: [
@@ -47,6 +50,7 @@ import { BILL_ITEM_TOLERANCE, readBillItemTolerance } from './bill-totals';
     BillCrudService,
     BillDashboardService,
     SpendingBreakdownService,
+    BillConversionService,
     DraftCleanupService,
     { provide: DRAFT_RETENTION_DAYS, useFactory: readDraftRetentionDays },
     { provide: BILL_ITEM_TOLERANCE, useFactory: readBillItemTolerance },

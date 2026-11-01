@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/unbound-method */
 import {
+  BadRequestException,
   ForbiddenException,
   ConflictException,
   NotFoundException,
@@ -8,6 +9,7 @@ import { EntityRepository, EntityManager } from '@mikro-orm/core';
 import { HouseholdService } from './household.service';
 import { Household } from '../../entities/household.entity';
 import { HouseholdMember } from '../../entities/household-member.entity';
+import { Currency } from '../../types/currency.enum';
 
 process.env.FRONTEND_URL = 'https://app.example.com';
 
@@ -27,6 +29,7 @@ function makeService() {
     getReference: jest.fn().mockReturnValue({}),
     find: jest.fn(),
     findOne: jest.fn(),
+    findOneOrFail: jest.fn(),
     nativeDelete: jest.fn().mockResolvedValue(1),
     transactional: jest
       .fn()
@@ -34,6 +37,9 @@ function makeService() {
         fn(em),
       ),
   } as unknown as EntityManager;
+  (em.findOneOrFail as jest.Mock).mockResolvedValue({
+    currency: Currency.MDL,
+  });
   return {
     service: new HouseholdService(householdRepo, memberRepo, em, 20),
     householdRepo,
@@ -54,6 +60,21 @@ describe('HouseholdService', () => {
       expect(result.name).toBe('Family');
       expect(result.member_count).toBe(1);
     });
+
+    it("without currency uses the creator's currency", async () => {
+      const { service } = makeService();
+      const result = await service.createHousehold(userId, { name: 'Family' });
+      expect(result.currency).toBe(Currency.MDL);
+    });
+
+    it('with currency USD keeps USD', async () => {
+      const { service } = makeService();
+      const result = await service.createHousehold(userId, {
+        name: 'Family',
+        currency: Currency.USD,
+      });
+      expect(result.currency).toBe(Currency.USD);
+    });
   });
 
   describe('assertOwner', () => {
@@ -72,7 +93,7 @@ describe('HouseholdService', () => {
     });
   });
 
-  describe('renameHousehold', () => {
+  describe('updateHousehold', () => {
     it('updates the name and returns DTO', async () => {
       const { service, householdRepo, memberRepo, em } = makeService();
       const household = {
@@ -84,18 +105,46 @@ describe('HouseholdService', () => {
       (householdRepo.findOne as jest.Mock).mockResolvedValue(household);
       (memberRepo.find as jest.Mock).mockResolvedValue([]);
 
-      const result = await service.renameHousehold(hid, { name: 'New' });
+      const result = await service.updateHousehold(hid, { name: 'New' });
 
       expect(household.name).toBe('New');
       expect(em.flush as jest.Mock).toHaveBeenCalled();
       expect(result.name).toBe('New');
     });
 
+    it('changes only currency when name is absent', async () => {
+      const { service, householdRepo, memberRepo } = makeService();
+      const household = {
+        id: hid,
+        name: 'Old',
+        currency: Currency.EUR,
+        created_at: new Date(),
+        deleted_at: null,
+      };
+      (householdRepo.findOne as jest.Mock).mockResolvedValue(household);
+      (memberRepo.find as jest.Mock).mockResolvedValue([]);
+
+      const result = await service.updateHousehold(hid, {
+        currency: Currency.USD,
+      });
+
+      expect(household.name).toBe('Old');
+      expect(result.name).toBe('Old');
+      expect(result.currency).toBe(Currency.USD);
+    });
+
+    it('rejects an empty update', async () => {
+      const { service } = makeService();
+      await expect(service.updateHousehold(hid, {})).rejects.toBeInstanceOf(
+        BadRequestException,
+      );
+    });
+
     it('throws NotFoundException when household not found', async () => {
       const { service, householdRepo } = makeService();
       (householdRepo.findOne as jest.Mock).mockResolvedValue(null);
       await expect(
-        service.renameHousehold(hid, { name: 'x' }),
+        service.updateHousehold(hid, { name: 'x' }),
       ).rejects.toBeInstanceOf(NotFoundException);
     });
   });

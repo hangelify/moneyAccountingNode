@@ -8,6 +8,7 @@ import { Household } from '../../entities/household.entity';
 import { User } from '../../entities/user.entity';
 import { BillStatus } from '../../types/bill-status.enum';
 import { DraftCleanupService } from './draft-cleanup.service';
+import { Currency } from '../../types/currency.enum';
 
 jest.setTimeout(30_000);
 
@@ -42,6 +43,7 @@ describe('DraftCleanupService (PostgreSQL)', () => {
     } as never);
     const household = em.create(Household, {
       name: 'P14 cleanup',
+      currency: Currency.EUR,
       created_by: user,
     } as never);
     await em.flush();

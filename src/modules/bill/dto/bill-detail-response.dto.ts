@@ -86,7 +86,7 @@ export class BillDetailResponseDto extends BillResponseDto {
   @ApiPropertyOptional({
     type: [PossibleDuplicateDto],
     description:
-      'Other confirmed bills that may be the same purchase. Set on get, create and confirm of one bill; empty for a bill marked as a duplicate; absent in the draft list',
+      'Other confirmed bills that may be the same purchase. Set on get, create, confirm and update of one bill; empty for a bill marked as a duplicate; absent in the draft list',
   })
   possible_duplicates?: PossibleDuplicateDto[];
 

@@ -8,7 +8,12 @@ import {
   Max,
   Length,
   Matches,
+  IsArray,
+  ArrayMinSize,
+  ArrayMaxSize,
+  ValidateNested,
 } from 'class-validator';
+import { Type } from 'class-transformer';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Currency } from '../../../types/currency.enum';
 import { MAX_MONEY_AMOUNT } from '../../../common/utils/money.util';
@@ -18,12 +23,27 @@ import {
   MAX_FISCAL_ID_LENGTH,
   PURCHASE_TIME_PATTERN,
 } from '../tasks/schemas/parsed-bill.schema';
+import { MAX_BILL_ITEMS } from './create-bill.dto';
+import { ConfirmBillItemDto, NewMarketDto } from './confirm-bill.dto';
 
 export class UpdateBillDto {
-  @ApiPropertyOptional({ format: 'uuid' })
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description: 'Use an existing market; not together with new_market',
+  })
   @IsUUID()
   @IsOptional()
   market_id?: string;
+
+  @ApiPropertyOptional({
+    type: NewMarketDto,
+    description:
+      'Auto find-or-create a market by name; not together with market_id',
+  })
+  @ValidateNested()
+  @Type(() => NewMarketDto)
+  @IsOptional()
+  new_market?: NewMarketDto;
 
   @ApiPropertyOptional({ example: '2026-05-19', format: 'date' })
   @IsCalendarDate()
@@ -71,4 +91,19 @@ export class UpdateBillDto {
   @Matches(PURCHASE_TIME_PATTERN)
   @IsOptional()
   purchase_time?: string;
+
+  @ApiPropertyOptional({
+    type: [ConfirmBillItemDto],
+    minItems: 1,
+    maxItems: MAX_BILL_ITEMS,
+    description:
+      'Replaces the bill lines: a line with id is updated in place, one without is added, lines left out are removed. Omit to keep the lines.',
+  })
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(MAX_BILL_ITEMS)
+  @ValidateNested({ each: true })
+  @Type(() => ConfirmBillItemDto)
+  @IsOptional()
+  items?: ConfirmBillItemDto[];
 }

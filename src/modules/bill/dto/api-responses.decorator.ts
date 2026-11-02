@@ -16,7 +16,6 @@ import {
   AiErrorResponseDto,
   ParsePhotoResponseDto,
 } from './parsed-bill-response.dto';
-import { BillResponseDto } from './bill-response.dto';
 import {
   BillDetailResponseDto,
   DraftImageResponseDto,
@@ -144,11 +143,15 @@ export const ApiUpdateBillResponses = () =>
   applyDecorators(
     ApiResponse({
       status: 200,
-      type: BillResponseDto,
-      description: 'Bill updated',
+      type: BillDetailResponseDto,
+      description: 'Bill updated; returned with its items',
     }),
     ApiResponse({ status: 404, description: 'Bill not found' }),
-    ApiResponse({ status: 400, description: 'Invalid market reference' }),
+    ApiResponse({
+      status: 400,
+      description:
+        'Invalid body, unknown market or sub-category, both market_id and new_market, or an item id that is not a line of this bill',
+    }),
     ApiResponse({ status: 401, description: 'Unauthorized' }),
   );
 

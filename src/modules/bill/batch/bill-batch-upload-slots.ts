@@ -9,7 +9,7 @@ import {
   Injectable,
   Optional,
 } from '@nestjs/common';
-import type { Response } from 'express';
+import type { Request, Response } from 'express';
 import { aiErrorBody } from '../filters/ai-error-body';
 import { BILL_BATCH_ENV } from './bill-batch.env';
 import type { BillBatchEnv } from './bill-batch.env';
@@ -59,7 +59,21 @@ export class BillBatchUploadSlotGuard implements CanActivate {
     this.max = env?.maxConcurrentUploads ?? DEFAULT_MAX_CONCURRENT_UPLOADS;
   }
 
+  /** Slots currently held. */
+  get inUseCount(): number {
+    return this.inUse;
+  }
+
   canActivate(context: ExecutionContext): boolean {
+    const http = context.switchToHttp();
+    const req = http.getRequest<Request>();
+    const res = http.getResponse<Response>();
+    // The client may have gone while the earlier (async) guards ran: then
+    // 'close' has already fired and would never release a slot taken now.
+    // Nobody reads the answer, so stop here without taking one.
+    if (res.destroyed || res.closed || res.writableFinished || req.destroyed) {
+      return false;
+    }
     if (this.inUse >= this.max) throw new BillBatchBusyError();
     this.inUse++;
     let released = false;
@@ -68,7 +82,6 @@ export class BillBatchUploadSlotGuard implements CanActivate {
       released = true;
       this.inUse--;
     };
-    const res = context.switchToHttp().getResponse<Response>();
     res.once('finish', release);
     res.once('close', release);
     return true;

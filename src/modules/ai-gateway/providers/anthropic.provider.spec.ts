@@ -88,6 +88,34 @@ describe('AnthropicProvider', () => {
       jsonSchema: { type: 'object' },
     };
 
+    it('falls back to ANTHROPIC_MAX_OUTPUT_TOKENS, then 16000', async () => {
+      mockCreate.mockResolvedValue({
+        content: [{ type: 'text', text: '{}' }],
+        stop_reason: 'end_turn',
+      });
+      delete process.env.ANTHROPIC_MAX_OUTPUT_TOKENS;
+      await new AnthropicProvider(testAiCallConfig()).complete(jsonReq);
+      process.env.ANTHROPIC_MAX_OUTPUT_TOKENS = '8000';
+      try {
+        await new AnthropicProvider(testAiCallConfig()).complete(jsonReq);
+      } finally {
+        delete process.env.ANTHROPIC_MAX_OUTPUT_TOKENS;
+      }
+      expect(mockCreate.mock.calls[0][0].max_tokens).toBe(16000);
+      expect(mockCreate.mock.calls[1][0].max_tokens).toBe(8000);
+    });
+
+    it('fails to start on an invalid ANTHROPIC_MAX_OUTPUT_TOKENS', () => {
+      process.env.ANTHROPIC_MAX_OUTPUT_TOKENS = 'lots';
+      try {
+        expect(() => new AnthropicProvider(testAiCallConfig())).toThrow(
+          /ANTHROPIC_MAX_OUTPUT_TOKENS/,
+        );
+      } finally {
+        delete process.env.ANTHROPIC_MAX_OUTPUT_TOKENS;
+      }
+    });
+
     // Current models reject temperature, so it is never sent.
     it('passes maxOutputTokens but not temperature into the request body', async () => {
       mockCreate.mockResolvedValue({

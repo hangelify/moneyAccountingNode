@@ -9,9 +9,11 @@ describe('BillParserTask', () => {
     expect(t.requiredCapabilities.has('text')).toBe(true);
   });
 
-  it('names itself bill.parse and prefers Claude Sonnet on anthropic', () => {
+  // The model and output limit come from the provider's env settings.
+  it('names itself bill.parse and leaves model and output limit to the provider', () => {
     expect(t.name).toBe('bill.parse');
-    expect(t.modelOverrides?.anthropic).toBe('claude-sonnet-4-6');
+    expect(t.modelOverrides).toBeUndefined();
+    expect(t.maxOutputTokens).toBeUndefined();
   });
 
   it('produces a user message with the image attached', async () => {

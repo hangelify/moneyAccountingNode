@@ -35,6 +35,8 @@ describe('BillPhotoIngestService', () => {
     await expect(service.ingest(input)).resolves.toEqual({
       kind: 'existing',
       billId: 'draft-old',
+      parsed: { draft_id: 'draft-old' },
+      requestId: 'req-old',
     });
     expect(findDraftByImageHash).toHaveBeenCalledWith('hh-1', 'sha-1');
     expect(parseAndCategorize).not.toHaveBeenCalled();

@@ -17,7 +17,6 @@ import {
   ParseFilePipe,
   Logger,
   UnprocessableEntityException,
-  ConflictException,
   Inject,
 } from '@nestjs/common';
 import { createHash } from 'node:crypto';
@@ -182,19 +181,16 @@ export class BillController {
       });
     }
 
+    if (result.kind === 'existing') {
+      return this.duplicateResponse(ctx.householdId, result);
+    }
+
     // Answer with the draft as saved (one line per item, values
     // clamped), so a re-upload of this photo gets the same answer.
     const stored = await this.billCrud.findDraftByImageHash(
       ctx.householdId,
       imageSha256,
     );
-    if (result.kind === 'existing') {
-      if (!stored) {
-        // Confirmed or deleted between the lookup and the read.
-        throw new ConflictException('The draft of this photo is gone');
-      }
-      return this.duplicateResponse(ctx.householdId, stored);
-    }
     if (stored) {
       return {
         ...stored.parsed,

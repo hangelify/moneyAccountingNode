@@ -17,7 +17,13 @@ export interface IngestInput {
 
 export type IngestResult =
   /** The same photo already has an open draft; no AI call was made. */
-  | { kind: 'existing'; billId: string }
+  | {
+      kind: 'existing';
+      billId: string;
+      /** The stored draft, as read by the lookup. */
+      parsed: ParsedBillResponseDto;
+      requestId: string | null;
+    }
   | {
       kind: 'draft';
       billId: string;
@@ -57,7 +63,12 @@ export class BillPhotoIngestService {
       imageSha256,
     );
     if (existing) {
-      return { kind: 'existing', billId: existing.parsed.draft_id };
+      return {
+        kind: 'existing',
+        billId: existing.parsed.draft_id,
+        parsed: existing.parsed,
+        requestId: existing.requestId,
+      };
     }
 
     const { parsed, requestId, isReceipt } =

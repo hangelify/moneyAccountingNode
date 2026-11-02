@@ -136,3 +136,35 @@ describe('CreateBillItemDto.product_weight', () => {
     expect(await errorsFor(0)).not.toHaveLength(0);
   });
 });
+
+describe.each([
+  ['CreateBillDto', CreateBillDto, billBase],
+  ['ConfirmBillDto', ConfirmBillDto, billBase],
+  ['UpdateBillDto', UpdateBillDto, {}],
+] as [string, new () => object, object][])(
+  '%s.items[].amount sign',
+  (_, Dto, base) => {
+    async function errorsFor(v: number) {
+      const errors = await validate(
+        plainToInstance(Dto, { ...base, items: [item({ amount: v })] }),
+      );
+      return errors.filter((e) => e.property === 'items');
+    }
+
+    it('accepts a negative amount (sales or discount line)', async () => {
+      expect(await errorsFor(-3.5)).toHaveLength(0);
+    });
+
+    it('accepts the minimum amount', async () => {
+      expect(await errorsFor(-1e12)).toHaveLength(0);
+    });
+
+    it('rejects a negative amount that overflows the column', async () => {
+      expect(await errorsFor(-1e18)).not.toHaveLength(0);
+    });
+
+    it('rejects a zero amount', async () => {
+      expect(await errorsFor(0)).not.toHaveLength(0);
+    });
+  },
+);

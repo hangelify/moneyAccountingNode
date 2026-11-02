@@ -11,6 +11,9 @@ async function bootstrap() {
 
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
   configureApp(app, { trustProxy });
+  // SIGTERM (PM2 restart, systemd stop) runs the onModuleDestroy hooks: the
+  // batch worker finishes its jobs and Redis connections close cleanly.
+  app.enableShutdownHooks();
 
   const port = process.env.PORT ?? 3000;
   await app.listen(port);

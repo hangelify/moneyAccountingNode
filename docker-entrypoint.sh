@@ -24,12 +24,18 @@ fi
 
 echo "Database check completed!"
 
-echo "Running migrations..."
-if ! npm run migration:up; then
-  echo "ERROR: Migrations failed"
-  echo "Sleeping for 60 seconds to allow log inspection..."
-  sleep 60
-  exit 1
+# RUN_MIGRATIONS=false when migrations run as a separate step before the
+# deploy (the production pipeline does this with `npm run migration:up`).
+if [ "${RUN_MIGRATIONS:-true}" = "true" ]; then
+  echo "Running migrations..."
+  if ! npm run migration:up; then
+    echo "ERROR: Migrations failed"
+    echo "Sleeping for 60 seconds to allow log inspection..."
+    sleep 60
+    exit 1
+  fi
+else
+  echo "Skipping migrations (RUN_MIGRATIONS=$RUN_MIGRATIONS)"
 fi
 
 echo "Starting application..."

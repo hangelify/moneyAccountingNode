@@ -410,7 +410,9 @@ Production requires all infrastructure (PostgreSQL, Redis, MinIO/S3) to be runni
 
 ### Full Docker stack
 
-A `Dockerfile` (multi-stage, Node 24 Alpine) and `docker-compose.yml` are included. The Docker entrypoint waits for PostgreSQL to be ready, runs all pending migrations, then starts the application.
+A `Dockerfile` (multi-stage, Node 24 Alpine) and `docker-compose.yml` are included. The Docker entrypoint waits for PostgreSQL to be ready, runs all pending migrations (skipped with `RUN_MIGRATIONS=false`), then starts the application as the `node` user.
+
+Stages: `test` runs lint, type check and unit tests; `runtime` (the default) is the production image. `GET /health` answers `{"status":"ok"}` when PostgreSQL responds within a second, otherwise 503 `{"status":"unavailable"}`. Production deploys go through Jenkins (`Jenkinsfile`), which runs migrations as a separate step before switching the container.
 
 ```bash
 # Build the application image

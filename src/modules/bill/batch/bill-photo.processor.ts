@@ -1,6 +1,7 @@
 import { Inject, Logger, OnApplicationBootstrap } from '@nestjs/common';
 import { OnWorkerEvent, Processor, WorkerHost } from '@nestjs/bullmq';
 import { DelayedError, UnrecoverableError } from 'bullmq';
+import { EntityManager, RequestContext } from '@mikro-orm/core';
 import type { Job } from 'bullmq';
 import { BillBatchItemStatus } from '../../../types/bill-batch-item-status.enum';
 import { BillParseErrorCode } from '../../../types/bill-parse-error.enum';
@@ -65,6 +66,7 @@ export class BillPhotoProcessor
     private readonly quota: AiUserQuota,
     private readonly events: BillEventsPublisher,
     @Inject(BILL_BATCH_ENV) private readonly env: BillBatchEnv,
+    private readonly em: EntityManager,
   ) {
     super();
   }
@@ -74,7 +76,16 @@ export class BillPhotoProcessor
     this.worker.concurrency = this.env.concurrency;
   }
 
-  async process(job: Job<BillPhotoJob>, token?: string): Promise<void> {
+  /**
+   * Runs in its own request context, as an HTTP request does: services that
+   * use the global EntityManager (BillCrudService's repositories) refuse to
+   * run outside one.
+   */
+  process(job: Job<BillPhotoJob>, token?: string): Promise<void> {
+    return RequestContext.create(this.em, () => this.run(job, token));
+  }
+
+  private async run(job: Job<BillPhotoJob>, token?: string): Promise<void> {
     const item = await this.batches.findItemForJob(job.data.itemId);
     // A re-delivered job of a finished item does nothing.
     if (!item || FINISHED.includes(item.status)) return;

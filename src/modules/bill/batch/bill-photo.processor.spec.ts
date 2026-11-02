@@ -1,4 +1,5 @@
 import { DelayedError, UnrecoverableError } from 'bullmq';
+import { RequestContext } from '@mikro-orm/core';
 import type { Job } from 'bullmq';
 import {
   AiBudgetExceededError,
@@ -21,6 +22,8 @@ describe('BillPhotoProcessor', () => {
   let storage: { get: jest.Mock };
   let quota: { takeMinute: jest.Mock };
   let events: { publish: jest.Mock };
+  let forked: object;
+  let em: { name: string; fork: jest.Mock };
   let processor: BillPhotoProcessor;
 
   function fakeJob(attemptsMade = 0) {
@@ -77,6 +80,8 @@ describe('BillPhotoProcessor', () => {
         .mockResolvedValue({ allowed: true, retryAfterMs: 0 }),
     };
     events = { publish: jest.fn().mockResolvedValue(undefined) };
+    forked = {};
+    em = { name: 'default', fork: jest.fn(() => forked) };
     processor = new BillPhotoProcessor(
       batches as never,
       ingest as never,
@@ -84,6 +89,7 @@ describe('BillPhotoProcessor', () => {
       quota as never,
       events as never,
       env,
+      em as never,
     );
   });
 
@@ -102,6 +108,27 @@ describe('BillPhotoProcessor', () => {
       },
     },
   ];
+
+  it('runs the job in a request context of its own EntityManager fork', async () => {
+    let contextEm: unknown;
+    ingest.ingest.mockImplementation(() => {
+      contextEm = RequestContext.getEntityManager();
+      return Promise.resolve({
+        kind: 'draft',
+        billId: 'draft-1',
+        duplicate: false,
+        requestId: 'req-1',
+        parsed: {},
+      });
+    });
+
+    await processor.process(asJob(fakeJob()));
+
+    expect(em.fork).toHaveBeenCalledWith(
+      expect.objectContaining({ useContext: true }),
+    );
+    expect(contextEm).toBe(forked);
+  });
 
   it('sets the worker concurrency from the env on bootstrap', () => {
     const worker = { concurrency: 1 };

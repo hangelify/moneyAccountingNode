@@ -25,6 +25,7 @@ import {
 import { BillDashboardResponseDto } from './bill-dashboard.dto';
 import { SpendingBreakdownResponseDto } from './spending-breakdown.dto';
 import { BillListResponseDto } from './bill-list-response.dto';
+import { DuplicateSuggestionsResponseDto } from './bill-duplicates.dto';
 
 export function ApiParsePhotoResponses(): MethodDecorator & ClassDecorator {
   return applyDecorators(
@@ -32,7 +33,8 @@ export function ApiParsePhotoResponses(): MethodDecorator & ClassDecorator {
       type: ParsePhotoResponseDto,
       description:
         'The recognized bill, saved as a draft; request_id identifies the AI request. ' +
-        'If this photo already has an open draft, that draft is returned with duplicate: true and no AI call is made.',
+        'If this photo already has an open draft, that draft is returned with duplicate: true and no AI call is made. ' +
+        'possible_duplicates lists confirmed bills that may be the same purchase; nothing is blocked.',
     }),
     // Every error of this endpoint has the AiErrorResponseDto body.
     ApiBadRequestResponse({
@@ -97,11 +99,17 @@ export const ApiCreateBillResponses = () =>
     ApiResponse({
       status: 201,
       type: BillDetailResponseDto,
-      description: 'Bill created',
+      description:
+        'Bill created; possible_duplicates lists other confirmed bills that may be the same purchase (the bill is saved regardless)',
     }),
     ApiResponse({
       status: 400,
-      description: 'Invalid market or sub-category reference',
+      description:
+        'Invalid market or sub-category reference, or a duplicate_of_id that is the bill itself, would make a cycle, or names an original that is not confirmed',
+    }),
+    ApiResponse({
+      status: 404,
+      description: 'duplicate_of_id names no bill of the household',
     }),
     ApiResponse({ status: 401, description: 'Unauthorized' }),
   );
@@ -125,7 +133,8 @@ export const ApiGetBillResponses = () =>
     ApiResponse({
       status: 200,
       type: BillDetailResponseDto,
-      description: 'Bill retrieved',
+      description:
+        'Bill retrieved; a draft or confirmed bill lists possible_duplicates, a bill marked as a duplicate returns duplicate_of',
     }),
     ApiResponse({ status: 404, description: 'Bill not found' }),
     ApiResponse({ status: 401, description: 'Unauthorized' }),
@@ -182,20 +191,87 @@ export const ApiConfirmBillResponses = () =>
     ApiResponse({
       status: 200,
       type: BillDetailResponseDto,
-      description: 'Bill confirmed',
+      description:
+        'Bill confirmed; possible_duplicates lists other confirmed bills that may be the same purchase (the bill is confirmed regardless)',
     }),
     ApiResponse({
       status: 404,
-      description: 'Draft bill not found',
+      description: 'Draft bill not found, or duplicate_of_id names no bill',
     }),
     ApiResponse({
       status: 409,
-      description: 'Bill is already confirmed',
+      description: 'Bill is not a draft',
     }),
     ApiResponse({
       status: 400,
-      description: 'Invalid market or sub-category reference',
+      description:
+        'Invalid market or sub-category reference, or a duplicate_of_id that is the bill itself, would make a cycle, or names an original that is not confirmed',
     }),
+    ApiResponse({ status: 401, description: 'Unauthorized' }),
+  );
+
+export const ApiMarkDuplicateResponses = () =>
+  applyDecorators(
+    ApiResponse({
+      status: 200,
+      type: BillDetailResponseDto,
+      description:
+        'Bill marked as a duplicate; duplicate_of names the original',
+    }),
+    ApiResponse({
+      status: 400,
+      description:
+        'The bill is its own original, would make a cycle, or the original is a draft',
+    }),
+    ApiResponse({
+      status: 404,
+      description: 'Bill or original not found',
+    }),
+    ApiResponse({
+      status: 409,
+      description: 'Bill is not confirmed (drafts are marked through confirm)',
+    }),
+    ApiResponse({ status: 401, description: 'Unauthorized' }),
+  );
+
+export const ApiUnmarkDuplicateResponses = () =>
+  applyDecorators(
+    ApiResponse({
+      status: 200,
+      type: BillDetailResponseDto,
+      description: 'Bill is confirmed again and counts in totals',
+    }),
+    ApiResponse({ status: 400, description: 'Bill is not a duplicate' }),
+    ApiResponse({ status: 404, description: 'Bill not found' }),
+    ApiResponse({ status: 401, description: 'Unauthorized' }),
+  );
+
+export const ApiDuplicateSuggestionsResponses = () =>
+  applyDecorators(
+    ApiResponse({
+      status: 200,
+      type: DuplicateSuggestionsResponseDto,
+      description: 'Pairs of confirmed bills that look like the same purchase',
+    }),
+    ApiResponse({
+      status: 400,
+      description: 'Invalid date or date_from is after date_to',
+    }),
+    ApiResponse({ status: 401, description: 'Unauthorized' }),
+  );
+
+export const ApiDismissDuplicateResponses = () =>
+  applyDecorators(
+    ApiResponse({
+      status: 204,
+      description:
+        'The pair is no longer suggested (also when already dismissed)',
+    }),
+    ApiResponse({
+      status: 400,
+      description: 'other_bill_id is the bill itself',
+    }),
+    ApiResponse({ status: 404, description: 'Either bill not found' }),
     ApiResponse({ status: 401, description: 'Unauthorized' }),
   );
 

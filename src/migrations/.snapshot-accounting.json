@@ -717,6 +717,228 @@
       "comment": null
     },
     {
+      "name": "bill_duplicate_dismissals",
+      "schema": "public",
+      "columns": {
+        "bill_id": {
+          "name": "bill_id",
+          "type": "uuid",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": true,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "uuid"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamptz(6)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": false,
+          "length": 6,
+          "precision": null,
+          "scale": null,
+          "default": "now()",
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "datetime"
+        },
+        "dismissed_by_user_id": {
+          "name": "dismissed_by_user_id",
+          "type": "uuid",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "unique": false,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "uuid"
+        },
+        "household_id": {
+          "name": "household_id",
+          "type": "uuid",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": false,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "uuid"
+        },
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": true,
+          "nullable": false,
+          "unique": false,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": "gen_random_uuid()",
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "uuid"
+        },
+        "other_bill_id": {
+          "name": "other_bill_id",
+          "type": "uuid",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": false,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "uuid"
+        }
+      },
+      "indexes": [
+        {
+          "columnNames": [
+            "dismissed_by_user_id"
+          ],
+          "composite": false,
+          "constraint": false,
+          "keyName": "bill_duplicate_dismissals_dismissed_by_user_id_index",
+          "primary": false,
+          "unique": false
+        },
+        {
+          "columnNames": [
+            "household_id"
+          ],
+          "composite": false,
+          "constraint": false,
+          "keyName": "bill_duplicate_dismissals_household_id_index",
+          "primary": false,
+          "unique": false
+        },
+        {
+          "columnNames": [
+            "other_bill_id"
+          ],
+          "composite": false,
+          "constraint": false,
+          "keyName": "bill_duplicate_dismissals_other_bill_id_index",
+          "primary": false,
+          "unique": false
+        },
+        {
+          "columnNames": [
+            "bill_id",
+            "other_bill_id"
+          ],
+          "composite": true,
+          "constraint": false,
+          "keyName": "bill_duplicate_dismissals_pair_unique",
+          "primary": false,
+          "unique": true
+        },
+        {
+          "columnNames": [
+            "id"
+          ],
+          "composite": false,
+          "constraint": true,
+          "keyName": "bill_duplicate_dismissals_pkey",
+          "primary": true,
+          "unique": true
+        }
+      ],
+      "checks": [
+        {
+          "name": "bill_duplicate_dismissals_order_check",
+          "expression": "bill_id < other_bill_id",
+          "definition": "CHECK ((bill_id < other_bill_id))",
+          "columnName": "bill_id"
+        }
+      ],
+      "triggers": [],
+      "foreignKeys": {
+        "bill_duplicate_dismissals_bill_id_foreign": {
+          "columnNames": [
+            "bill_id"
+          ],
+          "constraintName": "bill_duplicate_dismissals_bill_id_foreign",
+          "localTableName": "public.bill_duplicate_dismissals",
+          "referencedColumnNames": [
+            "id"
+          ],
+          "referencedTableName": "public.bills",
+          "updateRule": "cascade"
+        },
+        "bill_duplicate_dismissals_dismissed_by_user_id_foreign": {
+          "columnNames": [
+            "dismissed_by_user_id"
+          ],
+          "constraintName": "bill_duplicate_dismissals_dismissed_by_user_id_foreign",
+          "localTableName": "public.bill_duplicate_dismissals",
+          "referencedColumnNames": [
+            "id"
+          ],
+          "referencedTableName": "public.users",
+          "updateRule": "cascade",
+          "deleteRule": "set null"
+        },
+        "bill_duplicate_dismissals_household_id_foreign": {
+          "columnNames": [
+            "household_id"
+          ],
+          "constraintName": "bill_duplicate_dismissals_household_id_foreign",
+          "localTableName": "public.bill_duplicate_dismissals",
+          "referencedColumnNames": [
+            "id"
+          ],
+          "referencedTableName": "public.households",
+          "updateRule": "cascade"
+        },
+        "bill_duplicate_dismissals_other_bill_id_foreign": {
+          "columnNames": [
+            "other_bill_id"
+          ],
+          "constraintName": "bill_duplicate_dismissals_other_bill_id_foreign",
+          "localTableName": "public.bill_duplicate_dismissals",
+          "referencedColumnNames": [
+            "id"
+          ],
+          "referencedTableName": "public.bills",
+          "updateRule": "cascade"
+        }
+      },
+      "comment": null
+    },
+    {
       "name": "bill_sub_categories",
       "schema": "public",
       "columns": {
@@ -1270,6 +1492,57 @@
           "enumItems": [],
           "mappedType": "text"
         },
+        "duplicate_of_id": {
+          "name": "duplicate_of_id",
+          "type": "uuid",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "unique": false,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "uuid"
+        },
+        "fiscal_receipt_number": {
+          "name": "fiscal_receipt_number",
+          "type": "varchar(64)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "unique": false,
+          "length": 64,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "string"
+        },
+        "fiscal_register_id": {
+          "name": "fiscal_register_id",
+          "type": "varchar(64)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "unique": false,
+          "length": 64,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "string"
+        },
         "household_id": {
           "name": "household_id",
           "type": "uuid",
@@ -1355,6 +1628,23 @@
           "enumItems": [],
           "mappedType": "text"
         },
+        "purchase_time": {
+          "name": "purchase_time",
+          "type": "time(6)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "unique": false,
+          "length": 6,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "time"
+        },
         "status": {
           "name": "status",
           "type": "bill_status_enum",
@@ -1371,7 +1661,8 @@
           "collation": null,
           "enumItems": [
             "draft",
-            "confirmed"
+            "confirmed",
+            "duplicate"
           ],
           "mappedType": "unknown",
           "nativeEnumName": "bill_status_enum"
@@ -1427,6 +1718,17 @@
         },
         {
           "columnNames": [
+            "duplicate_of_id"
+          ],
+          "composite": false,
+          "constraint": false,
+          "keyName": "bills_duplicate_of_id_index",
+          "primary": false,
+          "unique": false,
+          "where": "duplicate_of_id IS NOT NULL"
+        },
+        {
+          "columnNames": [
             "household_id",
             "created_at",
             "id"
@@ -1449,6 +1751,19 @@
               "name": "id"
             }
           ]
+        },
+        {
+          "columnNames": [
+            "household_id",
+            "fiscal_register_id",
+            "fiscal_receipt_number"
+          ],
+          "composite": true,
+          "constraint": false,
+          "keyName": "bills_household_fiscal_index",
+          "primary": false,
+          "unique": false,
+          "where": "(deleted_at IS NULL) AND (fiscal_receipt_number IS NOT NULL)"
         },
         {
           "columnNames": [
@@ -1509,7 +1824,14 @@
           "unique": true
         }
       ],
-      "checks": [],
+      "checks": [
+        {
+          "name": "bills_duplicate_of_check",
+          "expression": "(status = 'duplicate'::text) = (duplicate_of_id IS NOT NULL)",
+          "definition": "CHECK ((((status)::text = 'duplicate'::text) = (duplicate_of_id IS NOT NULL)))",
+          "columnName": "duplicate_of_id"
+        }
+      ],
       "triggers": [],
       "foreignKeys": {
         "bills_ai_request_id_foreign": {
@@ -1549,6 +1871,18 @@
           ],
           "referencedTableName": "public.users",
           "deleteRule": "set null"
+        },
+        "bills_duplicate_of_id_foreign": {
+          "columnNames": [
+            "duplicate_of_id"
+          ],
+          "constraintName": "bills_duplicate_of_id_foreign",
+          "localTableName": "public.bills",
+          "referencedColumnNames": [
+            "id"
+          ],
+          "referencedTableName": "public.bills",
+          "updateRule": "cascade"
         },
         "bills_household_id_fkey": {
           "columnNames": [
@@ -2360,18 +2694,6 @@
         {
           "columnNames": [
             "source",
-            "rate_date",
-            "currency"
-          ],
-          "composite": true,
-          "constraint": true,
-          "keyName": "exchange_rates_source_date_currency_unique",
-          "primary": false,
-          "unique": true
-        },
-        {
-          "columnNames": [
-            "source",
             "currency",
             "rate_date"
           ],
@@ -2392,6 +2714,18 @@
               "sort": "DESC"
             }
           ]
+        },
+        {
+          "columnNames": [
+            "source",
+            "rate_date",
+            "currency"
+          ],
+          "composite": true,
+          "constraint": true,
+          "keyName": "exchange_rates_source_date_currency_unique",
+          "primary": false,
+          "unique": true
         }
       ],
       "checks": [],
@@ -5089,7 +5423,8 @@
       "schema": "public",
       "items": [
         "draft",
-        "confirmed"
+        "confirmed",
+        "duplicate"
       ]
     },
     "currency_enum": {

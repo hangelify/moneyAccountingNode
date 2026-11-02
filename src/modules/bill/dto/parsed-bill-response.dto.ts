@@ -1,4 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { PossibleDuplicateDto } from './bill-duplicates.dto';
 
 export class SubCategoryRefDto {
   @ApiProperty({
@@ -66,6 +67,15 @@ export class ParsedBillResponseDto {
   @ApiProperty({ nullable: true, example: 23.45 })
   total_amount!: number | null;
 
+  @ApiProperty({ nullable: true, example: 'J403001234' })
+  fiscal_register_id!: string | null;
+
+  @ApiProperty({ nullable: true, example: '0042' })
+  fiscal_receipt_number!: string | null;
+
+  @ApiProperty({ nullable: true, example: '14:05' })
+  purchase_time!: string | null;
+
   @ApiProperty({ type: [ParsedBillItemResponseDto] })
   items!: ParsedBillItemResponseDto[];
 }
@@ -84,6 +94,13 @@ export class ParsePhotoResponseDto extends ParsedBillResponseDto {
       'True when this photo already had an open draft: that draft is returned and no AI call is made',
   })
   duplicate!: boolean;
+
+  @ApiProperty({
+    type: [PossibleDuplicateDto],
+    description:
+      'Confirmed bills of the household that may be the same purchase as this draft (same fiscal receipt, or same amount, currency and date); empty when the receipt has no read date. Informational: nothing is blocked',
+  })
+  possible_duplicates!: PossibleDuplicateDto[];
 }
 
 /** Error body of the AI endpoints (see `aiErrorBody`); some add fields, e.g. `parsed`. */

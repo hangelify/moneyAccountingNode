@@ -2,6 +2,7 @@ import {
   IsOptional,
   IsArray,
   IsString,
+  IsBoolean,
   IsEnum,
   MinLength,
   MaxLength,
@@ -107,4 +108,17 @@ export class ListBillsQueryDto {
   @Min(1)
   @Max(100)
   limit?: number;
+
+  @ApiPropertyOptional({
+    type: Boolean,
+    default: false,
+    description:
+      'Also list bills marked as duplicates (status "duplicate", with duplicate_of_id). By default only confirmed bills are listed.',
+  })
+  @Transform(({ value }: { value: unknown }) =>
+    value === 'true' ? true : value === 'false' ? false : value,
+  )
+  @IsOptional()
+  @IsBoolean()
+  include_duplicates?: boolean;
 }

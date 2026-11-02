@@ -15,6 +15,7 @@ import { BillStatus } from '../../types/bill-status.enum';
 import { BillCrudService } from './bill-crud.service';
 import { ExchangeRateService } from '../exchange-rate/exchange-rate.service';
 import { StubProvider } from '../exchange-rate/testing/stub-exchange-rate.provider';
+import { BillDuplicatesService } from './bill-duplicates.service';
 import { BillConversionService } from './household-conversion';
 import type { CreateBillItemDto } from './dto/create-bill.dto';
 import type { ConfirmBillItemDto } from './dto/confirm-bill.dto';
@@ -143,6 +144,7 @@ describe('confirm and create bill (PostgreSQL)', () => {
       fork,
       rates,
       new BillConversionService(fork, rates),
+      new BillDuplicatesService(fork),
     );
   }
 
@@ -182,6 +184,13 @@ describe('confirm and create bill (PostgreSQL)', () => {
     const bill = await fork.findOneOrFail(Bill, id);
     const items = await fork.find(BillSubCategory, { bill: id });
     return { bill, items };
+  }
+
+  async function fork0Identity(id: string, identity: Partial<Bill>) {
+    const fork = orm.em.fork();
+    const bill = await fork.findOneOrFail(Bill, id);
+    Object.assign(bill, identity);
+    await fork.flush();
   }
 
   const required = { bill_date: '2026-05-20', total_amount: 1 };
@@ -276,7 +285,7 @@ describe('confirm and create bill (PostgreSQL)', () => {
       expect(savedIds).toEqual(wonIds);
     });
 
-    it('answers 409 when the bill is already confirmed', async () => {
+    it('answers 409 when the bill is not a draft', async () => {
       const id = await makeDraft();
       await crud().confirmBill(id, householdId, userId, {
         ...required,
@@ -360,6 +369,52 @@ describe('confirm and create bill (PostgreSQL)', () => {
         id: lineId,
         raw_name: 'LAPTE 1L',
         category_confidence: 0.9,
+      });
+    });
+
+    it('confirm overrides receipt identity', async () => {
+      const { id, lineId } = await makeDraftLine(subIds[0]);
+      await fork0Identity(id, { fiscal_receipt_number: '0001' });
+
+      const result = await crud().confirmBill(id, householdId, userId, {
+        ...required,
+        fiscal_register_id: 'J403001234',
+        fiscal_receipt_number: '0042',
+        purchase_time: '14:05',
+        items: [line(lineId)],
+      });
+
+      const { bill } = await load(id);
+      expect(bill).toMatchObject({
+        fiscal_register_id: 'J403001234',
+        fiscal_receipt_number: '0042',
+        purchase_time: '14:05',
+      });
+      expect(result).toMatchObject({
+        fiscal_register_id: 'J403001234',
+        fiscal_receipt_number: '0042',
+        purchase_time: '14:05',
+      });
+    });
+
+    it('confirm keeps the draft identity when none is sent', async () => {
+      const { id, lineId } = await makeDraftLine(subIds[0]);
+      await fork0Identity(id, {
+        fiscal_register_id: 'J1',
+        fiscal_receipt_number: '0001',
+        purchase_time: '08:30',
+      });
+
+      await crud().confirmBill(id, householdId, userId, {
+        ...required,
+        items: [line(lineId)],
+      });
+
+      const { bill } = await load(id);
+      expect(bill).toMatchObject({
+        fiscal_register_id: 'J1',
+        fiscal_receipt_number: '0001',
+        purchase_time: '08:30',
       });
     });
 
@@ -614,6 +669,46 @@ describe('confirm and create bill (PostgreSQL)', () => {
 
       const { items: saved } = await load(result.id);
       expect(saved).toHaveLength(2);
+    });
+
+    it('saves and returns receipt identity, and update changes it', async () => {
+      const created = await crud().createBill(householdId, userId, {
+        bill_date: '2026-05-19',
+        total_amount: 1,
+        fiscal_register_id: 'J403001234',
+        fiscal_receipt_number: '0042',
+        purchase_time: '14:05',
+        items: items(subIds[0]),
+      });
+      expect(created).toMatchObject({
+        fiscal_register_id: 'J403001234',
+        fiscal_receipt_number: '0042',
+        purchase_time: '14:05',
+      });
+
+      await crud().updateBill(created.id, householdId, {
+        fiscal_receipt_number: '0043',
+      });
+
+      const read = await crud().getBill(created.id, householdId);
+      expect(read).toMatchObject({
+        fiscal_register_id: 'J403001234',
+        fiscal_receipt_number: '0043',
+        purchase_time: '14:05',
+      });
+    });
+
+    it('returns null identity for a bill without one', async () => {
+      const created = await crud().createBill(householdId, userId, {
+        bill_date: '2026-05-19',
+        total_amount: 1,
+        items: items(subIds[0]),
+      });
+      expect(created).toMatchObject({
+        fiscal_register_id: null,
+        fiscal_receipt_number: null,
+        purchase_time: null,
+      });
     });
 
     it('runs the same number of SQL queries for 1 and 5 items', async () => {

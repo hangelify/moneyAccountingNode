@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { MikroOrmModule } from '@mikro-orm/nestjs';
 import { Bill } from '../../entities/bill.entity';
+import { BillDuplicateDismissal } from '../../entities/bill-duplicate-dismissal.entity';
 import { BillSubCategory } from '../../entities/bill-sub-category.entity';
 import { Market } from '../../entities/market.entity';
 import { User } from '../../entities/user.entity';
@@ -13,6 +14,7 @@ import { BillParseCategorizeTask } from './tasks/bill-parse-categorize.task';
 import { BillAiOrchestrator } from './bill-ai.orchestrator';
 import { BillPhotoService } from './bill-photo.service';
 import { BillCrudService } from './bill-crud.service';
+import { BillDuplicatesService } from './bill-duplicates.service';
 import { BillDashboardService } from './bill-dashboard.service';
 import { SpendingBreakdownService } from './spending-breakdown.service';
 import { BillController } from './bill.controller';
@@ -30,6 +32,7 @@ import { BILL_ITEM_TOLERANCE, readBillItemTolerance } from './bill-totals';
   imports: [
     MikroOrmModule.forFeature([
       Bill,
+      BillDuplicateDismissal,
       BillSubCategory,
       Market,
       User,
@@ -49,6 +52,7 @@ import { BILL_ITEM_TOLERANCE, readBillItemTolerance } from './bill-totals';
     BillPhotoService,
     BillCrudService,
     BillDashboardService,
+    BillDuplicatesService,
     SpendingBreakdownService,
     BillConversionService,
     DraftCleanupService,

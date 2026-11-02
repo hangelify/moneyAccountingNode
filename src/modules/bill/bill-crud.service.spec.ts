@@ -3,9 +3,11 @@ import {
   NotFoundException,
   BadRequestException,
   ConflictException,
+  Logger,
 } from '@nestjs/common';
 import { EntityManager, EntityRepository } from '@mikro-orm/core';
 import { BillCrudService } from './bill-crud.service';
+import { BillDuplicatesService } from './bill-duplicates.service';
 import type { BillConversionService } from './household-conversion';
 import type { ExchangeRateService } from '../exchange-rate/exchange-rate.service';
 import { Bill } from '../../entities/bill.entity';
@@ -70,7 +72,14 @@ function makeService() {
   (em as unknown as { transactional: jest.Mock }).transactional = jest.fn(
     (cb: (em: EntityManager) => unknown) => cb(em),
   );
+  const duplicates = {
+    findCandidates: jest.fn().mockResolvedValue([]),
+    probeOf: jest.fn().mockReturnValue({}),
+    originalOf: jest.fn(),
+    promoteAfterDelete: jest.fn().mockResolvedValue(undefined),
+  };
   return {
+    duplicates,
     service: new BillCrudService(
       billRepo,
       marketRepo,
@@ -80,6 +89,7 @@ function makeService() {
       {
         forBills: jest.fn().mockResolvedValue(new Map()),
       } as unknown as BillConversionService,
+      duplicates as unknown as BillDuplicatesService,
     ),
     billRepo,
     marketRepo,
@@ -126,6 +136,25 @@ describe('BillCrudService', () => {
       const result = await service.createBill(householdId, userId, dto);
       expect(result.total_amount).toBe(9.99);
       expect(em.flush as jest.Mock).toHaveBeenCalled();
+    });
+
+    it('still resolves when the duplicate lookup fails', async () => {
+      const { service, duplicates } = makeService();
+      duplicates.findCandidates.mockRejectedValue(new Error('db gone'));
+      const logSpy = jest
+        .spyOn(Logger.prototype, 'error')
+        .mockImplementation(() => undefined);
+
+      const result = await service.createBill(householdId, userId, {
+        bill_date: '2026-05-19',
+        total_amount: 9.99,
+        items: [],
+      });
+
+      expect(result.possible_duplicates).toEqual([]);
+      expect(result.duplicate_of).toBeNull();
+      expect(logSpy).toHaveBeenCalled();
+      logSpy.mockRestore();
     });
 
     it('still resolves when the household lookup for the rate fails', async () => {
@@ -488,16 +517,67 @@ describe('BillCrudService', () => {
     });
   });
 
+  describe('getBill duplicate lookup', () => {
+    it('returns the bill with no candidates when the lookup fails', async () => {
+      const { service, billRepo, duplicates } = makeService();
+      (billRepo.findOne as jest.Mock).mockResolvedValue({
+        id: billId,
+        status: BillStatus.CONFIRMED,
+        amount: 9.99,
+        bill_date: '2026-05-19',
+        created_at: new Date(),
+        billSubCategories: { getItems: () => [] },
+      });
+      duplicates.findCandidates.mockRejectedValue(new Error('db gone'));
+      const logSpy = jest
+        .spyOn(Logger.prototype, 'error')
+        .mockImplementation(() => undefined);
+
+      const result = await service.getBill(billId, householdId);
+
+      expect(result.possible_duplicates).toEqual([]);
+      expect(result.duplicate_of).toBeNull();
+      logSpy.mockRestore();
+    });
+  });
+
   describe('softDeleteBill', () => {
-    it('sets deleted_at on the bill', async () => {
-      const { service, billRepo, em } = makeService();
-      const bill = { id: billId, deleted_at: undefined } as unknown as Bill;
-      (billRepo.findOne as jest.Mock).mockResolvedValue(bill);
+    it('sets deleted_at and promotes a duplicate of a confirmed bill', async () => {
+      const { service, em, duplicates } = makeService();
+      const bill = {
+        id: billId,
+        status: BillStatus.CONFIRMED,
+        deleted_at: undefined,
+      } as unknown as Bill;
+      (em.findOne as jest.Mock).mockResolvedValue(bill);
 
       await service.softDeleteBill(billId, householdId);
 
       expect(bill.deleted_at).toBeInstanceOf(Date);
       expect(em.flush as jest.Mock).toHaveBeenCalled();
+      expect(duplicates.promoteAfterDelete).toHaveBeenCalledWith(em, billId);
+    });
+
+    it('does not promote anything when a draft or duplicate is deleted', async () => {
+      const { service, em, duplicates } = makeService();
+      for (const status of [BillStatus.DRAFT, BillStatus.DUPLICATE]) {
+        (em.findOne as jest.Mock).mockResolvedValue({
+          id: billId,
+          status,
+        });
+        await service.softDeleteBill(billId, householdId);
+      }
+
+      expect(duplicates.promoteAfterDelete).not.toHaveBeenCalled();
+    });
+
+    it('throws NotFoundException when the bill is missing', async () => {
+      const { service, em } = makeService();
+      (em.findOne as jest.Mock).mockResolvedValue(null);
+
+      await expect(
+        service.softDeleteBill(billId, householdId),
+      ).rejects.toBeInstanceOf(NotFoundException);
     });
   });
 
@@ -522,6 +602,9 @@ describe('BillCrudService', () => {
         bill_date: '2026-05-19',
         currency: 'EUR',
         total_amount: 9.99,
+        fiscal_register_id: null,
+        fiscal_receipt_number: null,
+        purchase_time: null,
         items: [],
       };
 
@@ -576,6 +659,35 @@ describe('BillCrudService', () => {
       expect(em.flush as jest.Mock).toHaveBeenCalled();
     });
 
+    it('still resolves when the duplicate lookup fails', async () => {
+      const { service, em, duplicates } = makeService();
+      const bill = {
+        id: billId,
+        status: BillStatus.DRAFT,
+        amount: 9.99,
+        bill_date: '2026-05-19',
+        created_at: new Date(),
+        deleted_at: undefined,
+        market: undefined,
+      } as unknown as Bill;
+      (em.findOne as jest.Mock).mockResolvedValue(bill);
+      duplicates.findCandidates.mockRejectedValue(new Error('db gone'));
+      const logSpy = jest
+        .spyOn(Logger.prototype, 'error')
+        .mockImplementation(() => undefined);
+
+      const result = await service.confirmBill(billId, householdId, userId, {
+        bill_date: '2026-05-19',
+        total_amount: 12,
+        items: [],
+      });
+
+      expect(result.status).toBe(BillStatus.CONFIRMED);
+      expect(result.possible_duplicates).toEqual([]);
+      expect(result.duplicate_of).toBeNull();
+      logSpy.mockRestore();
+    });
+
     it('throws NotFoundException when draft not found', async () => {
       const { service, subCategoryRepo, em } = makeService();
       (subCategoryRepo.find as jest.Mock).mockResolvedValue([]);
@@ -590,7 +702,7 @@ describe('BillCrudService', () => {
       ).rejects.toBeInstanceOf(NotFoundException);
     });
 
-    it('throws ConflictException when the bill is already confirmed', async () => {
+    it('throws ConflictException when the bill is not a draft', async () => {
       const { service, subCategoryRepo, em } = makeService();
       (subCategoryRepo.find as jest.Mock).mockResolvedValue([]);
       (em.findOne as jest.Mock).mockResolvedValue({
@@ -618,6 +730,9 @@ describe('BillCrudService', () => {
         bill_date: null,
         currency: null,
         total_amount: 28.2,
+        fiscal_register_id: null,
+        fiscal_receipt_number: null,
+        purchase_time: null,
         items: [
           {
             name: 'Paine Pumpern',
@@ -654,6 +769,9 @@ describe('BillCrudService', () => {
         bill_date: null,
         currency: null,
         total_amount: 88.39,
+        fiscal_register_id: null,
+        fiscal_receipt_number: null,
+        purchase_time: null,
         items: [
           {
             name: 'Carnaciori Ki',
@@ -705,6 +823,9 @@ describe('BillCrudService', () => {
         bill_date: null,
         currency: null,
         total_amount: 60,
+        fiscal_register_id: null,
+        fiscal_receipt_number: null,
+        purchase_time: null,
         items: [line('Lapte 1L', 27.5), line('Lapte 0.5L', 32.5)],
       };
 
@@ -727,6 +848,9 @@ describe('BillCrudService', () => {
         bill_date: null,
         currency: null,
         total_amount: 100,
+        fiscal_register_id: null,
+        fiscal_receipt_number: null,
+        purchase_time: null,
         items: [
           {
             name: 'Lapte 1L',
@@ -789,6 +913,9 @@ describe('BillCrudService', () => {
         bill_date: '2026-05-07',
         currency: 'EUR',
         total_amount: 1.2,
+        fiscal_register_id: null,
+        fiscal_receipt_number: null,
+        purchase_time: null,
         items: [item],
       };
 

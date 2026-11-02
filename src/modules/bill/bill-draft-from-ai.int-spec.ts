@@ -16,6 +16,7 @@ import { NotFoundException } from '@nestjs/common';
 import { BillCrudService } from './bill-crud.service';
 import { ExchangeRateService } from '../exchange-rate/exchange-rate.service';
 import { StubProvider } from '../exchange-rate/testing/stub-exchange-rate.provider';
+import { BillDuplicatesService } from './bill-duplicates.service';
 import { BillConversionService } from './household-conversion';
 import { BillPhotoService } from './bill-photo.service';
 import type { BillAiOrchestrator } from './bill-ai.orchestrator';
@@ -107,6 +108,7 @@ describe('draft from AI output (PostgreSQL)', () => {
       fork,
       rates,
       new BillConversionService(fork, rates),
+      new BillDuplicatesService(fork),
     );
   }
 
@@ -180,6 +182,9 @@ describe('draft from AI output (PostgreSQL)', () => {
       bill_date: '07.05.2026',
       currency: 'eur',
       total_amount: 1e20,
+      fiscal_register_id: null,
+      fiscal_receipt_number: null,
+      purchase_time: null,
       items: [
         {
           name: 'y'.repeat(300),
@@ -236,6 +241,9 @@ describe('draft from AI output (PostgreSQL)', () => {
       bill_date: '2026-05-07',
       currency: 'EUR',
       total_amount: 3.7,
+      fiscal_register_id: null,
+      fiscal_receipt_number: null,
+      purchase_time: null,
       items: [
         {
           name: 'BREAD',
@@ -339,6 +347,55 @@ describe('draft from AI output (PostgreSQL)', () => {
           }),
         ]),
       );
+    });
+
+    it('saves receipt identity on the draft and returns it on re-upload', async () => {
+      const hash = sha();
+      const { id } = await crud(orm.em.fork()).createDraftFromParsed(
+        householdId,
+        userId,
+        parsedDto({
+          fiscal_register_id: 'J403001234',
+          fiscal_receipt_number: '0042',
+          purchase_time: '14:05',
+        }),
+        { imageSha256: hash, aiRequestId: await aiRequest() },
+      );
+
+      const { bill } = await loadDraft(id);
+      expect(bill).toMatchObject({
+        fiscal_register_id: 'J403001234',
+        fiscal_receipt_number: '0042',
+        purchase_time: '14:05',
+      });
+      const found = await crud(orm.em.fork()).findDraftByImageHash(
+        householdId,
+        hash,
+      );
+      expect(found?.parsed).toMatchObject({
+        fiscal_register_id: 'J403001234',
+        fiscal_receipt_number: '0042',
+        purchase_time: '14:05',
+      });
+    });
+
+    it('returns null identity for a draft without one', async () => {
+      const hash = sha();
+      await crud(orm.em.fork()).createDraftFromParsed(
+        householdId,
+        userId,
+        parsedDto(),
+        { imageSha256: hash, aiRequestId: await aiRequest() },
+      );
+      const found = await crud(orm.em.fork()).findDraftByImageHash(
+        householdId,
+        hash,
+      );
+      expect(found?.parsed).toMatchObject({
+        fiscal_register_id: null,
+        fiscal_receipt_number: null,
+        purchase_time: null,
+      });
     });
 
     it('returns the read bill_date of a found draft as YYYY-MM-DD', async () => {

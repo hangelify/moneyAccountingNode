@@ -20,6 +20,7 @@ import { StubProvider } from '../exchange-rate/testing/stub-exchange-rate.provid
 import { BillCrudService } from './bill-crud.service';
 import { BillDashboardService } from './bill-dashboard.service';
 import { SpendingBreakdownService } from './spending-breakdown.service';
+import { BillDuplicatesService } from './bill-duplicates.service';
 import {
   BillConversionService,
   fetchUnconverted,
@@ -94,6 +95,7 @@ describe('household currency conversion (PostgreSQL)', () => {
       providers: [
         BillCrudService,
         BillConversionService,
+        BillDuplicatesService,
         BillDashboardService,
         SpendingBreakdownService,
       ],

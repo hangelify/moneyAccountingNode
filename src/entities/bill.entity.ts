@@ -9,6 +9,7 @@ import {
   ManyToOne,
   Enum,
   Index,
+  Check,
 } from '@mikro-orm/decorators/legacy';
 import { BaseEntity } from './base.entity';
 import { BillSubCategory } from './bill-sub-category.entity';
@@ -18,6 +19,7 @@ import { Market } from './market.entity';
 import { AiRequest } from './ai-request.entity';
 import { Currency } from '../types/currency.enum';
 import { BillStatus } from '../types/bill-status.enum';
+import { HourMinuteType } from '../types/hour-minute.type';
 
 @Entity({ tableName: 'bills' })
 // Dashboard and bill list: household + status, range on bill_date.
@@ -50,6 +52,21 @@ import { BillStatus } from '../types/bill-status.enum';
     'create unique index "bills_household_image_sha256_draft_unique" on "bills" ("household_id", "image_sha256") where "status" = \'draft\' and "deleted_at" is null and "image_sha256" is not null',
 })
 @Index({ name: 'bills_ai_request_id_index', properties: ['ai_request'] })
+@Index({
+  name: 'bills_duplicate_of_id_index',
+  expression:
+    'create index "bills_duplicate_of_id_index" on "bills" ("duplicate_of_id") where "duplicate_of_id" is not null',
+})
+// Receipt identity lookup; not unique, so "keep both" stays possible.
+@Index({
+  name: 'bills_household_fiscal_index',
+  expression:
+    'create index "bills_household_fiscal_index" on "bills" ("household_id", "fiscal_register_id", "fiscal_receipt_number") where "deleted_at" is null and "fiscal_receipt_number" is not null',
+})
+@Check({
+  name: 'bills_duplicate_of_check',
+  expression: `(status::text = 'duplicate') = (duplicate_of_id is not null)`,
+})
 export class Bill extends BaseEntity {
   @Property({ type: 'text', nullable: true })
   description?: string;
@@ -128,6 +145,25 @@ export class Bill extends BaseEntity {
     nullable: true,
   })
   currency?: Currency;
+
+  /** The confirmed bill this one copies; set exactly when status is duplicate. */
+  @ManyToOne(() => Bill, {
+    nullable: true,
+    deleteRule: 'no action',
+    fieldName: 'duplicate_of_id',
+  })
+  duplicate_of?: Rel<Bill> | null;
+
+  /** Cash register / fiscal device id printed on the receipt. */
+  @Property({ type: 'varchar', length: 64, nullable: true })
+  fiscal_register_id?: string;
+
+  @Property({ type: 'varchar', length: 64, nullable: true })
+  fiscal_receipt_number?: string;
+
+  /** `HH:MM` from the receipt timestamp. */
+  @Property({ type: HourMinuteType, nullable: true })
+  purchase_time?: string;
 
   @OneToMany(() => BillSubCategory, (bsc) => bsc.bill)
   billSubCategories = new Collection<BillSubCategory>(this);

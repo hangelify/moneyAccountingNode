@@ -78,4 +78,14 @@ describe('ListBillsQueryDto', () => {
     const errors = await validate(toDto({ currency: 'XYZ' }));
     expect(errors.some((e) => e.property === 'currency')).toBe(true);
   });
+
+  it("include_duplicates parses 'true' and rejects 'yes'", async () => {
+    const ok = toDto({ include_duplicates: 'true' });
+    expect(ok.include_duplicates).toBe(true);
+    expect(await validate(ok)).toHaveLength(0);
+    const no = toDto({ include_duplicates: 'false' });
+    expect(no.include_duplicates).toBe(false);
+    const bad = await validate(toDto({ include_duplicates: 'yes' }));
+    expect(bad.some((e) => e.property === 'include_duplicates')).toBe(true);
+  });
 });

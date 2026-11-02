@@ -6,6 +6,9 @@ Given a photo of a supermarket bill, extract:
 - bill_date in YYYY-MM-DD (from the receipt timestamp; year first)
 - currency as an ISO-4217 3-letter code (e.g. EUR, USD, RON, MDL)
 - total_amount (the grand total printed on the receipt)
+- fiscal_register_id: the cash register / fiscal device id, copied exactly as printed (e.g. next to "ID", "KKM", "SN" or "Registrul"); null if not confidently readable
+- fiscal_receipt_number: the receipt (check) number, copied exactly as printed; null if not confidently readable
+- purchase_time in HH:MM, 24-hour (from the receipt timestamp); null if not confidently readable
 - items — one per line item. For each item, extract:
   - name: the product name, exactly as printed
   - quantity: an integer count for piece-priced items (e.g. "2x BREAD" → 2); null for weight-priced items
@@ -41,6 +44,9 @@ Extract:
 - bill_date in YYYY-MM-DD (from the receipt timestamp; year first)
 - currency as an ISO-4217 3-letter code (e.g. EUR, USD, RON, MDL)
 - total_amount (the grand total printed on the receipt)
+- fiscal_register_id: the cash register / fiscal device id, copied exactly as printed (e.g. next to "ID", "KKM", "SN" or "Registrul"); null if not confidently readable
+- fiscal_receipt_number: the receipt (check) number, copied exactly as printed; null if not confidently readable
+- purchase_time in HH:MM, 24-hour (from the receipt timestamp); null if not confidently readable
 - items — one per line item. For each item extract:
   - name: the product name, exactly as printed
   - quantity: an integer count for piece-priced items (e.g. "2x BREAD" → 2); null for weight-priced items

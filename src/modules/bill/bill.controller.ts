@@ -37,6 +37,7 @@ import type { HouseholdContext } from '../household/guards/household-member.guar
 import { CurrentHousehold } from '../household/decorators/current-household.decorator';
 import { BillPhotoService } from './bill-photo.service';
 import { BillCrudService } from './bill-crud.service';
+import { BillDuplicatesService } from './bill-duplicates.service';
 import { BillDashboardService } from './bill-dashboard.service';
 import { SpendingBreakdownService } from './spending-breakdown.service';
 import {
@@ -52,6 +53,14 @@ import {
   DraftListResponseDto,
 } from './dto/bill-detail-response.dto';
 import { ListDraftsQueryDto } from './dto/list-drafts-query.dto';
+import {
+  DismissDuplicateDto,
+  DuplicateSuggestionsQueryDto,
+  DuplicateSuggestionsResponseDto,
+  MarkDuplicateDto,
+  PossibleDuplicateDto,
+} from './dto/bill-duplicates.dto';
+import { Currency } from '../../types/currency.enum';
 import { BillListResponseDto } from './dto/bill-list-response.dto';
 import {
   BillDashboardResponseDto,
@@ -71,6 +80,10 @@ import {
   ApiListDraftsResponses,
   ApiDraftImageResponses,
   ApiConfirmBillResponses,
+  ApiMarkDuplicateResponses,
+  ApiUnmarkDuplicateResponses,
+  ApiDuplicateSuggestionsResponses,
+  ApiDismissDuplicateResponses,
   ApiDashboardResponses,
   ApiSpendingBreakdownResponses,
 } from './dto/api-responses.decorator';
@@ -98,6 +111,7 @@ export class BillController {
   constructor(
     private readonly billPhoto: BillPhotoService,
     private readonly billCrud: BillCrudService,
+    private readonly billDuplicates: BillDuplicatesService,
     private readonly billDashboard: BillDashboardService,
     private readonly spendingBreakdown: SpendingBreakdownService,
     @Inject(STORAGE_SERVICE) private readonly storage: StorageService,
@@ -144,7 +158,9 @@ export class BillController {
       ctx.householdId,
       imageSha256,
     );
-    if (existing) return this.duplicateResponse(existing);
+    if (existing) {
+      return this.duplicateResponse(ctx.householdId, existing);
+    }
 
     const { parsed, requestId, isReceipt } =
       await this.billPhoto.parseAndCategorize(
@@ -198,22 +214,79 @@ export class BillController {
         ...stored.parsed,
         request_id: stored.requestId,
         duplicate: draft.duplicate,
+        possible_duplicates: await this.possibleDuplicates(
+          ctx.householdId,
+          stored.parsed,
+        ),
       };
     }
     // Confirmed or deleted in the meantime.
+    const saved = { ...parsed, draft_id: draft.id };
     return {
-      ...parsed,
-      draft_id: draft.id,
+      ...saved,
       request_id: requestId,
       duplicate: draft.duplicate,
+      possible_duplicates: await this.possibleDuplicates(
+        ctx.householdId,
+        saved,
+      ),
     };
   }
 
-  private duplicateResponse(draft: {
-    parsed: ParsedBillResponseDto;
-    requestId: string | null;
-  }): ParsePhotoResponseDto {
-    return { ...draft.parsed, request_id: draft.requestId, duplicate: true };
+  private async duplicateResponse(
+    householdId: string,
+    draft: { parsed: ParsedBillResponseDto; requestId: string | null },
+  ): Promise<ParsePhotoResponseDto> {
+    return {
+      ...draft.parsed,
+      request_id: draft.requestId,
+      duplicate: true,
+      possible_duplicates: await this.possibleDuplicates(
+        householdId,
+        draft.parsed,
+      ),
+    };
+  }
+
+  /**
+   * Look-alikes of a parsed draft. Never fails the request: the AI call is
+   * already paid for. Without a read date or total only the receipt ids can
+   * match, so the lookup narrows to those.
+   */
+  private async possibleDuplicates(
+    householdId: string,
+    draft: ParsedBillResponseDto,
+  ): Promise<PossibleDuplicateDto[]> {
+    const fiscalOnly = !draft.bill_date || draft.total_amount === null;
+    if (
+      fiscalOnly &&
+      !(draft.fiscal_register_id && draft.fiscal_receipt_number)
+    ) {
+      return [];
+    }
+    try {
+      return await this.billDuplicates.findCandidates(
+        householdId,
+        {
+          // Ignored by a fiscal-only lookup.
+          amount: draft.total_amount ?? 0,
+          currency: (draft.currency as Currency | null) ?? null,
+          bill_date: draft.bill_date ?? '',
+          market_id: null,
+          market_name: draft.market_name,
+          fiscal_register_id: draft.fiscal_register_id,
+          fiscal_receipt_number: draft.fiscal_receipt_number,
+          purchase_time: draft.purchase_time,
+        },
+        { excludeBillId: draft.draft_id, ...(fiscalOnly && { fiscalOnly }) },
+      );
+    } catch (err) {
+      this.log.error(
+        `Looking up possible duplicates of draft ${draft.draft_id} failed`,
+        err instanceof Error ? err.stack : String(err),
+      );
+      return [];
+    }
   }
 
   @Post()
@@ -321,6 +394,19 @@ export class BillController {
     return this.spendingBreakdown.getSpendingBreakdown(ctx.householdId, query);
   }
 
+  @Get('duplicate-suggestions')
+  @ApiOperation({
+    summary:
+      'Pairs of confirmed bills that look like the same purchase, best match first',
+  })
+  @ApiDuplicateSuggestionsResponses()
+  async duplicateSuggestions(
+    @CurrentHousehold() ctx: HouseholdContext,
+    @Query() query: DuplicateSuggestionsQueryDto,
+  ): Promise<DuplicateSuggestionsResponseDto> {
+    return this.billDuplicates.suggestions(ctx.householdId, query);
+  }
+
   @Get(':id')
   @ApiOperation({ summary: 'Get a bill by ID with line items' })
   @ApiParam({
@@ -355,6 +441,74 @@ export class BillController {
     @Body() dto: ConfirmBillDto,
   ): Promise<BillDetailResponseDto> {
     return this.billCrud.confirmBill(id, ctx.householdId, user.id, dto);
+  }
+
+  @Post(':id/mark-duplicate')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Mark a confirmed bill as a duplicate of another bill',
+  })
+  @ApiParam({
+    name: 'id',
+    description: 'Bill unique identifier',
+    example: '123e4567-e89b-12d3-a456-426614174000',
+  })
+  @ApiMarkDuplicateResponses()
+  async markDuplicate(
+    @CurrentUser() _user: AuthenticatedUser,
+    @CurrentHousehold() ctx: HouseholdContext,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: MarkDuplicateDto,
+  ): Promise<BillDetailResponseDto> {
+    await this.billDuplicates.markDuplicate(
+      id,
+      ctx.householdId,
+      dto.duplicate_of_id,
+    );
+    return this.billCrud.getBill(id, ctx.householdId);
+  }
+
+  @Post(':id/unmark-duplicate')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Count a duplicate bill again' })
+  @ApiParam({
+    name: 'id',
+    description: 'Bill unique identifier',
+    example: '123e4567-e89b-12d3-a456-426614174000',
+  })
+  @ApiUnmarkDuplicateResponses()
+  async unmarkDuplicate(
+    @CurrentUser() _user: AuthenticatedUser,
+    @CurrentHousehold() ctx: HouseholdContext,
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<BillDetailResponseDto> {
+    await this.billDuplicates.unmarkDuplicate(id, ctx.householdId);
+    return this.billCrud.getBill(id, ctx.householdId);
+  }
+
+  @Post(':id/dismiss-duplicate')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({
+    summary: 'Keep both bills of a pair: stop suggesting it as a duplicate',
+  })
+  @ApiParam({
+    name: 'id',
+    description: 'Bill unique identifier',
+    example: '123e4567-e89b-12d3-a456-426614174000',
+  })
+  @ApiDismissDuplicateResponses()
+  async dismissDuplicate(
+    @CurrentUser() user: AuthenticatedUser,
+    @CurrentHousehold() ctx: HouseholdContext,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: DismissDuplicateDto,
+  ): Promise<void> {
+    await this.billDuplicates.dismiss(
+      id,
+      ctx.householdId,
+      user.id,
+      dto.other_bill_id,
+    );
   }
 
   @Put(':id')

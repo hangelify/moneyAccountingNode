@@ -18,6 +18,12 @@ describe.each([
     expect(prompt).toMatch(/discount on the whole receipt/i);
   });
 
+  it('asks for the receipt identity', () => {
+    expect(prompt).toContain('fiscal_register_id');
+    expect(prompt).toContain('fiscal_receipt_number');
+    expect(prompt).toContain('purchase_time');
+  });
+
   it('no longer just drops discount lines', () => {
     expect(prompt).not.toMatch(/Do not include discount lines/);
   });

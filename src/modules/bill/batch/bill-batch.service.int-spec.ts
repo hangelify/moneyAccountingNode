@@ -238,11 +238,21 @@ describe('BillBatchService (PostgreSQL)', () => {
         'AI request limit reached: 100 per 24 hours. Try again in 42 s.',
       );
       expect(storage.put).not.toHaveBeenCalled();
-      expect(gateway.assertWithinBudget).not.toHaveBeenCalled();
       expect(queue.addBulk).not.toHaveBeenCalled();
       expect(
         await orm.em.fork().count(BillBatch, { household: householdId }),
       ).toBe(before);
+    });
+
+    it('checks the budget before reserving, so a budget refusal costs no quota', async () => {
+      gateway.assertWithinBudget.mockRejectedValue(new Error('over budget'));
+
+      await expect(
+        service.createBatch({ householdId, userId, images: images(2) }),
+      ).rejects.toThrow('over budget');
+
+      expect(quota.reserveDaily).not.toHaveBeenCalled();
+      expect(storage.put).not.toHaveBeenCalled();
     });
 
     it('fails every item when the jobs cannot be queued', async () => {

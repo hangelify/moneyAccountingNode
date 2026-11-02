@@ -684,5 +684,19 @@ describe('Batch photo parsing with the queue enabled (e2e)', () => {
       expect(storage.files.size).toBe(stored);
       expect(await queuedJobs()).toBe(jobs);
     });
+
+    it('still accepts a photo the quota covers after refusing the batch', async () => {
+      // The refused batch above cost only its guard hit (1 of 2).
+      const res = await request(quotaApp.getHttpServer())
+        .post(`/households/${dave.householdId}/bills/parse-photos`)
+        .set('Authorization', `Bearer ${dave.accessToken}`)
+        .attach('images', await photo(103), {
+          filename: 'bill-103.jpg',
+          contentType: 'image/jpeg',
+        });
+
+      expect(res.status).toBe(202);
+      expect((res.body as BillBatchResponseDto).total).toBe(1);
+    });
   });
 });

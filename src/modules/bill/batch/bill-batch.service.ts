@@ -340,7 +340,12 @@ export class BillBatchService {
     };
   }
 
+  /**
+   * The budget is checked first and reserveDaily is all or nothing, so a
+   * refused batch costs none of the daily quota.
+   */
   private async assertQuota(userId: string, extra: number): Promise<void> {
+    await this.gateway.assertWithinBudget(userId);
     const daily = await this.quota.reserveDaily(userId, extra);
     if (!daily.allowed) {
       throw new BillQuotaExceededException(
@@ -348,7 +353,6 @@ export class BillBatchService {
         daily.retryAfterSec,
       );
     }
-    await this.gateway.assertWithinBudget(userId);
   }
 
   private assertRetriable(bill: Bill | null, billId: string): Bill {

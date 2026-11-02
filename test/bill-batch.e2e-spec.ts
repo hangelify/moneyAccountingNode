@@ -437,6 +437,52 @@ describe('Batch photo parsing with the queue enabled (e2e)', () => {
     });
   });
 
+  it('parses a photo uploaded twice in one batch with one AI call', async () => {
+    const stream = await listen(bob);
+    const same = await photo(70);
+    const calls = () =>
+      (parseAndCategorize.mock.calls as unknown[][]).filter(
+        (c) => c[2] === bob.householdId,
+      ).length;
+    const before = calls();
+
+    const res = await api(bob)
+      .post('bills/parse-photos')
+      .attach('images', same, { filename: 'a.jpg', contentType: 'image/jpeg' })
+      .attach('images', same, { filename: 'b.jpg', contentType: 'image/jpeg' })
+      .expect(202);
+    const batch = res.body as BillBatchResponseDto;
+
+    await stream.waitFor(
+      (e) =>
+        e.type === 'item.done' &&
+        ofBatch(batch.batch_id)(e) &&
+        (e.data as { position: number }).position === 0,
+    );
+    // The repeat waits DUPLICATE_PHOTO_DELAY_MS; run it now.
+    const queue = new Queue(BILL_PHOTO_QUEUE, {
+      connection: redisConnectionOptions(),
+    });
+    try {
+      const job = await queue.getJob(batch.items[1].id);
+      expect(await job?.getState()).toBe('delayed');
+      await job!.promote();
+    } finally {
+      await queue.close();
+    }
+    await stream.waitFor(
+      (e) => e.type === 'batch.completed' && ofBatch(batch.batch_id)(e),
+    );
+
+    expect(calls() - before).toBe(1);
+    const state = (
+      await api(bob).get(`bill-batches/${batch.batch_id}`).expect(200)
+    ).body as BillBatchResponseDto;
+    expect(state.items.map((i) => i.status)).toEqual(['done', 'done']);
+    expect(state.items[0].bill_id).toEqual(expect.any(String));
+    expect(state.items[1].bill_id).toBe(state.items[0].bill_id);
+  });
+
   it('lets a failed bill be entered manually: PUT its lines, then confirm', async () => {
     const updated = (
       await api(alice)

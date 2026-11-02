@@ -24,6 +24,7 @@ import { StubProvider } from '../../exchange-rate/testing/stub-exchange-rate.pro
 import {
   BillBatchService,
   BillQuotaExceededException,
+  DUPLICATE_PHOTO_DELAY_MS,
   PROCESSING_FAILED_MESSAGE,
   QUEUE_FAILED_MESSAGE,
 } from './bill-batch.service';
@@ -251,6 +252,21 @@ describe('BillBatchService (PostgreSQL)', () => {
       expect(
         await orm.em.fork().count(BillBatch, { household: householdId }),
       ).toBe(before);
+    });
+
+    it('delays the job of a photo repeated in the upload', async () => {
+      const [a, b] = images(2);
+      await service.createBatch({ householdId, userId, images: [a, b, a, a] });
+
+      const jobs = (queue.addBulk.mock.calls as unknown[][])[0][0] as {
+        opts: { delay?: number };
+      }[];
+      expect(jobs.map((j) => j.opts.delay)).toEqual([
+        undefined,
+        undefined,
+        DUPLICATE_PHOTO_DELAY_MS,
+        DUPLICATE_PHOTO_DELAY_MS,
+      ]);
     });
 
     it('checks the budget before reserving, so a budget refusal costs no quota', async () => {

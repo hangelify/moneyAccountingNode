@@ -49,6 +49,12 @@ const LIVE_JOB_STATES = new Set([
   'waiting-children',
 ]);
 
+/**
+ * A photo that occurs again in the same upload waits this long, so the
+ * first copy has made its draft and the repeat finds it (the `existing` path
+ * of BillPhotoIngestService) instead of paying for a second AI call.
+ */
+export const DUPLICATE_PHOTO_DELAY_MS = 30_000;
 const JOB_RETENTION_SEC = 86_400;
 const BACKOFF_MS = 5_000;
 const UNFINISHED = [BillBatchItemStatus.QUEUED, BillBatchItemStatus.PROCESSING];
@@ -415,13 +421,20 @@ export class BillBatchService {
     batchId: string,
     items: BillBatchItem[],
   ): Promise<void> {
+    const seen = new Set<string>();
+    const repeated = items.map((item) => {
+      const again = seen.has(item.image_sha256);
+      seen.add(item.image_sha256);
+      return again;
+    });
     try {
       await this.queue.addBulk(
-        items.map((item) => ({
+        items.map((item, i) => ({
           name: BILL_PHOTO_QUEUE,
           data: { itemId: item.id },
           opts: {
             jobId: item.id,
+            ...(repeated[i] ? { delay: DUPLICATE_PHOTO_DELAY_MS } : {}),
             attempts: this.env.attempts,
             backoff: { type: 'exponential', delay: BACKOFF_MS },
             removeOnComplete: { age: JOB_RETENTION_SEC },

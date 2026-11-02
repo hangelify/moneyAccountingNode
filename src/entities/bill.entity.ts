@@ -19,6 +19,7 @@ import { Market } from './market.entity';
 import { AiRequest } from './ai-request.entity';
 import { Currency } from '../types/currency.enum';
 import { BillStatus } from '../types/bill-status.enum';
+import { BillParseErrorCode } from '../types/bill-parse-error.enum';
 import { HourMinuteType } from '../types/hour-minute.type';
 
 @Entity({ tableName: 'bills' })
@@ -66,6 +67,10 @@ import { HourMinuteType } from '../types/hour-minute.type';
 @Check({
   name: 'bills_duplicate_of_check',
   expression: `(status::text = 'duplicate') = (duplicate_of_id is not null)`,
+})
+@Check({
+  name: 'bills_parse_error_check',
+  expression: `(status::text = 'failed') = (parse_error_code is not null)`,
 })
 export class Bill extends BaseEntity {
   @Property({ type: 'text', nullable: true })
@@ -164,6 +169,23 @@ export class Bill extends BaseEntity {
   /** `HH:MM` from the receipt timestamp. */
   @Property({ type: HourMinuteType, nullable: true })
   purchase_time?: string;
+
+  /** Set exactly when status is failed. */
+  @Enum({
+    items: () => BillParseErrorCode,
+    type: 'enum',
+    nativeEnumName: 'bill_parse_error_enum',
+    nullable: true,
+  })
+  parse_error_code?: BillParseErrorCode | null;
+
+  /** Human-readable reason for a failed bill. */
+  @Property({ type: 'text', nullable: true })
+  parse_error_message?: string | null;
+
+  /** S3 key of the receipt photo; set on every bill created from a batch. */
+  @Property({ type: 'varchar', nullable: true })
+  image_key?: string | null;
 
   @OneToMany(() => BillSubCategory, (bsc) => bsc.bill)
   billSubCategories = new Collection<BillSubCategory>(this);

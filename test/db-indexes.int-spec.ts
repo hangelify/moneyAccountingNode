@@ -207,4 +207,76 @@ describe('database indexes (PostgreSQL)', () => {
     );
     expect(p).toContain('markets_household_id_index');
   });
+
+  // Runs `fn` in a transaction with a fixture household and always rolls
+  // back, so the shared test database stays empty.
+  const inRolledBackTx = async (
+    fn: (
+      run: (sql: string, params?: unknown[]) => Promise<unknown>,
+      householdId: string,
+    ) => Promise<void>,
+  ): Promise<void> => {
+    const conn = orm.em.getConnection();
+    const rollback = new Error('rollback');
+    await conn
+      .transactional(async (trx) => {
+        const run = (sql: string, params: unknown[] = []) =>
+          conn.execute(sql, params, 'all', trx) as Promise<unknown>;
+        const [user] = (await run(
+          `insert into users (first_name, email, password) values ('T', 'schema-test@x.com', 'x') returning id`,
+        )) as Array<{ id: string }>;
+        const [household] = (await run(
+          `insert into households (name, currency, created_by) values ('H', 'EUR', ?) returning id`,
+          [user.id],
+        )) as Array<{ id: string }>;
+        await fn(run, household.id);
+        throw rollback;
+      })
+      .catch((e: unknown) => {
+        if (e !== rollback) throw e;
+      });
+  };
+
+  it('bills_parse_error_check ties failed status to an error code', async () => {
+    await inRolledBackTx(async (run, householdId) => {
+      const insert = (status: string, code: string | null) =>
+        run(
+          `insert into bills (household_id, amount, bill_date, status, parse_error_code)
+           values (?, 0, '2026-11-02', ?, ?)`,
+          [householdId, status, code],
+        );
+      // Each rejected insert needs its own savepoint to keep the tx usable.
+      const rejects = async (status: string, code: string | null) => {
+        await run('savepoint s');
+        await expect(insert(status, code)).rejects.toThrow(
+          /bills_parse_error_check/,
+        );
+        await run('rollback to savepoint s');
+      };
+      await rejects('failed', null);
+      await rejects('draft', 'ai_failed');
+      await expect(insert('failed', 'ai_failed')).resolves.toBeDefined();
+    });
+  });
+
+  it('bill_batch_items is unique per batch and position', async () => {
+    await inRolledBackTx(async (run, householdId) => {
+      const [batch] = (await run(
+        `insert into bill_batches (household_id, total) values (?, 2) returning id`,
+        [householdId],
+      )) as Array<{ id: string }>;
+      const insert = (position: number) =>
+        run(
+          `insert into bill_batch_items (batch_id, position, image_key, image_sha256, status)
+           values (?, ?, 'k', 'h', 'queued')`,
+          [batch.id, position],
+        );
+      await insert(0);
+      await insert(1);
+      await run('savepoint s');
+      await expect(insert(0)).rejects.toThrow(
+        /bill_batch_items_batch_id_position_unique/,
+      );
+    });
+  });
 });

@@ -7,6 +7,7 @@ import { Bill } from '../../entities/bill.entity';
 import { Household } from '../../entities/household.entity';
 import { User } from '../../entities/user.entity';
 import { BillStatus } from '../../types/bill-status.enum';
+import { BillParseErrorCode } from '../../types/bill-parse-error.enum';
 import { DraftCleanupService } from './draft-cleanup.service';
 import { Currency } from '../../types/currency.enum';
 
@@ -72,6 +73,9 @@ describe('DraftCleanupService (PostgreSQL)', () => {
       status,
       amount: 1,
       bill_date: createdAt.toISOString().slice(0, 10),
+      ...(status === BillStatus.FAILED && {
+        parse_error_code: BillParseErrorCode.AI_FAILED,
+      }),
     } as never);
     await em.flush();
     await orm.em
@@ -94,9 +98,11 @@ describe('DraftCleanupService (PostgreSQL)', () => {
     return row.ms === null ? null : Number(row.ms);
   }
 
-  it('soft-deletes only drafts older than the retention period', async () => {
+  it('soft-deletes only drafts and failed bills older than the retention period', async () => {
     const stale = await bill(BillStatus.DRAFT, daysAgo(31));
     const fresh = await bill(BillStatus.DRAFT, daysAgo(29));
+    const staleFailed = await bill(BillStatus.FAILED, daysAgo(31));
+    const freshFailed = await bill(BillStatus.FAILED, daysAgo(29));
     const oldConfirmed = await bill(BillStatus.CONFIRMED, daysAgo(400));
 
     const purged = await new DraftCleanupService(orm.em, 30).purgeStaleDrafts(
@@ -105,6 +111,8 @@ describe('DraftCleanupService (PostgreSQL)', () => {
 
     expect(purged).toBeGreaterThanOrEqual(1);
     expect(await deletedAt(stale)).not.toBeNull();
+    expect(await deletedAt(staleFailed)).not.toBeNull();
+    expect(await deletedAt(freshFailed)).toBeNull();
     expect(await deletedAt(fresh)).toBeNull();
     expect(await deletedAt(oldConfirmed)).toBeNull();
   });

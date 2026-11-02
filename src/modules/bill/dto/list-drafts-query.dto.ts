@@ -1,6 +1,6 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsInt, IsOptional, Max, Min } from 'class-validator';
+import { IsIn, IsInt, IsOptional, Max, Min } from 'class-validator';
 
 export class ListDraftsQueryDto {
   @ApiPropertyOptional({
@@ -25,4 +25,13 @@ export class ListDraftsQueryDto {
   @Min(1)
   @Max(100)
   limit?: number;
+
+  @ApiPropertyOptional({
+    enum: ['draft', 'failed'],
+    default: 'draft',
+    description: 'Which bills to list: open drafts or photos that failed.',
+  })
+  @IsOptional()
+  @IsIn(['draft', 'failed'])
+  status?: 'draft' | 'failed';
 }

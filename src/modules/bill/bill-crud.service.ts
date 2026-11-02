@@ -23,6 +23,7 @@ import { Household } from '../../entities/household.entity';
 import { AiRequest } from '../../entities/ai-request.entity';
 import { isCalendarDate, todayIsoDate } from '../../common/utils/calendar-date';
 import { BillStatus } from '../../types/bill-status.enum';
+import { BillParseErrorCode } from '../../types/bill-parse-error.enum';
 import { Currency } from '../../types/currency.enum';
 import { ListBillsQueryDto } from './dto/list-bills-query.dto';
 import { CreateBillDto, CreateBillItemDto } from './dto/create-bill.dto';
@@ -103,6 +104,8 @@ function numberOrNull(v: number | string | null | undefined): number | null {
 export interface DraftSource {
   imageSha256: string;
   aiRequestId: string;
+  /** Storage key of the receipt image. */
+  imageKey?: string;
 }
 
 function toDraftItem(it: ParsedBillItemResponseDto) {
@@ -444,6 +447,7 @@ export class BillCrudService {
     bill.bill_date_inferred = billDate.inferred;
     if (source) {
       bill.image_sha256 = source.imageSha256;
+      if (source.imageKey) bill.image_key = source.imageKey;
       bill.ai_request = this.em.getReference(AiRequest, source.aiRequestId);
     }
     bill.amount = inRange(dto.total_amount, MAX_AMOUNT) ?? 0;
@@ -495,6 +499,41 @@ export class BillCrudService {
     return { id: bill.id, duplicate: false };
   }
 
+  /**
+   * A photo that could not become a draft, kept with its error so the user
+   * can see it and fill the bill in by hand. Persists on the caller's `em`
+   * without flushing, so the caller owns the transaction.
+   */
+  createFailedBill(
+    em: EntityManager,
+    args: {
+      householdId: string;
+      userId: string | null;
+      imageKey: string;
+      imageSha256: string;
+      code: BillParseErrorCode;
+      message: string;
+      aiRequestId?: string | null;
+    },
+  ): Bill {
+    const bill = new Bill();
+    bill.household = em.getReference(Household, args.householdId);
+    if (args.userId) bill.created_by = em.getReference(User, args.userId);
+    bill.status = BillStatus.FAILED;
+    bill.amount = 0;
+    bill.bill_date = todayIsoDate();
+    bill.bill_date_inferred = true;
+    bill.image_key = args.imageKey;
+    bill.image_sha256 = args.imageSha256;
+    bill.parse_error_code = args.code;
+    bill.parse_error_message = args.message;
+    if (args.aiRequestId) {
+      bill.ai_request = em.getReference(AiRequest, args.aiRequestId);
+    }
+    em.persist(bill);
+    return bill;
+  }
+
   /** The open draft saved from this image, shaped like a fresh parse. */
   async findDraftByImageHash(
     householdId: string,
@@ -544,18 +583,18 @@ export class BillCrudService {
     };
   }
 
-  /** S3 key of the receipt photo a draft of this household was parsed from. */
+  /** S3 key of the receipt photo a draft or failed bill of this household came from. */
   async getDraftImageKey(id: string, householdId: string): Promise<string> {
     const bill = await this.billRepository.findOne(
       {
         id,
         household: { id: householdId },
-        status: BillStatus.DRAFT,
+        status: { $in: [BillStatus.DRAFT, BillStatus.FAILED] },
         deleted_at: null,
       },
       { populate: ['ai_request'] },
     );
-    const key = bill?.ai_request?.image_s3_keys?.[0];
+    const key = bill?.image_key ?? bill?.ai_request?.image_s3_keys?.[0];
     if (!key) {
       throw new NotFoundException(`No image for draft bill with ID ${id}`);
     }
@@ -580,7 +619,8 @@ export class BillCrudService {
     const [bills, total] = await this.billRepository.findAndCount(
       {
         household: { id: householdId },
-        status: BillStatus.DRAFT,
+        status:
+          query.status === 'failed' ? BillStatus.FAILED : BillStatus.DRAFT,
         deleted_at: null,
       },
       {
@@ -618,8 +658,12 @@ export class BillCrudService {
       );
       if (!bill)
         throw new NotFoundException(`Draft bill with ID ${id} not found`);
-      if (bill.status !== BillStatus.DRAFT)
+      if (bill.status !== BillStatus.DRAFT && bill.status !== BillStatus.FAILED)
         throw new ConflictException(`Bill with ID ${id} is not a draft`);
+      // The check constraint ties the error to the failed status, so both
+      // go in the same flush as the status change.
+      bill.parse_error_code = null;
+      bill.parse_error_message = null;
 
       bill.confirmed_by = em.getReference(User, userId);
       bill.confirmed_at = new Date();
@@ -945,6 +989,8 @@ export class BillCrudService {
     return {
       ...this.toListDto(bill, items),
       status: bill.status,
+      parse_error_code: bill.parse_error_code ?? null,
+      parse_error_message: bill.parse_error_message ?? null,
       market_name_raw: bill.market_name_raw ?? undefined,
       bill_date_inferred: bill.bill_date_inferred,
       fiscal_register_id: bill.fiscal_register_id ?? null,

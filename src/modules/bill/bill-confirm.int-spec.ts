@@ -12,6 +12,7 @@ import { Market } from '../../entities/market.entity';
 import { SubCategory } from '../../entities/sub-category.entity';
 import { User } from '../../entities/user.entity';
 import { BillStatus } from '../../types/bill-status.enum';
+import { BillParseErrorCode } from '../../types/bill-parse-error.enum';
 import { BillCrudService } from './bill-crud.service';
 import { ExchangeRateService } from '../exchange-rate/exchange-rate.service';
 import { StubProvider } from '../exchange-rate/testing/stub-exchange-rate.provider';
@@ -300,6 +301,35 @@ describe('confirm and create bill (PostgreSQL)', () => {
       ).rejects.toBeInstanceOf(ConflictException);
       const { items: saved } = await load(id);
       expect(saved.map((i) => i.sub_category!.id)).toEqual([subIds[0]]);
+    });
+
+    it('confirms a failed bill and clears its error', async () => {
+      const fork = orm.em.fork();
+      const failed = fork.create(Bill, {
+        household: householdId,
+        created_by: userId,
+        status: BillStatus.FAILED,
+        bill_date: '2026-05-19',
+        amount: 0,
+        parse_error_code: BillParseErrorCode.NOT_A_RECEIPT,
+        parse_error_message: 'Not a receipt',
+      } as never);
+      await fork.flush();
+
+      const confirmed = await crud().confirmBill(
+        failed.id,
+        householdId,
+        userId,
+        { ...required, items: items(subIds[0]) },
+      );
+
+      expect(confirmed).toMatchObject({
+        status: 'confirmed',
+        parse_error_code: null,
+        parse_error_message: null,
+      });
+      const { bill } = await load(failed.id);
+      expect(bill.parse_error_code).toBeNull();
     });
 
     it('creates a new market inside the confirm', async () => {

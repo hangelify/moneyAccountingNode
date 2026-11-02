@@ -12,6 +12,7 @@ import { Category } from '../../entities/category.entity';
 import { User } from '../../entities/user.entity';
 import { AiRequest, AiRequestStatus } from '../../entities/ai-request.entity';
 import { BillStatus } from '../../types/bill-status.enum';
+import { BillParseErrorCode } from '../../types/bill-parse-error.enum';
 import { NotFoundException } from '@nestjs/common';
 import { BillCrudService } from './bill-crud.service';
 import { ExchangeRateService } from '../exchange-rate/exchange-rate.service';
@@ -706,6 +707,74 @@ describe('draft from AI output (PostgreSQL)', () => {
           crud(orm.em.fork()).getDraftImageKey(id, householdId),
         ).rejects.toBeInstanceOf(NotFoundException);
       }
+    });
+  });
+  describe('failed bills', () => {
+    async function failedBill(
+      args: Partial<Parameters<BillCrudService['createFailedBill']>[1]> = {},
+    ): Promise<string> {
+      const fork = orm.em.fork();
+      const bill = crud(fork).createFailedBill(fork, {
+        householdId,
+        userId,
+        imageKey: 'bills/failed.jpg',
+        imageSha256: randomUUID().replace(/-/g, '').padEnd(64, '0'),
+        code: BillParseErrorCode.NOT_A_RECEIPT,
+        message: 'Not a receipt',
+        ...args,
+      });
+      await fork.flush();
+      return bill.id;
+    }
+
+    it('stores a failed bill with amount 0, an inferred date, code and message', async () => {
+      const id = await failedBill();
+
+      const { bill } = await loadDraft(id);
+      expect(bill).toMatchObject({
+        status: BillStatus.FAILED,
+        bill_date_inferred: true,
+        parse_error_code: BillParseErrorCode.NOT_A_RECEIPT,
+        parse_error_message: 'Not a receipt',
+        image_key: 'bills/failed.jpg',
+      });
+      expect(Number(bill.amount)).toBe(0);
+      expect(bill.image_sha256).toHaveLength(64);
+      expect(bill.bill_date).toBeTruthy();
+    });
+
+    it('links the AI request when there is one', async () => {
+      const aiRequestId = await aiRequest();
+      const id = await failedBill({
+        code: BillParseErrorCode.SAVE_FAILED,
+        aiRequestId,
+      });
+
+      const { bill } = await loadDraft(id);
+      expect(bill.ai_request?.id).toBe(aiRequestId);
+    });
+
+    it('gives the image key of a failed bill without an AI request', async () => {
+      const id = await failedBill();
+      await expect(
+        crud(orm.em.fork()).getDraftImageKey(id, householdId),
+      ).resolves.toBe('bills/failed.jpg');
+    });
+
+    it('stores the image key of a draft made from a source', async () => {
+      const { id } = await crud(orm.em.fork()).createDraftFromParsed(
+        householdId,
+        userId,
+        parsedDto(),
+        {
+          imageSha256: randomUUID().replace(/-/g, '').padEnd(64, '0'),
+          aiRequestId: await aiRequest(),
+          imageKey: 'bills/stored.jpg',
+        },
+      );
+
+      const { bill } = await loadDraft(id);
+      expect(bill.image_key).toBe('bills/stored.jpg');
     });
   });
 });

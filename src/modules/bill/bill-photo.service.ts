@@ -1,0 +1,135 @@
+import { Injectable } from '@nestjs/common';
+import { InjectRepository } from '@mikro-orm/nestjs';
+import { EntityRepository } from '@mikro-orm/core';
+import { SubCategory } from '../../entities/sub-category.entity';
+import { BillAiOrchestrator } from './bill-ai.orchestrator';
+import type { ParsedBill } from './tasks/schemas/parsed-bill.schema';
+import type { ParsedAndCategorizedBill } from './tasks/schemas/parsed-and-categorized-bill.schema';
+import type {
+  ParsedBillResponseDto,
+  ParsedBillItemResponseDto,
+} from './dto/parsed-bill-response.dto';
+
+function isReceipt(bill: ParsedBill | ParsedAndCategorizedBill): boolean {
+  return bill.is_receipt && bill.items.length > 0;
+}
+
+@Injectable()
+export class BillPhotoService {
+  constructor(
+    private readonly orchestrator: BillAiOrchestrator,
+    @InjectRepository(SubCategory)
+    private readonly subCategoryRepo: EntityRepository<SubCategory>,
+  ) {}
+
+  async parseAndCategorize(
+    image: Buffer,
+    mediaType: 'image/png' | 'image/jpeg' | 'image/webp',
+    householdId: string,
+    userId: string,
+  ): Promise<{
+    parsed: ParsedBillResponseDto;
+    requestId: string;
+    /** False for a photo that is not a receipt or has no readable items. */
+    isReceipt: boolean;
+  }> {
+    const subs = await this.subCategoryRepo.find(
+      {
+        deleted_at: null,
+        category: { household: { id: householdId }, deleted_at: null },
+      },
+      { populate: ['category'] },
+    );
+
+    if (subs.length === 0) {
+      const { data, requestId } = await this.orchestrator.parseOnly(
+        image,
+        mediaType,
+        { userId, householdId },
+      );
+      return {
+        parsed: this.fromParsed(data),
+        requestId,
+        isReceipt: isReceipt(data),
+      };
+    }
+
+    const byId = new Map(subs.map((s) => [s.id, s]));
+    const subcategories = subs.map((s) => ({
+      id: s.id,
+      category_name: s.category.name,
+      sub_category_name: s.name,
+    }));
+
+    const { data, requestId } = await this.orchestrator.parseAndCategorize(
+      image,
+      mediaType,
+      { userId, householdId },
+      subcategories,
+    );
+    return {
+      parsed: this.fromParsedAndCategorized(data, byId),
+      requestId,
+      isReceipt: isReceipt(data),
+    };
+  }
+
+  private fromParsed(parsed: ParsedBill): ParsedBillResponseDto {
+    return {
+      draft_id: '',
+      market_name: parsed.market_name,
+      bill_date: parsed.bill_date,
+      currency: parsed.currency,
+      total_amount: parsed.total_amount,
+      fiscal_register_id: parsed.fiscal_register_id,
+      fiscal_receipt_number: parsed.fiscal_receipt_number,
+      purchase_time: parsed.purchase_time,
+      items: parsed.items.map(
+        (it): ParsedBillItemResponseDto => ({
+          name: it.name,
+          quantity: it.quantity,
+          unit: it.unit,
+          weight_kg: it.weight_kg,
+          price_per_kg: it.price_per_kg,
+          final_price: it.final_price,
+          sub_category: null,
+          category_confidence: 0,
+        }),
+      ),
+    };
+  }
+
+  private fromParsedAndCategorized(
+    bill: ParsedAndCategorizedBill,
+    byId: Map<string, SubCategory>,
+  ): ParsedBillResponseDto {
+    return {
+      draft_id: '',
+      market_name: bill.market_name,
+      bill_date: bill.bill_date,
+      currency: bill.currency,
+      total_amount: bill.total_amount,
+      fiscal_register_id: bill.fiscal_register_id,
+      fiscal_receipt_number: bill.fiscal_receipt_number,
+      purchase_time: bill.purchase_time,
+      items: bill.items.map((it): ParsedBillItemResponseDto => {
+        const sub = it.sub_category_id
+          ? byId.get(it.sub_category_id)
+          : undefined;
+        return {
+          name: it.name,
+          quantity: it.quantity,
+          unit: it.unit,
+          weight_kg: it.weight_kg,
+          price_per_kg: it.price_per_kg,
+          final_price: it.final_price,
+          sub_category: sub
+            ? { id: sub.id, name: sub.name, category_name: sub.category.name }
+            : null,
+          category_confidence: it.category_confidence ?? 0,
+          category_reasoning: it.category_reasoning ?? undefined,
+        };
+      }),
+    };
+  }
+}

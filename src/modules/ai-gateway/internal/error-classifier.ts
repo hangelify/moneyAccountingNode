@@ -1,0 +1,126 @@
+import Anthropic from '@anthropic-ai/sdk';
+import OpenAI from 'openai';
+import { AiAttemptErrorCode } from '../../../entities/ai-request-attempt.entity';
+import type { LlmResponse } from '../types/llm-request';
+import {
+  DeadlineExceededError,
+  RetryExhaustedError,
+  TimeoutError,
+} from './retry';
+
+/**
+ * The provider answered (and billed) but the body was unusable. Carries the
+ * raw body and token usage so the audit can still account for the call.
+ */
+export class InvalidResponseError extends Error {
+  constructor(
+    message: string,
+    public readonly raw?: string,
+    public readonly usage?: LlmResponse['usage'],
+  ) {
+    super(message);
+    this.name = 'InvalidResponseError';
+  }
+}
+
+/** The model hit its output token limit, so the body is cut off. */
+export class TruncatedResponseError extends InvalidResponseError {
+  constructor(message: string, raw?: string, usage?: LlmResponse['usage']) {
+    super(message, raw, usage);
+    this.name = 'TruncatedResponseError';
+  }
+}
+
+/** The model declined to answer (refusal or content filter). */
+export class RefusalError extends InvalidResponseError {
+  constructor(message: string, raw?: string, usage?: LlmResponse['usage']) {
+    super(message, raw, usage);
+    this.name = 'RefusalError';
+  }
+}
+
+export interface ClassifiedError {
+  code: AiAttemptErrorCode;
+  message: string;
+}
+
+function statusOf(err: unknown): number | undefined {
+  if (err && typeof err === 'object') {
+    const anyErr = err as { status?: number; statusCode?: number };
+    return anyErr.status ?? anyErr.statusCode;
+  }
+  return undefined;
+}
+
+function messageOf(err: unknown): string {
+  if (err instanceof Error) return err.message;
+  try {
+    return JSON.stringify(err);
+  } catch {
+    return String(err);
+  }
+}
+
+export function classifyError(err: unknown): ClassifiedError {
+  if (
+    err instanceof TimeoutError ||
+    err instanceof DeadlineExceededError ||
+    err instanceof Anthropic.APIConnectionTimeoutError ||
+    err instanceof OpenAI.APIConnectionTimeoutError
+  ) {
+    return { code: AiAttemptErrorCode.TIMEOUT, message: err.message };
+  }
+  if (err instanceof TruncatedResponseError) {
+    return { code: AiAttemptErrorCode.TRUNCATED, message: err.message };
+  }
+  if (err instanceof InvalidResponseError) {
+    return { code: AiAttemptErrorCode.INVALID_RESPONSE, message: err.message };
+  }
+  if (err instanceof RetryExhaustedError) {
+    return classifyError(err.cause);
+  }
+  const status = statusOf(err);
+  if (status === 429) {
+    return { code: AiAttemptErrorCode.RATE_LIMIT, message: messageOf(err) };
+  }
+  if (status !== undefined && status >= 500 && status < 600) {
+    return { code: AiAttemptErrorCode.SERVER_ERROR, message: messageOf(err) };
+  }
+  if (status !== undefined && status >= 400 && status < 500) {
+    return { code: AiAttemptErrorCode.PROVIDER_ERROR, message: messageOf(err) };
+  }
+  return { code: AiAttemptErrorCode.UNKNOWN, message: messageOf(err) };
+}
+
+/**
+ * Why a provider attempt failed, from the client's point of view:
+ * - `rejected`: the provider refused the request itself (e.g. the image);
+ * - `unavailable`: rate limit, 5xx, timeout or no connection — worth a retry;
+ * - `other`: anything else (bad key, unusable answer, unknown error).
+ */
+export type FailureKind = 'rejected' | 'unavailable' | 'other';
+
+// 401/403/404 point at our key or model name, not at the request content.
+const REJECTED_STATUSES = new Set([400, 413, 415, 422]);
+
+export function failureKind(err: unknown): FailureKind {
+  if (err instanceof RetryExhaustedError) return failureKind(err.cause);
+  if (
+    err instanceof Anthropic.APIConnectionError ||
+    err instanceof OpenAI.APIConnectionError
+  ) {
+    // Includes the connection timeouts, which subclass these.
+    return 'unavailable';
+  }
+  const { code } = classifyError(err);
+  if (
+    code === AiAttemptErrorCode.TIMEOUT ||
+    code === AiAttemptErrorCode.RATE_LIMIT ||
+    code === AiAttemptErrorCode.SERVER_ERROR
+  ) {
+    return 'unavailable';
+  }
+  const status = statusOf(err);
+  if (status !== undefined && REJECTED_STATUSES.has(status)) return 'rejected';
+  return 'other';
+}

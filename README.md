@@ -1,98 +1,671 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# Family Accounting API
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+A NestJS REST API for household financial management. Supports multi-user households, budget planning, expense tracking with AI-assisted bill parsing, S3 file storage, and JWT-based authentication.
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+---
 
-## Description
+## Table of Contents
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+- [Architecture](#architecture)
+- [Entity Architecture](#entity-architecture)
+- [Tech Stack](#tech-stack)
+- [Prerequisites](#prerequisites)
+- [Environment Variables](#environment-variables)
+- [Running the Application](#running-the-application)
+  - [Local (development)](#local-development)
+  - [Watch mode](#watch-mode)
+  - [Production build](#production-build)
+  - [Full Docker stack](#full-docker-stack)
+- [Database Migrations](#database-migrations)
+- [Authentication: web and mobile clients](#authentication-web-and-mobile-clients)
+- [Swagger API Docs](#swagger-api-docs)
+- [Rate Limiting](#rate-limiting)
+- [Data Retention](#data-retention)
+- [Testing](#testing)
+- [Useful Scripts](#useful-scripts)
 
-## Project setup
+---
 
-```bash
-$ yarn install
+## Architecture
+
+The application is organized into feature modules under `src/modules/`:
+
+| Module | Responsibility |
+|---|---|
+| `auth` | Session-based authentication with JWT: registration, login, logout, access/refresh tokens backed by server-side sessions |
+| `user` | User profile management |
+| `household` | Multi-user households, member invites, household-scoped data access |
+| `budget` | Budget creation and management |
+| `planing-horizon` | Planning horizons linked to budgets and categories |
+| `category` | Expense categories (per-user) |
+| `sub-category` | Sub-categories under categories |
+| `bill` | Bill CRUD, AI-assisted parsing from photos, draft/approval workflow, dashboard stats |
+| `market` | Markets/stores referenced by bills |
+| `storage` | S3-compatible object storage (file upload, presigned URLs) |
+| `ai-gateway` | Pluggable multi-provider AI gateway (Anthropic, OpenAI, DeepSeek) |
+
+### Infrastructure Services
+
+```
+┌─────────────────────────────────────┐
+│            NestJS API               │
+│  Port: $PORT (default 3000)         │
+└────────┬────────┬────────┬──────────┘
+         │        │        │
+    PostgreSQL  Redis    MinIO
+    (data)   (rate     (file
+              limit)   storage)
 ```
 
-## Compile and run the project
+- **PostgreSQL 16** — primary datastore, managed via MikroORM migrations
+- **Redis 7** — stores rate-limit counters (via `@nest-lab/throttler-storage-redis`)
+- **MinIO** (or any S3-compatible service) — stores bill photos and other uploads
 
-```bash
-# development
-$ yarn run start
+---
 
-# watch mode
-$ yarn run start:dev
+## Entity Architecture
 
-# production mode
-$ yarn run start:prod
+All entities extend `BaseEntity` which provides a UUID primary key (`id`, generated by `gen_random_uuid()`). Every table that tracks mutable data carries `created_at` / `updated_at` timestamps and a nullable `deleted_at` for soft deletes.
+
+### Domain groups
+
+The schema is split into four logical groups that roughly mirror the feature modules:
+
+| Group | Entities | Scope |
+|---|---|---|
+| **Identity & Auth** | `User`, `Session`, `RefreshToken`, `Log` | One user, cross-household |
+| **Household** | `Household`, `HouseholdMember`, `HouseholdInvite` | Multi-user membership layer |
+| **Finance** | `Budget`, `PlaningHorizon`, `Category`, `SubCategory`, `Market`, `Bill`, `BillSubCategory` | Household-scoped financial data |
+| **AI Observability** | `AiRequest`, `AiRequestAttempt` | Per-user AI call audit trail |
+
+---
+
+### Relationship map
+
+```
+User ──────────────────────────────────────────────────┐
+ │                                                      │
+ │ creates                                              │ owns
+ ▼                                                      ▼
+Household ──────────────── HouseholdInvite         Session
+ │                           (invited_by → User)     │
+ │ has many                  (household → Household)  │ has many
+ ▼                                                    ▼
+HouseholdMember                                   RefreshToken
+ (composite PK: household + user)
+ (role: owner | member)
+ │
+ │ household owns
+ ├──────────────────────────────────────────────────────┐
+ │                                                      │
+ ▼                                                      ▼
+Budget                                             Category ──── SubCategory
+ │                                                  ▲               │
+ │ has many                                         │               │
+ ▼                                                  │               │
+PlaningHorizon ──────────── (pivot table) ──────────┘               │
+                           planing_horizon_categories                │
+                                                                     │
+Market ◄──── Bill ──────────────────────── BillSubCategory ─────────┘
+              (created_by → User)           (line items, amount, AI confidence)
+              (household → Household)
+              (status: DRAFT | CONFIRMED)
+
+User ──► AiRequest ──► AiRequestAttempt
+         (task_name)    (provider, model, tokens, cost)
 ```
 
-## Run tests
+---
 
-```bash
-# unit tests
-$ yarn run test
+### Group-by-group detail
 
-# e2e tests
-$ yarn run test:e2e
+#### Identity & Auth
 
-# test coverage
-$ yarn run test:cov
+**`User`** is the root identity. Every piece of data is either owned by a `User` directly (sessions, refresh tokens, AI requests) or indirectly through a `Household`.
+
+| Relationship | Direction | Notes |
+|---|---|---|
+| `Session` → `User` | Many-to-one | Cascade delete — removing a user wipes all sessions |
+| `RefreshToken` → `User` | Many-to-one | Cascade delete |
+| `RefreshToken` → `Session` | Many-to-one | Cascade delete — revoking a session invalidates all its refresh tokens |
+| `Log` → `User` | Many-to-one | Set null on delete — logs are retained after user removal |
+
+**`Session`** represents one browser/device login. Each session carries `ip_address`, `user_agent`, `absolute_expires_at`, and an `is_active` flag. Logging out deactivates the session and revokes all its refresh tokens.
+
+**`RefreshToken`** uses token rotation: each `/auth/refresh` call revokes the presented token and issues a new one. Only the `token_hash` (SHA-256) is stored, never the raw token. Each row also stores a `jti` (JWT ID) for fast lookup.
+
+Rotation is atomic: revoking the old token and storing the new one happen in one transaction, so if issuing fails the old token is still valid and the client can retry. Presenting an already-rotated token counts as theft: the whole session is revoked. Two concurrent refreshes with the same token yield exactly one `200`; the other gets `401` — and, if it reads the token after the winner committed, it is treated as a reuse and revokes the session too. Clients should therefore serialize refresh calls. `REFRESH_REUSE_GRACE_SECONDS` (off by default) lets a reuse within that many seconds of the rotation get a plain `401` without revoking the session; `revoked_at` records when each token was revoked. The trade-off: within the window, a thief who refreshes first keeps the session and the real client's retry is not flagged as theft — keep the window short (seconds, e.g. ≤ 30).
+
+**`Log`** is a structured audit table written by the auth module for login, logout, registration, and refresh events. Fields include `source`, `level`, `endpoint`, `http_method`, `status_code`, `ip_address`, and an optional JSONB `metadata` blob.
+
+---
+
+#### Household
+
+**`Household`** is the organisational unit that all financial data belongs to. A user can be a member of multiple households.
+
+| Relationship | Direction | Notes |
+|---|---|---|
+| `Household` → `User` (`created_by`) | Many-to-one | Who created the household |
+| `HouseholdMember` → `Household` | Many-to-one (PK) | Cascade delete |
+| `HouseholdMember` → `User` | Many-to-one (PK) | Cascade delete |
+| `HouseholdInvite` → `Household` | Many-to-one | Cascade delete |
+| `HouseholdInvite` → `User` (`invited_by`) | Many-to-one | Who sent the invite |
+
+**`HouseholdMember`** has a composite primary key of `(household_id, user_id)`. Each member has a `role`: `owner` or `member`. The creator of a household is automatically its first owner.
+
+**`HouseholdInvite`** stores only a `token_hash` (SHA-256 of the invite token). The raw token is returned to the client once at creation and never persisted. Invites have a `status` (`pending`, `accepted`, `revoked`) and an `expires_at` deadline.
+
+---
+
+#### Finance
+
+All finance entities belong to a **`Household`**, not an individual user. Any household member can read and write them.
+
+```
+Household
+  └── Budget (name, description)
+        └── PlaningHorizon (amount, currency, period_type, is_archived)
+              └──[M:N]── Category (name, description)
+                              └── SubCategory (name, description)
+                                       └──[via BillSubCategory]── Bill
+  └── Market (name, address, city, country)
+  └── Bill (amount, bill_date, status, currency)
+        ├── created_by → User
+        ├── market → Market (optional)
+        └── BillSubCategory[] (line items)
+              └── sub_category → SubCategory (optional, AI-assigned)
 ```
 
-## Deployment
+**`Budget`** groups planning horizons into a named plan for a household (e.g. "Monthly 2026").
 
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
+**`PlaningHorizon`** defines a spending target for a given period (`DAILY`, `WEEKLY`, `MONTHLY`, `YEARLY`). It links to one or more `Category` records via the pivot table `planing_horizon_categories`.
 
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
+**`Category`** belongs to a household and has many `SubCategory` children. Categories are shared across all budgets within the same household.
+
+**`SubCategory`** is the leaf node of the taxonomy (e.g. Category = "Groceries", SubCategory = "Dairy"). It is referenced by `BillSubCategory` for both manual and AI-categorised line items.
+
+**`Market`** stores the shop/store where a bill was issued. It belongs to a household. Bills can optionally reference a `Market`; when AI parses a receipt it may also store the raw extracted market name in `market_name_raw` even when no `Market` record is matched.
+
+**`Bill`** is the central transaction record. Key fields:
+
+| Field | Description |
+|---|---|
+| `amount` | Total bill amount |
+| `bill_date` | Date of purchase (not necessarily today) |
+| `status` | `DRAFT` (AI-created, pending review) or `CONFIRMED` (approved by user) |
+| `currency` | Per-bill currency override |
+| `market_name_raw` | Raw AI-extracted market name before entity matching |
+| `created_by` | User who submitted the bill (set null if user deleted) |
+
+**`BillSubCategory`** is the line-item table on a bill. Each row records:
+
+| Field | Description |
+|---|---|
+| `raw_name` | Original product name as parsed from the receipt |
+| `amount` | Line-item total |
+| `product_count` | Quantity |
+| `product_weight` / `unit` / `price_per_unit` | Detailed unit info when available |
+| `sub_category` | Resolved `SubCategory` (nullable — AI may fail to match) |
+| `category_confidence` | AI confidence score 0–1 |
+| `category_reasoning` | Free-text explanation from the AI |
+
+---
+
+#### AI Observability
+
+Every call routed through the AI gateway is persisted for auditing and cost tracking.
+
+**`AiRequest`** represents one logical AI job (e.g. `bill.parse` or `bill.categorize`). It stores the full prompt, required capabilities, any attached S3 image keys, the final output, and aggregate cost/latency.
+
+**`AiRequestAttempt`** records each individual provider call within that job. A request can have multiple attempts (retries or provider fallback). Fields:
+
+| Field | Description |
+|---|---|
+| `provider_name` | `anthropic`, `openai`, `deepseek` |
+| `model` | Exact model ID used |
+| `status` | `SUCCESS` or `FAILED` |
+| `error_code` | `TIMEOUT`, `RATE_LIMIT`, `SERVER_ERROR`, etc. |
+| `input_tokens` / `output_tokens` | Token counts |
+| `input_cost_usd` / `output_cost_usd` | Per-attempt cost |
+| `latency_ms` | Wall-clock time for the provider call |
+| `raw_response_text` / `parsed_json` | Full response for debugging |
+
+`AiRequest.chosen_attempt_id` points to the attempt whose output was used as the final result.
+
+---
+
+## Tech Stack
+
+| Layer | Technology |
+|---|---|
+| Framework | NestJS 11 (Node 24, TypeScript 5) |
+| ORM | MikroORM 6 with PostgreSQL driver |
+| Auth | Session-based authentication with JWT (Passport.js; access + refresh token rotation). Not OAuth: there is no authorization server, clients or scopes |
+| Validation | `class-validator` + `class-transformer` |
+| Rate limiting | `@nestjs/throttler` + Redis storage |
+| AI providers | Anthropic Claude, OpenAI, DeepSeek (pluggable gateway) |
+| Object storage | AWS S3 SDK v3 / MinIO |
+| API docs | `@nestjs/swagger` (Swagger UI) |
+| Testing | Jest 30, Supertest (e2e against a throw-away PostgreSQL database) |
+| Linting | ESLint 9 + Prettier, enforced via Husky pre-commit |
+| Containerization | Docker multi-stage build, Docker Compose |
+
+---
+
+## Prerequisites
+
+- **Node.js 24+**
+- **npm**
+- **Docker + Docker Compose** (required for PostgreSQL, Redis, and MinIO)
+
+If `docker compose` fails with `permission denied while trying to connect to the docker API at unix:///var/run/docker.sock`, your user is not in the `docker` group. Either prefix the commands with `sudo`, or add yourself to the group and log out and back in (note that `docker` group membership is equivalent to root access):
 
 ```bash
-$ yarn install -g @nestjs/mau
-$ mau deploy
+sudo usermod -aG docker $USER
 ```
 
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
+---
 
-## Resources
+## Environment Variables
 
-Check out a few resources that may come in handy when working with NestJS:
+Copy the template and fill in values:
 
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
+```bash
+cp .env.example .env
+```
 
-## Support
+`.env` is gitignored. Below is a full reference of every variable.
 
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
+### Database
 
-## Stay in touch
+| Variable | Required | Default | Description |
+|---|---|---|---|
+| `DB_HOST` | yes | `localhost` | PostgreSQL host |
+| `DB_PORT` | yes | `5432` | PostgreSQL port |
+| `DB_USER` | yes | `postgres` | PostgreSQL user |
+| `DB_PASSWORD` | yes | `postgres` | PostgreSQL password |
+| `DB_NAME` | yes | `accounting` | PostgreSQL database name |
 
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
+### Server
 
-## License
+| Variable | Required | Default | Description |
+|---|---|---|---|
+| `PORT` | no | `3000` | HTTP port the API listens on |
+| `NODE_ENV` | no | `development` | `development`, `test`, or `production` |
+| `FRONTEND_URL` | no | `http://localhost:5173` | Frontend origin: CORS allowed origin and the `Origin` accepted by web-mode `/auth` endpoints (see [Authentication](#authentication-web-and-mobile-clients)) |
+| `LOG_LEVEL` | no | — | Logger verbosity: `debug`, `log`, `warn`, `error` |
+| `TRUST_PROXY` | no | off | Which proxies may set `X-Forwarded-For`. Unset/`false`: header ignored. Hop count (`1` for production behind a single reverse proxy) or a comma-separated list of addresses/subnets (`loopback, 10.0.0.0/8`). `true` is rejected; an invalid value stops startup. See [Rate Limiting](#rate-limiting) |
 
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+### JWT
+
+Both secrets must be at least 32 bytes long and must differ, otherwise the app refuses to start. Generate with `openssl rand -base64 32`.
+
+Tokens are signed with HS256 only and carry `iss`, `aud` and an explicit `typ` header (`at+jwt` for access, `rt+jwt` for refresh); verification pins all three. The claims hold no personal data, only `sub`, `sid`, `jti` and `type`. Changing `JWT_ISSUER` or `JWT_AUDIENCE` invalidates every issued token. Token responses are sent with `Cache-Control: no-store`, and a `401` from a protected endpoint carries `WWW-Authenticate: Bearer realm="api"` (plus `error="invalid_token"` when a token was sent but refused).
+
+| Variable | Required | Description |
+|---|---|---|
+| `JWT_SECRET` | yes | Secret for signing access tokens |
+| `JWT_EXPIRES_IN_MS` | yes | Access token TTL in milliseconds (e.g. `900000` = 15 min) |
+| `JWT_REFRESH_SECRET` | yes | Secret for signing refresh tokens |
+| `JWT_REFRESH_EXPIRES_IN_MS` | yes | Refresh token TTL in milliseconds (e.g. `604800000` = 7 days) |
+| `JWT_ISSUER` | no | `iss` claim of issued tokens, required on verification. Default `accounting-api` |
+| `JWT_AUDIENCE` | no | `aud` claim of issued tokens, required on verification. Default `accounting-api` |
+| `REFRESH_REUSE_GRACE_SECONDS` | no | Seconds after a rotation during which reusing the old refresh token gets `401` without revoking the session (for clients retrying after a timeout). Default `0`: any reuse revokes the session |
+| `LOGIN_MAX_FAILURES` | no | Failed logins for one email (from any IP) after which its logins get `429` with `Retry-After`. Default `5` |
+| `LOGIN_FAILURE_WINDOW_SECONDS` | no | Window in which failures are counted; a successful login resets the count. Default `900` |
+| `LOGIN_LOCKOUT_SECONDS` | no | First lock; each further failure doubles it. Default `60` |
+| `LOGIN_LOCKOUT_MAX_SECONDS` | no | Upper bound of the lock. Default `900` |
+
+### AI Gateway
+
+All AI provider keys are **optional**. An adapter is silently skipped at boot if its key is absent. At least one provider capable of the `vision` + `json` capabilities must be configured if you use bill photo parsing.
+
+| Variable | Required | Default | Description |
+|---|---|---|---|
+| `ANTHROPIC_API_KEY` | no | — | Anthropic API key |
+| `ANTHROPIC_MODEL` | no* | `claude-sonnet-4-6` | Model ID. Required when `ANTHROPIC_API_KEY` is set |
+| `OPENAI_API_KEY` | no | — | OpenAI API key |
+| `OPENAI_MODEL` | no* | `gpt-4o` | Model ID. Required when `OPENAI_API_KEY` is set |
+| `DEEPSEEK_API_KEY` | no | — | DeepSeek API key |
+| `DEEPSEEK_MODEL` | no* | `deepseek-chat` | Model ID. Required when `DEEPSEEK_API_KEY` is set |
+| `AI_CALL_TIMEOUT_MS` | no | `60000` | Per-call timeout in milliseconds; the HTTP request is aborted and not retried on the same provider |
+| `AI_TRANSIENT_RETRY_ATTEMPTS` | no | `2` | Retry attempts on transient errors (connection, 408, 409, 429, 5xx) |
+| `AI_TRANSIENT_RETRY_BACKOFF_MS` | no | `500` | Base of exponential backoff with full jitter; `retry-after` on 429 is honoured (capped at 10 s) |
+| `AI_TASK_DEADLINE_MS` | no | `90000` | Total budget of one AI task across all providers (min `5000`); a further provider is skipped when less than 5 s remain |
+| `AI_USER_LIMIT_PER_MINUTE` | no | `10` | AI requests (e.g. `parse-photo`) one user may make per minute; see [Rate Limiting](#rate-limiting) |
+| `AI_USER_LIMIT_PER_DAY` | no | `100` | AI requests one user may make per 24 hours |
+| `AI_DAILY_BUDGET_USD` | no | `1` | Spend of one user on AI over the last 24 hours (sum of `ai_requests.total_cost_usd`) after which AI calls are refused with `429` |
+| `AI_MAX_CONCURRENCY` | no | `4` | AI calls running at once **per API instance**; further calls get `503` with `Retry-After` |
+
+### Object Storage (S3 / MinIO)
+
+| Variable | Required | Description |
+|---|---|---|
+| `S3_REGION` | yes | AWS region or any string for MinIO (e.g. `us-east-1`) |
+| `S3_BUCKET` | yes | Bucket name for uploads |
+| `S3_ACCESS_KEY` | yes | Access key ID |
+| `S3_SECRET_KEY` | yes | Secret access key |
+| `S3_ENDPOINT` | no | Custom endpoint URL — set to MinIO URL for local dev (e.g. `http://localhost:9000`) |
+| `S3_FORCE_PATH_STYLE` | no | `false` | Set to `true` for MinIO and other path-style S3 servers |
+
+### Redis
+
+| Variable | Required | Default | Description |
+|---|---|---|---|
+| `REDIS_HOST` | yes | `localhost` | Redis host |
+| `REDIS_PORT` | yes | `6379` | Redis port |
+| `REDIS_PASSWORD` | no | — | Redis password (omit if none) |
+
+---
+
+## Running the Application
+
+### Local (development)
+
+Start infrastructure services, apply migrations, then start the API:
+
+```bash
+# 1. Install dependencies
+npm install
+
+# 2. Copy and fill in environment file
+cp .env.example .env
+
+# 3. Start PostgreSQL, Redis, and MinIO
+docker compose up -d postgres redis minio
+
+# 3a. First run only: create the S3 bucket ($S3_BUCKET) in MinIO
+docker compose up minio-init
+
+# 4. Apply database migrations
+npm run migration:up
+
+# 5. Start the API (single run, no file watching)
+npm run start
+```
+
+The API will be available at `http://localhost:3000` (or `$PORT`).
+
+MinIO's official images (`minio/minio`, `minio/mc`) are no longer published on Docker Hub, so `docker-compose.yml` uses the community fork's pinned images `pgsty/minio` and `pgsty/mc` instead. They are drop-in replacements: same ports (API `9000`, console `http://localhost:9001`), same `MINIO_ROOT_*` credentials (`S3_ACCESS_KEY` / `S3_SECRET_KEY`, default `minioadmin`), and the same `mc` CLI.
+
+### Watch mode
+
+Automatically restarts on file changes — use this during active development:
+
+```bash
+npm run start:dev
+```
+
+### Production build
+
+Compile TypeScript to `dist/`, then run the compiled output:
+
+```bash
+npm run build
+npm run start:prod
+```
+
+Production requires all infrastructure (PostgreSQL, Redis, MinIO/S3) to be running and reachable via the environment variables in `.env`.
+
+### Full Docker stack
+
+A `Dockerfile` (multi-stage, Node 24 Alpine) and `docker-compose.yml` are included. The Docker entrypoint waits for PostgreSQL to be ready, runs all pending migrations, then starts the application.
+
+```bash
+# Build the application image
+docker build -t accounting-api .
+
+# Run the application container (adjust env values as needed)
+docker run --rm \
+  --env-file .env \
+  -p 3000:3000 \
+  accounting-api
+```
+
+To run the full stack (API + all services) with Docker Compose, add an `app` service to `docker-compose.yml` referencing the built image and set `depends_on` for `postgres`, `redis`, and `minio`.
+
+---
+
+## Database Migrations
+
+MikroORM manages the schema via versioned migration files in `src/migrations/`.
+
+```bash
+# Apply all pending migrations
+npm run migration:up
+
+# Roll back the latest migration
+npm run migration:down
+
+# List all migrations and their status
+npm run migration:list
+
+# Show only pending (not yet applied) migrations
+npm run migration:pending
+
+# Generate a new migration from entity changes
+npm run migration:create
+
+# Drop and recreate the schema from scratch (destructive!)
+npm run migration:fresh
+
+# Run the default database seeder
+npm run seed
+```
+
+> `migration:check` (via `scripts/check-migrations.ts`) is used in CI to verify that no entity changes exist without a corresponding migration.
+
+---
+
+## Authentication: web and mobile clients
+
+Login returns a short-lived access token (send it as `Authorization: Bearer <token>`) and a refresh token. How the refresh token travels depends on the client mode, which the server picks for `POST /auth/login`, `/auth/register`, `/auth/refresh` and `/auth/logout`:
+
+| Request | Mode |
+|---|---|
+| `Origin` equals `FRONTEND_URL`, or the API's own origin (Swagger UI) | **web** |
+| `X-Client-Type: mobile` and no `Origin` header | **mobile** |
+| `X-Client-Type: mobile` with an `Origin` header | `403` |
+| no `X-Client-Type`, foreign or missing `Origin` | `403` |
+| `X-Client-Type` with any value other than `mobile` | `400` |
+
+### Web mode (SPA)
+
+- The refresh token is never in a response body. It is set as a cookie `refresh_token; HttpOnly; Secure; SameSite=Strict; Path=/auth; Max-Age=<JWT_REFRESH_EXPIRES_IN_MS>`, so page scripts (and an XSS payload) cannot read it.
+- `/auth/refresh` reads the token only from that cookie (a `refresh_token` in the body is ignored) and rotates the cookie.
+- `/auth/logout` (still needs the Bearer access token) revokes the cookie's session and clears the cookie.
+- CSRF protection: `SameSite=Strict` plus the `Origin` check above — a request from another site is rejected with `403` before any token is read.
+- SPA and API must be same-site (e.g. `app.example.com` and `api.example.com`; locally `localhost:5173` and `localhost:3000`), otherwise the `Strict` cookie is not sent.
+
+Frontend checklist:
+
+1. Send every `/auth/*` request with `fetch(url, { method: 'POST', credentials: 'include' })`.
+2. Keep the access token in memory only (a module variable or state store) — never in `localStorage`/`sessionStorage`.
+3. On page load and on any `401`, call `POST /auth/refresh` with no body to get a new access token; if that returns `401`, the session is over — show the login screen. Refresh rotates the cookie, so tabs must not refresh concurrently: serialise refreshes across tabs (e.g. `navigator.locks.request('auth-refresh', ...)`), or retry once after a `401` before treating the session as over.
+4. Log out with `POST /auth/logout` (Bearer header + `credentials: 'include'`). Logout needs a valid access token; if it is missing or expired, call `/auth/refresh` first — otherwise the `401` leaves the HttpOnly cookie in place and the next page load signs the user back in.
+
+Local development: Chrome and Firefox accept `Secure` cookies on `http://localhost`. Safari does not, so use Chrome/Firefox or serve the API over HTTPS when testing in Safari.
+
+### Mobile mode (native apps)
+
+Send `X-Client-Type: mobile` on the four endpoints above (native HTTP clients send no `Origin`). Responses include `refresh_token` in the body, no cookie is set; send it back as `{ "refresh_token": "..." }` to `/auth/refresh` (required) and optionally to `/auth/logout`. Store it in the platform's secure storage (Keychain / Keystore). Browsers cannot use this mode: any request carrying `Origin` is rejected.
+
+---
+
+## Swagger API Docs
+
+Swagger UI is served at:
+
+```
+http://localhost:<PORT>/api
+```
+
+For example with the default port: `http://localhost:3000/api`
+
+### Authenticating in Swagger UI
+
+Most endpoints require a JWT access token. To authorize:
+
+1. Call `POST /auth/register` or `POST /auth/login` (leave `X-Client-Type` empty) — the response body contains `access_token`, and the browser stores the refresh cookie.
+2. Click the **Authorize** button (lock icon) at the top of the Swagger UI page.
+3. In the **JWT-auth (http, Bearer)** field, paste only the token value (without the `Bearer ` prefix).
+4. Click **Authorize**, then **Close**.
+
+All subsequent requests from Swagger UI will include the `Authorization: Bearer <token>` header automatically. The authorization is persisted across page refreshes.
+
+Swagger UI is served from the API's own origin, so it uses web mode. When the access token expires (see `JWT_EXPIRES_IN_MS`), call `POST /auth/refresh` with an empty body — the refresh cookie is sent automatically — then re-authorize in the UI with the new `access_token`.
+
+---
+
+## Rate Limiting
+
+Rate limits are enforced globally and stored in Redis so they work correctly across multiple API instances.
+
+| Scope | Limit | Window |
+|---|---|---|
+| All endpoints (global) | 100 requests | 60 seconds per IP |
+| `POST /auth/register` | 10 requests | 60 seconds per IP |
+| `POST /auth/login` | 10 requests | 60 seconds per IP |
+| `POST /auth/refresh` | 10 requests | 60 seconds per IP |
+| AI endpoints (`POST /households/:hid/bills/parse-photo`) | `AI_USER_LIMIT_PER_MINUTE` (10) | 60 seconds per user |
+| AI endpoints | `AI_USER_LIMIT_PER_DAY` (100) | 24 hours per user |
+
+Exceeding a limit returns `429 Too Many Requests` with `Retry-After`. Once the per-day AI limit is hit, the user is blocked for a full 24 hours from that moment, not until the window rolls over.
+
+AI endpoints have further guards on top of the per-user limits:
+
+- **Daily budget.** Before each AI call the user's spend over the last 24 hours is summed from `ai_requests.total_cost_usd`. Once it reaches `AI_DAILY_BUDGET_USD` the call is refused with `429` (no `Retry-After`). Calls still in flight have no cost yet, so concurrent calls can overshoot the budget by their own cost. Calls without a recorded cost (model missing from the pricing table, or no token usage reported by the provider) count as $0. Dated model IDs are priced by their base model (`claude-sonnet-4-5-20250929` → `claude-sonnet-4-5`), and on startup the module warns about every configured default model or task override that has no price in `src/modules/ai-gateway/pricing.ts`.
+- **Concurrency.** At most `AI_MAX_CONCURRENCY` AI calls run at once; a call beyond that gets `503 Service Unavailable` with `Retry-After`. The counter lives in process memory, so with N API instances up to N × `AI_MAX_CONCURRENCY` calls may run.
+
+The per-user limits are counted after authentication (`UserThrottlerGuard`), so a client cannot dodge them by changing IP.
+
+The client IP is `req.ip`. It is derived from `X-Forwarded-For` only for proxies trusted through `TRUST_PROXY`. Leave it unset when the API is exposed directly; otherwise any client could pick a new IP per request and dodge the limits. Behind a single reverse proxy (nginx, Traefik, a cloud load balancer) set `TRUST_PROXY=1`. The proxy must overwrite or append to `X-Forwarded-For`, never pass through what the client sent. IP values that are not valid addresses are stored as `NULL` in `sessions`, `refresh_tokens` and `logs`.
+
+---
+
+## Data Retention
+
+A daily job (`RetentionService`, 04:00 UTC) clears data that is no longer
+needed. Every batch (5000 rows) runs in its own transaction under a
+PostgreSQL advisory lock (`pg_try_advisory_xact_lock`), so with several app
+instances only one does the work and the others skip.
+
+| Data | Rule | Variable | Default |
+|---|---|---|---|
+| `refresh_tokens` | deleted N days after `expires_at` | `REFRESH_TOKEN_RETENTION_DAYS` | 7 |
+| `sessions` | deleted N days after `absolute_expires_at`, or once revoked and unused for N days (their refresh tokens go with them) | `SESSION_RETENTION_DAYS` | 30 |
+| `ai_requests.prompt`, `ai_requests.final_output`, `ai_request_attempts.raw_response_text`, `ai_request_attempts.parsed_json` | set to `NULL` N days after the request (PENDING requests are left to the stale-request sweeper) | `AI_AUDIT_RAW_RETENTION_DAYS` | 30 |
+| Unconfirmed AI draft bills | soft-deleted N days after creation (03:00 UTC job) | `DRAFT_RETENTION_DAYS` | 30 |
+| Receipt images in S3 | expired by a bucket lifecycle rule (below) | — | 31 days |
+
+Kept indefinitely: `logs`, and the AI audit metadata (status, provider,
+model, tokens, cost, latency), which is small once the payloads are gone.
+All values are whole days >= 1; an invalid value stops startup.
+
+A successful AI answer is stored once, as `ai_requests.final_output`; only
+failed attempts keep their raw and parsed provider responses for diagnosis.
+
+### Receipt images
+
+Images are stored as `ai/images/<householdId>/<sha256>.<ext>` (images
+uploaded before this layout, and calls without a household, use
+`ai/images/<sha256>.<ext>`). `ai_requests.household_id` records the owning
+household, so a household's images and audit rows can be found and deleted
+on request.
+
+The app does not delete images itself: they are only needed to review a
+draft, so configure a lifecycle rule on the bucket that expires them a day
+after the draft retention period (S3 rounds expiry up to the next midnight
+UTC, and draft cleanup runs at 03:00 UTC): 31 days for the default 30.
+Uploading a photo that is already stored rewrites the object, which restarts
+its expiry.
+
+MinIO:
+
+```bash
+mc ilm rule add --prefix "ai/images/" --expire-days 31 local/<bucket>
+```
+
+AWS S3 (`aws s3api put-bucket-lifecycle-configuration --bucket <bucket> --lifecycle-configuration file://lifecycle.json`):
+
+```json
+{
+  "Rules": [
+    {
+      "ID": "expire-ai-images",
+      "Filter": { "Prefix": "ai/images/" },
+      "Status": "Enabled",
+      "Expiration": { "Days": 31 }
+    }
+  ]
+}
+```
+
+---
+
+## Testing
+
+```bash
+# Unit tests (no database, Redis or .env required)
+npm test
+
+# Run tests in watch mode
+npm run test:watch
+
+# Coverage report
+npm run test:cov
+
+# e2e (test/*.e2e-spec.ts) + integration (src/**/*.int-spec.ts) tests
+# (requires a live PostgreSQL server, nothing else)
+docker compose up -d postgres
+npm run test:e2e
+```
+
+`npm run test:e2e` needs no `.env`: `test/setup/test-env.ts` sets every variable the app reads. It only takes the Postgres server from `DB_HOST` / `DB_PORT` / `DB_USER` / `DB_PASSWORD` (default `localhost:5432`, `postgres`/`postgres`). On each run the suite drops and recreates its own database, `accounting_e2e` (override with `E2E_DB_NAME`; the name must end with `_e2e` or `_test`), applies the migrations, and empties all tables before every spec file. Spec files run one at a time. The dev database is never touched. Rate-limit counters are kept in memory per test app, so Redis is not needed. Build test apps with `createTestApp()` from `test/utils/app.ts`: it applies the same `configureApp()` as `main.ts`.
+
+`npm test` sets `NODE_OPTIONS=--experimental-vm-modules` automatically so the AWS SDK v3's dynamic imports work cleanly inside Jest.
+
+### Smoke-testing the AI gateway without touching `.env`
+
+Create `.env.test` (gitignored) with a minimal set of values, then source it:
+
+```bash
+set -a && source .env.test && set +a && npm run start
+```
+
+Boot logs will confirm which AI providers are active:
+
+```
+[AiGatewayModule] Configured providers: anthropic
+[AiGatewayModule] Skipped providers (no API key): openai, deepseek
+[AiGatewayModule] Task 'bill.parse' can run on: anthropic
+[AiGatewayModule] Task 'bill.categorize' can run on: anthropic
+```
+
+If no configured provider satisfies a required AI task, the application refuses to start with an error identifying the missing capability.
+
+---
+
+## Useful Scripts
+
+| Script | Description |
+|---|---|
+| `npm run build` | Compile TypeScript to `dist/` |
+| `npm run start` | Start compiled app (requires build) |
+| `npm run start:dev` | Start in watch mode (recompiles on change) |
+| `npm run start:debug` | Start in debug + watch mode |
+| `npm run start:prod` | Run production build (`node dist/main`) |
+| `npm run lint` | Run ESLint and auto-fix |
+| `npm run lint:check` | Run ESLint without fixing |
+| `npm run format` | Format all source files with Prettier |
+| `npm run type-check` | TypeScript type check without emitting |
+| `npm test` | Run unit tests |
+| `npm run test:e2e` | Run e2e and integration tests (needs PostgreSQL) |
+| `npm run test:cov` | Run tests with coverage report |
+| `npm run migration:up` | Apply pending migrations |
+| `npm run migration:down` | Roll back latest migration |
+| `npm run migration:create` | Generate migration from entity diff |
+| `npm run migration:list` | List all migrations with status |
+| `npm run migration:fresh` | Drop schema and reapply all migrations |
+| `npm run seed` | Run the default database seeder |

@@ -1,0 +1,474 @@
+import {
+  applyDecorators,
+  BadRequestException,
+  Controller,
+  Post,
+  Body,
+  HttpCode,
+  HttpStatus,
+  UseGuards,
+  Req,
+  Get,
+  Header,
+  Res,
+  UnauthorizedException,
+  Delete,
+  Param,
+  ParseUUIDPipe,
+} from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiBearerAuth,
+  ApiBody,
+  ApiCookieAuth,
+  ApiHeader,
+} from '@nestjs/swagger';
+import type { Request, Response } from 'express';
+import { AuthService } from './auth.service';
+import { UserService } from '../user/user.service';
+import { LoginDto } from './dto/login.dto';
+import { RegisterDto } from './dto/register.dto';
+import { ChangePasswordDto } from './dto/change-password.dto';
+import { RefreshTokenDto } from './dto/refresh-token.dto';
+import { RevokeTokenDto } from './dto/revoke-token.dto';
+import { SessionDto } from './dto/session.dto';
+import { VerifyEmailDto } from './dto/verify-email.dto';
+import {
+  ClientTokenResponse,
+  TokenResponseDto,
+} from './dto/token-response.dto';
+import { UserProfileDto } from '../user/dto/user-profile.dto';
+import { JwtAuthGuard } from './guards/jwt-auth.guard';
+import { CurrentUser } from './decorators/current-user.decorator';
+import type { AuthenticatedUser } from './types/jwt-payload.interface';
+import { ClientMode, resolveClientMode } from './client-mode';
+import {
+  clearRefreshCookie,
+  readRefreshCookie,
+  setRefreshCookie,
+} from './refresh-cookie';
+
+// Swagger docs shared by every endpoint that issues or consumes a refresh token.
+const ApiClientMode = () =>
+  applyDecorators(
+    ApiHeader({
+      name: 'X-Client-Type',
+      required: false,
+      description:
+        'Set to "mobile" (native apps only, request without Origin) to ' +
+        'receive the refresh token in the body. Browsers omit it and get ' +
+        'the refresh token as an HttpOnly cookie.',
+    }),
+    ApiResponse({
+      status: 403,
+      description:
+        'Origin not allowed: web mode needs Origin = FRONTEND_URL or the ' +
+        'API origin; mobile mode is rejected when Origin is present',
+    }),
+  );
+
+const USER_AGENT_MAX_LENGTH = 512;
+
+@ApiTags('auth')
+@Controller('auth')
+export class AuthController {
+  constructor(
+    private readonly authService: AuthService,
+    private readonly userService: UserService,
+  ) {}
+
+  private extractIpAddress(req: Request): string {
+    return req.ip ?? req.socket?.remoteAddress ?? 'unknown';
+  }
+
+  // Stored with every session, refresh token and auth log row; the header is
+  // client-controlled, so only a bounded prefix is kept.
+  private extractUserAgent(req: Request): string | undefined {
+    return req.get('user-agent')?.slice(0, USER_AGENT_MAX_LENGTH);
+  }
+
+  // Web clients get the refresh token only as an HttpOnly cookie; mobile
+  // clients (no Origin, explicit header) keep receiving it in the body.
+  private deliverTokens(
+    mode: ClientMode,
+    tokens: TokenResponseDto,
+    res: Response,
+  ): ClientTokenResponse {
+    if (mode === 'mobile') {
+      return tokens;
+    }
+    const { refresh_token: refreshToken, ...body } = tokens;
+    setRefreshCookie(res, refreshToken);
+    return body;
+  }
+
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  @Post('register')
+  @Header('Cache-Control', 'no-store')
+  @Header('Pragma', 'no-cache')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: 'Register a new user' })
+  @ApiResponse({
+    status: 201,
+    description: 'User successfully registered',
+    type: TokenResponseDto,
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Bad request - User already exists',
+  })
+  @ApiBody({ type: RegisterDto })
+  @ApiClientMode()
+  async register(
+    @Body() registerDto: RegisterDto,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<ClientTokenResponse> {
+    const mode = resolveClientMode(req);
+    const ipAddress = this.extractIpAddress(req);
+    const userAgent = this.extractUserAgent(req);
+    const tokens = await this.authService.register(
+      registerDto,
+      ipAddress,
+      userAgent,
+    );
+    return this.deliverTokens(mode, tokens, res);
+  }
+
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  @Post('login')
+  @Header('Cache-Control', 'no-store')
+  @Header('Pragma', 'no-cache')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Login with email and password' })
+  @ApiResponse({
+    status: 200,
+    description: 'User successfully logged in',
+    type: TokenResponseDto,
+  })
+  @ApiResponse({ status: 401, description: 'Invalid credentials' })
+  @ApiResponse({
+    status: 429,
+    description:
+      'Too many requests from this IP, or too many failed logins for this email; see Retry-After',
+  })
+  @ApiBody({ type: LoginDto })
+  @ApiClientMode()
+  async login(
+    @Body() loginDto: LoginDto,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<ClientTokenResponse> {
+    const mode = resolveClientMode(req);
+    const ipAddress = this.extractIpAddress(req);
+    const userAgent = this.extractUserAgent(req);
+    const tokens = await this.authService.login(loginDto, ipAddress, userAgent);
+    return this.deliverTokens(mode, tokens, res);
+  }
+
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  @Post('refresh')
+  @Header('Cache-Control', 'no-store')
+  @Header('Pragma', 'no-cache')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Refresh access token' })
+  @ApiResponse({
+    status: 200,
+    description: 'Token successfully refreshed',
+    type: TokenResponseDto,
+  })
+  @ApiResponse({ status: 401, description: 'Invalid or expired refresh token' })
+  @ApiBody({ type: RefreshTokenDto, required: false })
+  @ApiCookieAuth('refresh-cookie')
+  @ApiClientMode()
+  async refresh(
+    @Body() refreshTokenDto: RefreshTokenDto,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<ClientTokenResponse> {
+    const mode = resolveClientMode(req);
+    // Web mode never reads the body: the token must come from the cookie.
+    const refreshToken =
+      mode === 'web' ? readRefreshCookie(req) : refreshTokenDto.refresh_token;
+    if (!refreshToken) {
+      throw mode === 'web'
+        ? new UnauthorizedException('Missing refresh token cookie')
+        : new BadRequestException('refresh_token is required');
+    }
+    const ipAddress = this.extractIpAddress(req);
+    const userAgent = this.extractUserAgent(req);
+    const tokens = await this.authService.refreshToken(
+      refreshToken,
+      ipAddress,
+      userAgent,
+    );
+    return this.deliverTokens(mode, tokens, res);
+  }
+
+  // RFC 7009 token revocation: the refresh token is the only credential, so
+  // a client whose access token has expired can still end its session.
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  @Post('revoke')
+  @Header('Cache-Control', 'no-store')
+  @Header('Pragma', 'no-cache')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Revoke a refresh token and end its session (RFC 7009)',
+    description:
+      'Needs no access token. Answers 200 whether or not the token was ' +
+      'valid, so the response does not reveal which tokens exist.',
+  })
+  @ApiResponse({ status: 200, description: 'Token revoked or unknown' })
+  @ApiResponse({
+    status: 400,
+    description: 'Mobile mode without refresh_token',
+  })
+  @ApiBody({ type: RevokeTokenDto, required: false })
+  @ApiCookieAuth('refresh-cookie')
+  @ApiClientMode()
+  async revoke(
+    @Body() revokeTokenDto: RevokeTokenDto,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<void> {
+    const mode = resolveClientMode(req);
+    const refreshToken =
+      mode === 'web' ? readRefreshCookie(req) : revokeTokenDto.refresh_token;
+    if (mode === 'web') {
+      clearRefreshCookie(res);
+    } else if (!refreshToken) {
+      throw new BadRequestException({
+        error: 'invalid_request',
+        error_description: 'refresh_token is required',
+      });
+    }
+    if (refreshToken) {
+      await this.authService.revokeRefreshToken(
+        refreshToken,
+        this.extractIpAddress(req),
+        this.extractUserAgent(req),
+      );
+    }
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('logout')
+  @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({
+    summary: 'End the current session',
+    description:
+      'Revokes the session of the access token. A request body is ignored; ' +
+      'use POST /auth/revoke or DELETE /auth/sessions/{id} for other sessions.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'User successfully logged out',
+    schema: {
+      type: 'object',
+      properties: {
+        message: { type: 'string', example: 'Logged out successfully' },
+      },
+    },
+  })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiClientMode()
+  async logout(
+    @CurrentUser() user: AuthenticatedUser,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<{ message: string }> {
+    const mode = resolveClientMode(req);
+    await this.authService.logout(
+      user,
+      this.extractIpAddress(req),
+      this.extractUserAgent(req),
+    );
+    if (mode === 'web') {
+      clearRefreshCookie(res);
+    }
+    return { message: 'Logged out successfully' };
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('logout-all')
+  @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({
+    summary: 'End every session of the user, on all devices',
+    description: 'Access tokens of all sessions stop working at once.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'All sessions ended',
+    schema: {
+      type: 'object',
+      properties: {
+        message: { type: 'string', example: 'Logged out of all sessions' },
+      },
+    },
+  })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiClientMode()
+  async logoutAll(
+    @CurrentUser() user: AuthenticatedUser,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<{ message: string }> {
+    const mode = resolveClientMode(req);
+    await this.authService.logoutAll(
+      user,
+      this.extractIpAddress(req),
+      this.extractUserAgent(req),
+    );
+    if (mode === 'web') {
+      clearRefreshCookie(res);
+    }
+    return { message: 'Logged out of all sessions' };
+  }
+
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  @UseGuards(JwtAuthGuard)
+  @Post('change-password')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({
+    summary: 'Change the password',
+    description:
+      'Every other session of the user ends; the calling session stays.',
+  })
+  @ApiBody({ type: ChangePasswordDto })
+  @ApiResponse({ status: 204, description: 'Password changed' })
+  @ApiResponse({
+    status: 400,
+    description: 'Current password is incorrect, or the new one is invalid',
+  })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  async changePassword(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: ChangePasswordDto,
+    @Req() req: Request,
+  ): Promise<void> {
+    await this.authService.changePassword(
+      user,
+      dto,
+      this.extractIpAddress(req),
+      this.extractUserAgent(req),
+    );
+  }
+
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  @Post('verify-email')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({
+    summary: 'Confirm the email address with the token from the email',
+    description:
+      'Public: the link may be opened on another device. A token works once.',
+  })
+  @ApiBody({ type: VerifyEmailDto })
+  @ApiResponse({ status: 204, description: 'Email address verified' })
+  @ApiResponse({
+    status: 400,
+    description: 'Invalid or expired verification token',
+  })
+  async verifyEmail(
+    @Body() dto: VerifyEmailDto,
+    @Req() req: Request,
+  ): Promise<void> {
+    await this.authService.verifyEmail(
+      dto.token,
+      this.extractIpAddress(req),
+      this.extractUserAgent(req),
+    );
+  }
+
+  @Throttle({ default: { limit: 3, ttl: 60_000 } })
+  @UseGuards(JwtAuthGuard)
+  @Post('resend-verification')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({
+    summary: 'Send a new verification email',
+    description:
+      'The previous link stops working. Does nothing when the email is already verified.',
+  })
+  @ApiResponse({ status: 204, description: 'Email sent, or already verified' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({
+    status: 429,
+    description: 'The previous email was sent less than a minute ago',
+  })
+  @ApiResponse({ status: 503, description: 'The email could not be sent' })
+  async resendVerification(
+    @CurrentUser() user: AuthenticatedUser,
+    @Req() req: Request,
+  ): Promise<void> {
+    await this.authService.resendVerification(
+      user,
+      this.extractIpAddress(req),
+      this.extractUserAgent(req),
+    );
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get('sessions')
+  @Header('Cache-Control', 'no-store')
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({ summary: 'List the active sessions of the user' })
+  @ApiResponse({ status: 200, type: SessionDto, isArray: true })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  async listSessions(
+    @CurrentUser() user: AuthenticatedUser,
+  ): Promise<SessionDto[]> {
+    return this.authService.listSessions(user);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Delete('sessions/:id')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({
+    summary: 'End one active session of the user',
+    description:
+      'Meant for other devices: it does not clear the refresh cookie, so ' +
+      'use POST /auth/logout to end the current session.',
+  })
+  @ApiResponse({ status: 204, description: 'Session ended' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({
+    status: 404,
+    description: 'No active session with this id belongs to the user',
+  })
+  async revokeSession(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() req: Request,
+  ): Promise<void> {
+    await this.authService.revokeOwnSession(
+      user,
+      id,
+      this.extractIpAddress(req),
+      this.extractUserAgent(req),
+    );
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get('me')
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({ summary: 'Get current user profile' })
+  @ApiResponse({
+    status: 200,
+    description: 'User profile retrieved successfully',
+    type: UserProfileDto,
+  })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ status: 404, description: 'User not found' })
+  async getProfile(
+    @CurrentUser() user: AuthenticatedUser,
+  ): Promise<UserProfileDto> {
+    return this.userService.getProfile(user.id);
+  }
+}

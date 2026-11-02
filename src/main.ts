@@ -1,12 +1,22 @@
-import { config } from 'dotenv';
+import 'dotenv/config';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { NestExpressApplication } from '@nestjs/platform-express';
-
-config();
+import { configureApp } from './app.setup';
+import { parseTrustProxy } from './config/trust-proxy';
 
 async function bootstrap() {
+  // Parsed before the app is created so an invalid value fails startup fast.
+  const trustProxy = parseTrustProxy(process.env.TRUST_PROXY);
+
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
-  await app.listen(process.env.PORT ?? 3000);
+  configureApp(app, { trustProxy });
+
+  const port = process.env.PORT ?? 3000;
+  await app.listen(port);
+  console.log(`Application is running on: http://localhost:${port}`);
+  console.log(
+    `Swagger documentation available at: http://localhost:${port}/api`,
+  );
 }
-bootstrap();
+void bootstrap();

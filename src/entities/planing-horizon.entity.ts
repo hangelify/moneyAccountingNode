@@ -1,3 +1,4 @@
+import { Collection, type Rel } from '@mikro-orm/core';
 import {
   Entity,
   Property,
@@ -6,8 +7,8 @@ import {
   Enum,
   ManyToOne,
   ManyToMany,
-  Collection,
-} from '@mikro-orm/core';
+  Index,
+} from '@mikro-orm/decorators/legacy';
 import { BaseEntity } from './base.entity';
 import { Currency } from '../types/currency.enum';
 import { PeriodType } from '../types/period-type.enum';
@@ -15,6 +16,12 @@ import { Budget } from './budget.entity';
 import { Category } from './category.entity';
 
 @Entity({ tableName: 'planing_horizons' })
+// Case-insensitive unique name among a budget's active planning horizons.
+@Index({
+  name: 'planing_horizons_budget_id_name_lower_unique',
+  expression:
+    'create unique index "planing_horizons_budget_id_name_lower_unique" on "planing_horizons" ("budget_id", lower("name")) where "deleted_at" is null and not "is_archived"',
+})
 export class PlaningHorizon extends BaseEntity {
   @Property({ type: 'varchar', length: 255, nullable: false })
   name!: string;
@@ -50,8 +57,11 @@ export class PlaningHorizon extends BaseEntity {
   @Property({ type: 'timestamptz', nullable: true })
   deleted_at?: Date;
 
+  @Property({ type: 'boolean', nullable: false, default: false })
+  is_archived!: boolean;
+
   @ManyToOne(() => Budget, { nullable: false })
-  budget!: Budget;
+  budget!: Rel<Budget>;
 
   @ManyToMany(() => Category, (category) => category.planingHorizons, {
     owner: true,

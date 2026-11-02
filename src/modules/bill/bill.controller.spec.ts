@@ -1,0 +1,737 @@
+import { Test } from '@nestjs/testing';
+import {
+  BadRequestException,
+  Logger,
+  UnprocessableEntityException,
+  UnsupportedMediaTypeException,
+  ValidationPipe,
+} from '@nestjs/common';
+import {
+  EXCEPTION_FILTERS_METADATA,
+  GUARDS_METADATA,
+} from '@nestjs/common/constants';
+import { APP_FILTER } from '@nestjs/core';
+import { createHash } from 'node:crypto';
+import sharp from 'sharp';
+import { BillController } from './bill.controller';
+import { BillPhotoService } from './bill-photo.service';
+import { BillCrudService } from './bill-crud.service';
+import { BillDuplicatesService } from './bill-duplicates.service';
+import { BillDashboardService } from './bill-dashboard.service';
+import { BillDashboardQueryDto } from './dto/bill-dashboard.dto';
+import { SpendingBreakdownService } from './spending-breakdown.service';
+import { SpendingBreakdownQueryDto } from './dto/spending-breakdown.dto';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { HouseholdMemberGuard } from '../household/guards/household-member.guard';
+import { AiGatewayErrorFilter } from './filters/ai-gateway-error.filter';
+import { AiUsageLimitFilter } from './filters/ai-usage-limit.filter';
+import { UserThrottlerGuard } from '../ai-gateway/guards/user-throttler.guard';
+import { STORAGE_SERVICE } from '../storage/storage.service';
+
+function makeImage(format: 'png' | 'jpeg'): Promise<Buffer> {
+  return sharp({
+    create: { width: 40, height: 30, channels: 3, background: '#fff' },
+  })
+    .toFormat(format)
+    .toBuffer();
+}
+
+describe('BillController', () => {
+  let controller: BillController;
+  let billDashboardMock: { getDashboard: jest.Mock };
+  const parseAndCategorize = jest.fn();
+  const billCrudMock = {
+    createBill: jest.fn(),
+    listBills: jest.fn(),
+    getBill: jest.fn(),
+    updateBill: jest.fn(),
+    softDeleteBill: jest.fn(),
+    createDraftFromParsed: jest.fn(),
+    findDraftByImageHash: jest.fn(),
+    getDraftImageKey: jest.fn(),
+    listDrafts: jest.fn(),
+    confirmBill: jest.fn(),
+  };
+
+  const findCandidates = jest.fn();
+  const markDuplicate = jest.fn();
+  const unmarkDuplicate = jest.fn();
+  const getSignedUrl = jest.fn();
+  const getSpendingBreakdown = jest.fn();
+
+  beforeEach(async () => {
+    parseAndCategorize.mockReset();
+    getSignedUrl.mockReset();
+    findCandidates.mockReset();
+    markDuplicate.mockReset();
+    unmarkDuplicate.mockReset();
+    findCandidates.mockResolvedValue([]);
+    getSpendingBreakdown.mockReset();
+    Object.values(billCrudMock).forEach((fn) => fn.mockReset());
+    billDashboardMock?.getDashboard?.mockReset?.();
+    const mod = await Test.createTestingModule({
+      controllers: [BillController],
+      providers: [
+        { provide: BillPhotoService, useValue: { parseAndCategorize } },
+        { provide: BillCrudService, useValue: billCrudMock },
+        {
+          provide: BillDuplicatesService,
+          useValue: { findCandidates, markDuplicate, unmarkDuplicate },
+        },
+        {
+          provide: BillDashboardService,
+          useValue: { getDashboard: jest.fn() },
+        },
+        { provide: STORAGE_SERVICE, useValue: { getSignedUrl } },
+        {
+          provide: SpendingBreakdownService,
+          useValue: { getSpendingBreakdown },
+        },
+        { provide: APP_FILTER, useClass: AiGatewayErrorFilter },
+      ],
+    })
+      .overrideGuard(JwtAuthGuard)
+      .useValue({ canActivate: () => true })
+      .overrideGuard(HouseholdMemberGuard)
+      .useValue({ canActivate: () => true })
+      .overrideGuard(UserThrottlerGuard)
+      .useValue({ canActivate: () => true })
+      .compile();
+    controller = mod.get(BillController);
+    billDashboardMock = mod.get(BillDashboardService);
+    billDashboardMock.getDashboard = jest.fn();
+  });
+
+  it('forwards the normalized JPEG + user id to BillPhotoService and returns the saved draft', async () => {
+    const dto = {
+      market_name: null,
+      bill_date: null,
+      currency: null,
+      total_amount: null,
+      items: [{ name: 'BREAD' }],
+    };
+    const draftId = 'draft-uuid-001';
+    parseAndCategorize.mockResolvedValue({
+      parsed: dto,
+      requestId: 'req-1',
+      isReceipt: true,
+    });
+    const saved = { ...dto, draft_id: draftId, items: [{ name: 'BREAD 1' }] };
+    billCrudMock.findDraftByImageHash
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ parsed: saved, requestId: 'req-1' });
+    billCrudMock.createDraftFromParsed.mockResolvedValue({
+      id: draftId,
+      duplicate: false,
+    });
+    const fakeFile = {
+      buffer: await makeImage('png'),
+      mimetype: 'image/png',
+    } as Express.Multer.File;
+    const res = await controller.parsePhoto(
+      { id: 'user-xyz' } as never,
+      { householdId: 'hh-1', role: 'owner' } as never,
+      fakeFile,
+    );
+    expect(parseAndCategorize).toHaveBeenCalledWith(
+      expect.any(Buffer),
+      'image/jpeg',
+      'hh-1',
+      'user-xyz',
+    );
+    const [[sent]] = parseAndCategorize.mock.calls as [[Buffer]];
+    expect((await sharp(sent).metadata()).format).toBe('jpeg');
+    const imageSha256 = createHash('sha256').update(sent).digest('hex');
+    expect(billCrudMock.findDraftByImageHash).toHaveBeenCalledWith(
+      'hh-1',
+      imageSha256,
+    );
+    expect(billCrudMock.createDraftFromParsed).toHaveBeenCalledWith(
+      'hh-1',
+      'user-xyz',
+      dto,
+      { imageSha256, aiRequestId: 'req-1' },
+    );
+    expect(res).toEqual({
+      ...saved,
+      request_id: 'req-1',
+      duplicate: false,
+      possible_duplicates: [],
+    });
+  });
+
+  describe('possible duplicates', () => {
+    const candidate = {
+      id: 'bill-old',
+      bill_date: '2026-05-07',
+      total_amount: 2.4,
+      currency: 'EUR',
+      market_name: 'Lidl',
+      created_by_name: 'Ana',
+      match: 'strong',
+    };
+    const draft = {
+      draft_id: 'draft-1',
+      market_name: 'Lidl',
+      bill_date: '2026-05-07',
+      currency: 'EUR',
+      total_amount: 2.4,
+      fiscal_register_id: null,
+      fiscal_receipt_number: null,
+      purchase_time: null,
+      items: [{ name: 'BREAD' }],
+    };
+    const ctx = { householdId: 'hh-1', role: 'owner' } as never;
+    const user = { id: 'user-xyz' } as never;
+
+    it('parse-photo returns possible_duplicates for the saved draft', async () => {
+      parseAndCategorize.mockResolvedValue({
+        parsed: draft,
+        requestId: 'req-1',
+        isReceipt: true,
+      });
+      billCrudMock.findDraftByImageHash
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce({ parsed: draft, requestId: 'req-1' });
+      billCrudMock.createDraftFromParsed.mockResolvedValue({
+        id: 'draft-1',
+        duplicate: false,
+      });
+      findCandidates.mockResolvedValue([candidate]);
+
+      const res = await controller.parsePhoto(user, ctx, {
+        buffer: await makeImage('png'),
+        mimetype: 'image/png',
+      } as never);
+
+      expect(res.possible_duplicates).toEqual([candidate]);
+      expect(findCandidates).toHaveBeenCalledWith(
+        'hh-1',
+        {
+          amount: 2.4,
+          currency: 'EUR',
+          bill_date: '2026-05-07',
+          market_id: null,
+          market_name: 'Lidl',
+          fiscal_register_id: null,
+          fiscal_receipt_number: null,
+          purchase_time: null,
+        },
+        { excludeBillId: 'draft-1' },
+      );
+    });
+
+    it('a re-uploaded photo still carries possible_duplicates', async () => {
+      billCrudMock.findDraftByImageHash.mockResolvedValue({
+        parsed: draft,
+        requestId: 'req-old',
+      });
+      findCandidates.mockResolvedValue([candidate]);
+
+      const res = await controller.parsePhoto(user, ctx, {
+        buffer: await makeImage('png'),
+        mimetype: 'image/png',
+      } as never);
+
+      expect(res.duplicate).toBe(true);
+      expect(res.possible_duplicates).toEqual([candidate]);
+    });
+
+    it('looks up by fiscal ids only when the date was not read', async () => {
+      const fiscal = {
+        fiscal_register_id: 'R1',
+        fiscal_receipt_number: '7',
+      };
+      billCrudMock.findDraftByImageHash.mockResolvedValue({
+        parsed: { ...draft, ...fiscal, bill_date: null },
+        requestId: 'req-old',
+      });
+      findCandidates.mockResolvedValue([candidate]);
+
+      const res = await controller.parsePhoto(user, ctx, {
+        buffer: await makeImage('png'),
+        mimetype: 'image/png',
+      } as never);
+
+      expect(res.possible_duplicates).toEqual([candidate]);
+      expect(findCandidates).toHaveBeenCalledWith(
+        'hh-1',
+        expect.objectContaining(fiscal),
+        { excludeBillId: 'draft-1', fiscalOnly: true },
+      );
+    });
+
+    it('looks up by fiscal ids only when the total was not read', async () => {
+      billCrudMock.findDraftByImageHash.mockResolvedValue({
+        parsed: {
+          ...draft,
+          fiscal_register_id: 'R1',
+          fiscal_receipt_number: '7',
+          total_amount: null,
+        },
+        requestId: 'req-old',
+      });
+
+      await controller.parsePhoto(user, ctx, {
+        buffer: await makeImage('png'),
+        mimetype: 'image/png',
+      } as never);
+
+      expect(findCandidates).toHaveBeenCalledWith(
+        'hh-1',
+        expect.objectContaining({ fiscal_register_id: 'R1' }),
+        { excludeBillId: 'draft-1', fiscalOnly: true },
+      );
+    });
+
+    it('skips the lookup for a draft without a read date or fiscal ids', async () => {
+      billCrudMock.findDraftByImageHash.mockResolvedValue({
+        parsed: { ...draft, bill_date: null },
+        requestId: 'req-old',
+      });
+
+      const res = await controller.parsePhoto(user, ctx, {
+        buffer: await makeImage('png'),
+        mimetype: 'image/png',
+      } as never);
+
+      expect(res.possible_duplicates).toEqual([]);
+      expect(findCandidates).not.toHaveBeenCalled();
+    });
+
+    it('a failing lookup does not fail parse-photo', async () => {
+      billCrudMock.findDraftByImageHash.mockResolvedValue({
+        parsed: draft,
+        requestId: 'req-old',
+      });
+      findCandidates.mockRejectedValue(new Error('db down'));
+      const logSpy = jest
+        .spyOn(Logger.prototype, 'error')
+        .mockImplementation(() => undefined);
+
+      const res = await controller.parsePhoto(user, ctx, {
+        buffer: await makeImage('png'),
+        mimetype: 'image/png',
+      } as never);
+
+      expect(res.possible_duplicates).toEqual([]);
+      expect(logSpy).toHaveBeenCalled();
+      logSpy.mockRestore();
+    });
+  });
+
+  it('answers 422 with the request id and parsed bill when the draft cannot be saved', async () => {
+    const dto = {
+      draft_id: '',
+      market_name: 'Lidl',
+      bill_date: null,
+      currency: null,
+      total_amount: 1,
+      items: [{ name: 'BREAD' }],
+    };
+    parseAndCategorize.mockResolvedValue({
+      parsed: dto,
+      requestId: 'req-9',
+      isReceipt: true,
+    });
+    billCrudMock.findDraftByImageHash.mockResolvedValue(null);
+    billCrudMock.createDraftFromParsed.mockRejectedValue(
+      new Error('numeric field overflow'),
+    );
+    const logSpy = jest
+      .spyOn(Logger.prototype, 'error')
+      .mockImplementation(() => undefined);
+
+    const err: unknown = await controller
+      .parsePhoto(
+        { id: 'user-xyz' } as never,
+        { householdId: 'hh-1', role: 'owner' } as never,
+        { buffer: await makeImage('png'), mimetype: 'image/png' } as never,
+      )
+      .catch((e: unknown) => e);
+
+    expect(err).toBeInstanceOf(UnprocessableEntityException);
+    expect((err as UnprocessableEntityException).getResponse()).toEqual({
+      statusCode: 422,
+      error: 'Unprocessable Entity',
+      message: expect.any(String) as string,
+      request_id: 'req-9',
+      parsed: dto,
+    });
+    expect(logSpy).toHaveBeenCalled();
+    logSpy.mockRestore();
+  });
+
+  describe('re-upload of the same photo', () => {
+    const stored = {
+      draft_id: 'draft-old',
+      market_name: 'Lidl',
+      bill_date: '2026-05-07',
+      currency: 'EUR',
+      total_amount: 2.4,
+      items: [{ name: 'BREAD' }],
+    };
+
+    it('returns the open draft of the same image without calling the AI', async () => {
+      billCrudMock.findDraftByImageHash.mockResolvedValue({
+        parsed: stored,
+        requestId: 'req-old',
+      });
+
+      const res = await controller.parsePhoto(
+        { id: 'user-xyz' } as never,
+        { householdId: 'hh-1', role: 'owner' } as never,
+        { buffer: await makeImage('png'), mimetype: 'image/png' } as never,
+      );
+
+      expect(parseAndCategorize).not.toHaveBeenCalled();
+      expect(billCrudMock.createDraftFromParsed).not.toHaveBeenCalled();
+      expect(res).toEqual({
+        ...stored,
+        request_id: 'req-old',
+        duplicate: true,
+        possible_duplicates: [],
+      });
+    });
+
+    it('returns the stored draft when a concurrent upload saved it first', async () => {
+      billCrudMock.findDraftByImageHash
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce({ parsed: stored, requestId: 'req-old' });
+      parseAndCategorize.mockResolvedValue({
+        parsed: { ...stored, draft_id: '', market_name: 'Lid1' },
+        requestId: 'req-new',
+        isReceipt: true,
+      });
+      billCrudMock.createDraftFromParsed.mockResolvedValue({
+        id: 'draft-old',
+        duplicate: true,
+        possible_duplicates: [],
+      });
+
+      const res = await controller.parsePhoto(
+        { id: 'user-xyz' } as never,
+        { householdId: 'hh-1', role: 'owner' } as never,
+        { buffer: await makeImage('png'), mimetype: 'image/png' } as never,
+      );
+
+      expect(res).toEqual({
+        ...stored,
+        request_id: 'req-old',
+        duplicate: true,
+        possible_duplicates: [],
+      });
+    });
+  });
+
+  it('falls back to the parsed bill when the saved draft is gone before it is read', async () => {
+    const parsed = { draft_id: '', market_name: 'Lidl', items: [{}] };
+    billCrudMock.findDraftByImageHash.mockResolvedValue(null);
+    parseAndCategorize.mockResolvedValue({
+      parsed,
+      requestId: 'req-3',
+      isReceipt: true,
+    });
+    billCrudMock.createDraftFromParsed.mockResolvedValue({
+      id: 'draft-other',
+      duplicate: true,
+      possible_duplicates: [],
+    });
+
+    const res = await controller.parsePhoto(
+      { id: 'user-xyz' } as never,
+      { householdId: 'hh-1', role: 'owner' } as never,
+      { buffer: await makeImage('png'), mimetype: 'image/png' } as never,
+    );
+
+    expect(res).toEqual({
+      ...parsed,
+      draft_id: 'draft-other',
+      request_id: 'req-3',
+      duplicate: true,
+      possible_duplicates: [],
+    });
+  });
+
+  it('answers 422 for a photo that is not a receipt and saves no draft', async () => {
+    billCrudMock.findDraftByImageHash.mockResolvedValue(null);
+    parseAndCategorize.mockResolvedValue({
+      parsed: { items: [] },
+      requestId: 'req-nr',
+      isReceipt: false,
+    });
+
+    const err: unknown = await controller
+      .parsePhoto(
+        { id: 'user-xyz' } as never,
+        { householdId: 'hh-1', role: 'owner' } as never,
+        { buffer: await makeImage('png'), mimetype: 'image/png' } as never,
+      )
+      .catch((e: unknown) => e);
+
+    expect(err).toBeInstanceOf(UnprocessableEntityException);
+    expect((err as UnprocessableEntityException).getResponse()).toEqual({
+      statusCode: 422,
+      error: 'Unprocessable Entity',
+      message: expect.stringMatching(/not a receipt/) as string,
+      request_id: 'req-nr',
+    });
+    expect(billCrudMock.createDraftFromParsed).not.toHaveBeenCalled();
+  });
+
+  it('ignores the client-sent "image/jpg" type of a real JPEG', async () => {
+    parseAndCategorize.mockResolvedValue({
+      parsed: { items: [{ name: 'BREAD' }] },
+      requestId: 'req-2',
+      isReceipt: true,
+    });
+    billCrudMock.findDraftByImageHash.mockResolvedValue(null);
+    billCrudMock.createDraftFromParsed.mockResolvedValue({
+      id: 'draft-2',
+      duplicate: false,
+    });
+
+    await controller.parsePhoto(
+      { id: 'user-xyz' } as never,
+      { householdId: 'hh-1', role: 'owner' } as never,
+      { buffer: await makeImage('jpeg'), mimetype: 'image/jpg' } as never,
+    );
+
+    expect(parseAndCategorize).toHaveBeenCalledWith(
+      expect.any(Buffer),
+      'image/jpeg',
+      'hh-1',
+      'user-xyz',
+    );
+  });
+
+  it('answers 415 for a non-image and never calls the AI', async () => {
+    const err: unknown = await controller
+      .parsePhoto(
+        { id: 'user-xyz' } as never,
+        { householdId: 'hh-1', role: 'owner' } as never,
+        { buffer: Buffer.from('plain text'), mimetype: 'image/jpeg' } as never,
+      )
+      .catch((e: unknown) => e);
+
+    expect(err).toBeInstanceOf(UnsupportedMediaTypeException);
+    expect(parseAndCategorize).not.toHaveBeenCalled();
+  });
+
+  describe('getDraftImage', () => {
+    it('signs a 5-minute URL for the image of a draft of this household', async () => {
+      billCrudMock.getDraftImageKey.mockResolvedValue('ai/images/abc.jpg');
+      getSignedUrl.mockResolvedValue('https://s3.local/signed');
+
+      const res = await controller.getDraftImage(
+        { householdId: 'hh-1', role: 'member' } as never,
+        'draft-1',
+      );
+
+      expect(billCrudMock.getDraftImageKey).toHaveBeenCalledWith(
+        'draft-1',
+        'hh-1',
+      );
+      expect(getSignedUrl).toHaveBeenCalledWith('ai/images/abc.jpg', 300);
+      expect(res).toEqual({ url: 'https://s3.local/signed', expires_in: 300 });
+    });
+  });
+
+  describe('parsePhoto limits', () => {
+    const handler = Object.getOwnPropertyDescriptor(
+      BillController.prototype,
+      'parsePhoto',
+    )!.value as object;
+
+    it('throttles per user after the controller-level auth guards', () => {
+      // Method guards run after class guards, so req.user is already set.
+      expect(Reflect.getMetadata(GUARDS_METADATA, BillController)).toEqual([
+        JwtAuthGuard,
+        HouseholdMemberGuard,
+      ]);
+      expect(Reflect.getMetadata(GUARDS_METADATA, handler)).toEqual([
+        UserThrottlerGuard,
+      ]);
+    });
+
+    it('maps AI usage-limit and gateway errors to HTTP', () => {
+      const filters = Reflect.getMetadata(
+        EXCEPTION_FILTERS_METADATA,
+        handler,
+      ) as unknown[];
+      expect(filters).toContain(AiUsageLimitFilter);
+      expect(filters).toContain(AiGatewayErrorFilter);
+    });
+  });
+
+  describe('mark and unmark duplicate', () => {
+    const user = { id: 'user-1' } as never;
+    const ctx = { householdId: 'household-1' } as never;
+
+    it('marks, then answers with the bill detail', async () => {
+      const detail = { id: 'bill-1', status: 'duplicate' };
+      billCrudMock.getBill.mockResolvedValue(detail);
+
+      const res = await controller.markDuplicate(user, ctx, 'bill-1', {
+        duplicate_of_id: 'bill-0',
+      });
+
+      expect(markDuplicate).toHaveBeenCalledWith(
+        'bill-1',
+        'household-1',
+        'bill-0',
+      );
+      expect(billCrudMock.getBill).toHaveBeenCalledWith(
+        'bill-1',
+        'household-1',
+      );
+      expect(res).toBe(detail);
+    });
+
+    it('unmarks, then answers with the bill detail', async () => {
+      const detail = { id: 'bill-1', status: 'confirmed' };
+      billCrudMock.getBill.mockResolvedValue(detail);
+
+      const res = await controller.unmarkDuplicate(user, ctx, 'bill-1');
+
+      expect(unmarkDuplicate).toHaveBeenCalledWith('bill-1', 'household-1');
+      expect(res).toBe(detail);
+    });
+  });
+
+  describe('getDashboard', () => {
+    it('delegates to BillDashboardService and returns its response', async () => {
+      const response = { by_currency: [], bills: [] };
+      billDashboardMock.getDashboard.mockResolvedValue(response);
+
+      const query: BillDashboardQueryDto = {
+        type: 'month',
+        year: 2026,
+        month: 4,
+      };
+      const result = await controller.getDashboard(
+        { id: 'user-xyz' } as never,
+        { householdId: 'hh-1', role: 'owner' } as never,
+        query,
+      );
+
+      expect(billDashboardMock.getDashboard).toHaveBeenCalledWith(
+        'hh-1',
+        query,
+      );
+      expect(result).toBe(response);
+    });
+  });
+
+  describe('getSpendingBreakdown', () => {
+    it('delegates to SpendingBreakdownService with the household', async () => {
+      const response = {
+        range: { period: 'month', start: '2026-10-01', end: '2026-11-01' },
+        by_currency: [],
+      };
+      getSpendingBreakdown.mockResolvedValue(response);
+      const query: SpendingBreakdownQueryDto = {
+        period: 'month',
+        anchor: '2026-10-31',
+      };
+
+      const result = await controller.getSpendingBreakdown(
+        { householdId: 'hh-1', role: 'owner' } as never,
+        query,
+      );
+
+      expect(getSpendingBreakdown).toHaveBeenCalledWith('hh-1', query);
+      expect(result).toBe(response);
+    });
+
+    describe('query validation', () => {
+      // The same options as the global pipe in app.setup.ts.
+      const pipe = new ValidationPipe({
+        whitelist: true,
+        transform: true,
+        forbidNonWhitelisted: true,
+      });
+      const validate = (query: Record<string, string>) =>
+        pipe.transform(query, {
+          type: 'query',
+          metatype: SpendingBreakdownQueryDto,
+        }) as Promise<SpendingBreakdownQueryDto>;
+      const messages = async (query: Record<string, string>) => {
+        const err = (await validate(query).catch((e: unknown) => e)) as
+          | BadRequestException
+          | undefined;
+        expect(err).toBeInstanceOf(BadRequestException);
+        return (err!.getResponse() as { message: string[] }).message;
+      };
+
+      it.each(['week', 'month', 'quarter', 'year', '5y'])(
+        'accepts period=%s without anchor',
+        async (period) => {
+          await expect(validate({ period })).resolves.toMatchObject({
+            period,
+          });
+        },
+      );
+
+      it('accepts a custom range of exactly 10 years', async () => {
+        await expect(
+          validate({ period: 'custom', from: '2016-11-01', to: '2026-10-31' }),
+        ).resolves.toMatchObject({ from: '2016-11-01', to: '2026-10-31' });
+      });
+
+      it('accepts a single-day custom range', async () => {
+        await expect(
+          validate({ period: 'custom', from: '2026-10-31', to: '2026-10-31' }),
+        ).resolves.toBeDefined();
+      });
+
+      it('rejects a missing or unknown period', async () => {
+        expect((await messages({})).join()).toMatch(/period/);
+        expect(await messages({ period: 'decade' })).toEqual([
+          'period must be one of the following values: week, month, quarter, year, 5y, custom',
+        ]);
+      });
+
+      it('rejects custom without from and to', async () => {
+        const msgs = await messages({ period: 'custom' });
+        expect(msgs.some((m) => m.startsWith('from'))).toBe(true);
+        expect(msgs.some((m) => m.startsWith('to'))).toBe(true);
+      });
+
+      it('rejects custom with only from', async () => {
+        const msgs = await messages({ period: 'custom', from: '2026-01-01' });
+        expect(msgs.some((m) => m.startsWith('to'))).toBe(true);
+      });
+
+      it('rejects from after to', async () => {
+        expect(
+          await messages({
+            period: 'custom',
+            from: '2026-03-02',
+            to: '2026-03-01',
+          }),
+        ).toEqual(['to must not be before from']);
+      });
+
+      it('rejects a custom range over 10 years', async () => {
+        expect(
+          await messages({
+            period: 'custom',
+            from: '2016-11-01',
+            to: '2026-11-01',
+          }),
+        ).toEqual(['to must be at most 10 years after from']);
+      });
+
+      it.each([
+        ['anchor', { period: 'month', anchor: '2026-02-30' }],
+        ['anchor', { period: 'month', anchor: '2026-10-31T00:00:00Z' }],
+        ['from', { period: 'custom', from: '2026/01/01', to: '2026-01-02' }],
+        ['currency', { period: 'month', currency: 'XXX' }],
+      ])('rejects an invalid %s', async (field, query) => {
+        const msgs = await messages(query);
+        expect(msgs.some((m) => m.startsWith(field))).toBe(true);
+      });
+    });
+  });
+});

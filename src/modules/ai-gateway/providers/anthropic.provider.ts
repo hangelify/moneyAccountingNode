@@ -1,0 +1,176 @@
+import { Inject, Injectable } from '@nestjs/common';
+import Anthropic from '@anthropic-ai/sdk';
+import { Capability } from '../types/capability';
+import {
+  LlmCallOptions,
+  LlmProvider,
+  ProviderName,
+} from '../types/llm-provider';
+import { LlmRequest, LlmResponse } from '../types/llm-request';
+import { readOptionalKey, readModelWhenConfigured } from './provider.env';
+import { toUsage } from './usage';
+import { withRetry } from '../internal/retry';
+import { AI_CALL_CONFIG, readInt } from '../internal/ai-call-config';
+import type { AiCallConfig } from '../internal/ai-call-config';
+import { isTransient, retryAfterMs } from '../internal/transient';
+import {
+  InvalidResponseError,
+  RefusalError,
+  TruncatedResponseError,
+} from '../internal/error-classifier';
+import { toAnthropicOutputSchema } from '../internal/provider-json-schema';
+
+const DEFAULT_MAX_OUTPUT_TOKENS = 16_000;
+
+@Injectable()
+export class AnthropicProvider implements LlmProvider {
+  readonly name: ProviderName = 'anthropic';
+  readonly capabilities = new Set<Capability>(['text', 'vision', 'json']);
+  readonly isConfigured: boolean;
+  readonly defaultModel: string;
+  private readonly maxOutputTokens: number;
+  private readonly client?: Anthropic;
+
+  constructor(@Inject(AI_CALL_CONFIG) private readonly config: AiCallConfig) {
+    const key = readOptionalKey('ANTHROPIC_API_KEY');
+    this.isConfigured = !!key;
+    this.defaultModel =
+      readModelWhenConfigured('ANTHROPIC_API_KEY', 'ANTHROPIC_MODEL') ?? '';
+    // Thinking counts toward the limit on current models, so it leaves room
+    // for thinking as well as the answer.
+    this.maxOutputTokens = readInt(
+      process.env,
+      'ANTHROPIC_MAX_OUTPUT_TOKENS',
+      DEFAULT_MAX_OUTPUT_TOKENS,
+      1,
+    );
+    if (key) this.client = new Anthropic({ apiKey: key, maxRetries: 0 });
+  }
+
+  async complete(req: LlmRequest, opts?: LlmCallOptions): Promise<LlmResponse> {
+    if (!this.client) throw new Error('AnthropicProvider is not configured');
+    const model = req.modelOverride ?? this.defaultModel;
+    const system =
+      req.messages
+        .filter((m) => m.role === 'system')
+        .map((m) => m.text)
+        .join('\n') || undefined;
+
+    const messages = req.messages
+      .filter((m) => m.role !== 'system')
+      .map((m) => {
+        if (m.role === 'assistant') {
+          return {
+            role: 'assistant' as const,
+            content: [{ type: 'text' as const, text: m.text }],
+          };
+        }
+        const u = m; // role: 'user'
+        const blocks: unknown[] = [];
+        for (const img of u.images ?? []) {
+          blocks.push({
+            type: 'image',
+            source: {
+              type: 'base64',
+              media_type: img.mediaType,
+              data: img.data.toString('base64'),
+            },
+          });
+        }
+        blocks.push({ type: 'text', text: u.text });
+        return { role: 'user' as const, content: blocks };
+      });
+
+    // No `temperature`: Claude Haiku 5.5 and Sonnet 5.5 answer a 400 to any
+    // non-default value, Opus 5.5 to any value, and API version 2026-10-21
+    // drops it on every model. JSON comes back as structured output, since
+    // Opus 5.5 and Sonnet 5.5 also reject a forced tool call.
+    const body: Record<string, unknown> = {
+      model,
+      max_tokens: req.maxOutputTokens ?? this.maxOutputTokens,
+      system,
+      messages,
+    };
+
+    if (req.jsonSchema) {
+      body.output_config = {
+        format: {
+          type: 'json_schema',
+          schema: toAnthropicOutputSchema(req.jsonSchema),
+        },
+      };
+    }
+
+    const { config } = this;
+    const response = await withRetry(
+      (signal) =>
+        this.client!.messages.create(body as never, {
+          signal,
+          timeout: config.callTimeoutMs,
+        }),
+      isTransient,
+      {
+        attempts: config.retryAttempts + 1,
+        backoffMs: config.retryBackoffMs,
+        maxBackoffMs: config.maxBackoffMs,
+        timeoutMs: config.callTimeoutMs,
+        signal: opts?.signal,
+        retryAfterMs,
+        maxRetryAfterMs: config.maxRetryAfterMs,
+      },
+    );
+
+    let text = '';
+    const resp = response as {
+      content?: Array<{ type: string; text?: string }>;
+      usage?: { input_tokens?: number; output_tokens?: number };
+      model?: string;
+      stop_reason?: string | null;
+    };
+    // Newer models can open with `thinking` blocks; only text is the answer.
+    for (const block of resp.content ?? []) {
+      if (block.type === 'text' && typeof block.text === 'string')
+        text += block.text;
+    }
+
+    const usage = toUsage(resp.usage?.input_tokens, resp.usage?.output_tokens);
+    const stopReason = resp.stop_reason ?? undefined;
+    if (
+      stopReason === 'max_tokens' ||
+      stopReason === 'model_context_window_exceeded'
+    ) {
+      throw new TruncatedResponseError(
+        `Anthropic stopped at the output token limit (stop_reason=${stopReason})`,
+        text,
+        usage,
+      );
+    }
+    if (stopReason === 'refusal') {
+      throw new RefusalError('Anthropic model refused to answer', text, usage);
+    }
+    let json: unknown;
+    if (req.jsonSchema) {
+      try {
+        json = JSON.parse(text);
+      } catch {
+        throw new InvalidResponseError(
+          'Anthropic returned non-JSON body',
+          text,
+          usage,
+        );
+      }
+    }
+
+    return {
+      text,
+      json,
+      model: resp.model ?? model,
+      usage,
+      stopReason,
+    };
+  }
+
+  isTransient(err: unknown): boolean {
+    return isTransient(err);
+  }
+}

@@ -1,0 +1,50 @@
+import { Collection, type Rel } from '@mikro-orm/core';
+import {
+  Entity,
+  Property,
+  BeforeCreate,
+  ManyToOne,
+  OneToMany,
+  Index,
+  Enum,
+} from '@mikro-orm/decorators/legacy';
+import { BaseEntity } from './base.entity';
+import { User } from './user.entity';
+import { HouseholdMember } from './household-member.entity';
+import { HouseholdInvite } from './household-invite.entity';
+import { Currency } from '../types/currency.enum';
+
+@Entity({ tableName: 'households' })
+@Index({ name: 'households_created_by_index', properties: ['created_by'] })
+export class Household extends BaseEntity {
+  @Property({ type: 'varchar', length: 255, nullable: false })
+  name!: string;
+
+  @Enum({
+    items: () => Currency,
+    type: 'enum',
+    nativeEnumName: 'currency_enum',
+    nullable: false,
+  })
+  currency!: Currency;
+
+  @ManyToOne(() => User, { nullable: false, fieldName: 'created_by' })
+  created_by!: Rel<User>;
+
+  @Property({ type: 'timestamptz', nullable: false, defaultRaw: 'NOW()' })
+  created_at!: Date;
+
+  @Property({ type: 'timestamptz', nullable: true })
+  deleted_at?: Date;
+
+  @OneToMany(() => HouseholdMember, (m) => m.household)
+  members = new Collection<HouseholdMember>(this);
+
+  @OneToMany(() => HouseholdInvite, (i) => i.household)
+  invites = new Collection<HouseholdInvite>(this);
+
+  @BeforeCreate()
+  beforeCreate() {
+    this.created_at = new Date();
+  }
+}

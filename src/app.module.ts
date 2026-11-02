@@ -1,36 +1,59 @@
 import { Module } from '@nestjs/common';
+import { APP_GUARD } from '@nestjs/core';
+import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
+import { ScheduleModule } from '@nestjs/schedule';
+import { ThrottlerStorageRedisService } from '@nest-lab/throttler-storage-redis';
 import { MikroOrmModule } from '@mikro-orm/nestjs';
-import { PostgreSqlDriver } from '@mikro-orm/postgresql';
+import { createMikroOrmConfig } from './mikro-orm.config';
+import { redisConnectionOptions } from './config/redis';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
+import { AuthModule } from './modules/auth/auth.module';
+import { MailModule } from './modules/mail/mail.module';
+import { BudgetModule } from './modules/budget/budget.module';
+import { PlaningHorizonModule } from './modules/planing-horizon/planing-horizon.module';
+import { CategoryModule } from './modules/category/category.module';
+import { SubCategoryModule } from './modules/sub-category/sub-category.module';
+import { StorageModule } from './modules/storage/storage.module';
+import { AiGatewayModule } from './modules/ai-gateway/ai-gateway.module';
+import { AnthropicProvider } from './modules/ai-gateway/providers/anthropic.provider';
+import { OpenAiProvider } from './modules/ai-gateway/providers/openai.provider';
+import { DeepSeekProvider } from './modules/ai-gateway/providers/deepseek.provider';
+import { BillModule } from './modules/bill/bill.module';
+import { MarketModule } from './modules/market/market.module';
+import { HouseholdModule } from './modules/household/household.module';
+import { RetentionModule } from './modules/retention/retention.module';
+import { ExchangeRateModule } from './modules/exchange-rate/exchange-rate.module';
+
+export const APP_THROTTLERS = [{ name: 'default', ttl: 60_000, limit: 100 }];
 
 @Module({
   imports: [
-    MikroOrmModule.forRootAsync({
+    MikroOrmModule.forRootAsync({ useFactory: createMikroOrmConfig }),
+    ScheduleModule.forRoot(),
+    MailModule,
+    AuthModule,
+    BudgetModule,
+    PlaningHorizonModule,
+    CategoryModule,
+    SubCategoryModule,
+    StorageModule,
+    AiGatewayModule.forRoot({
+      providers: [AnthropicProvider, OpenAiProvider, DeepSeekProvider],
+    }),
+    BillModule,
+    MarketModule,
+    HouseholdModule,
+    RetentionModule,
+    ExchangeRateModule,
+    ThrottlerModule.forRootAsync({
       useFactory: () => ({
-        driver: PostgreSqlDriver,
-        host: process.env.DB_HOST || 'localhost',
-        port: parseInt(process.env.DB_PORT || '5432', 10),
-        user: process.env.DB_USER || 'postgres',
-        password: process.env.DB_PASSWORD || 'postgres',
-        dbName: process.env.DB_NAME || 'accounting',
-        entities: ['./dist/**/*.entity.js'],
-        entitiesTs: ['./src/**/*.entity.ts'],
-        migrations: {
-          path: './src/migrations',
-          pathTs: './src/migrations',
-          glob: '!(*.d).{js,ts}',
-        },
-        seeder: {
-          path: './src/seeders',
-          pathTs: './src/seeders',
-          glob: '!(*.d).{js,ts}',
-          defaultSeeder: 'DatabaseSeeder',
-        },
+        throttlers: APP_THROTTLERS,
+        storage: new ThrottlerStorageRedisService(redisConnectionOptions()),
       }),
     }),
   ],
   controllers: [AppController],
-  providers: [AppService],
+  providers: [AppService, { provide: APP_GUARD, useClass: ThrottlerGuard }],
 })
 export class AppModule {}

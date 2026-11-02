@@ -1,0 +1,109 @@
+import {
+  IsUUID,
+  IsEnum,
+  IsNumber,
+  IsString,
+  IsOptional,
+  IsPositive,
+  Max,
+  Length,
+  Matches,
+  IsArray,
+  ArrayMinSize,
+  ArrayMaxSize,
+  ValidateNested,
+} from 'class-validator';
+import { Type } from 'class-transformer';
+import { ApiPropertyOptional } from '@nestjs/swagger';
+import { Currency } from '../../../types/currency.enum';
+import { MAX_MONEY_AMOUNT } from '../../../common/utils/money.util';
+import { IsCalendarDate } from '../../../common/validators/is-calendar-date';
+import { MaxDecimalPlaces } from '../../../common/validators/max-decimal-places';
+import {
+  MAX_FISCAL_ID_LENGTH,
+  PURCHASE_TIME_PATTERN,
+} from '../tasks/schemas/parsed-bill.schema';
+import { MAX_BILL_ITEMS } from './create-bill.dto';
+import { ConfirmBillItemDto, NewMarketDto } from './confirm-bill.dto';
+
+export class UpdateBillDto {
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description: 'Use an existing market; not together with new_market',
+  })
+  @IsUUID()
+  @IsOptional()
+  market_id?: string;
+
+  @ApiPropertyOptional({
+    type: NewMarketDto,
+    description:
+      'Auto find-or-create a market by name; not together with market_id',
+  })
+  @ValidateNested()
+  @Type(() => NewMarketDto)
+  @IsOptional()
+  new_market?: NewMarketDto;
+
+  @ApiPropertyOptional({ example: '2026-05-19', format: 'date' })
+  @IsCalendarDate()
+  @IsOptional()
+  bill_date?: string;
+
+  @ApiPropertyOptional({ enum: Currency })
+  @IsEnum(Currency)
+  @IsOptional()
+  currency?: Currency;
+
+  @ApiPropertyOptional({ example: 23.45 })
+  @IsNumber()
+  @MaxDecimalPlaces(2)
+  @IsPositive()
+  @Max(MAX_MONEY_AMOUNT)
+  @IsOptional()
+  total_amount?: number;
+
+  @ApiPropertyOptional()
+  @IsString()
+  @IsOptional()
+  description?: string;
+
+  @ApiPropertyOptional({
+    example: 'J403001234',
+    description: 'Cash register / fiscal device id printed on the receipt',
+  })
+  @IsString()
+  @Length(1, MAX_FISCAL_ID_LENGTH)
+  @IsOptional()
+  fiscal_register_id?: string;
+
+  @ApiPropertyOptional({
+    example: '0042',
+    description: 'Receipt number printed on the receipt',
+  })
+  @IsString()
+  @Length(1, MAX_FISCAL_ID_LENGTH)
+  @IsOptional()
+  fiscal_receipt_number?: string;
+
+  @ApiPropertyOptional({ example: '14:05', description: 'HH:MM, 24-hour' })
+  @IsString()
+  @Matches(PURCHASE_TIME_PATTERN)
+  @IsOptional()
+  purchase_time?: string;
+
+  @ApiPropertyOptional({
+    type: [ConfirmBillItemDto],
+    minItems: 1,
+    maxItems: MAX_BILL_ITEMS,
+    description:
+      'Replaces the bill lines: a line with id is updated in place, one without is added, lines left out are removed. Omit to keep the lines.',
+  })
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(MAX_BILL_ITEMS)
+  @ValidateNested({ each: true })
+  @Type(() => ConfirmBillItemDto)
+  @IsOptional()
+  items?: ConfirmBillItemDto[];
+}

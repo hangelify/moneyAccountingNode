@@ -1,0 +1,272 @@
+import {
+  BadRequestException,
+  Inject,
+  Injectable,
+  Logger,
+  NotFoundException,
+  ServiceUnavailableException,
+} from '@nestjs/common';
+import { EntityManager } from '@mikro-orm/core';
+import { Currency } from '../../types/currency.enum';
+import { isCalendarDate } from '../../common/utils/calendar-date';
+import {
+  EXCHANGE_RATE_PROVIDER,
+  type ExchangeRateProvider,
+  type FetchedRate,
+} from './exchange-rate.provider';
+
+const KNOWN_CURRENCIES = new Set<string>(Object.values(Currency));
+
+/** BNM publishes in Moldovan time; `today` there may differ from UTC. */
+function chisinauToday(now: Date = new Date()): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Europe/Chisinau',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(now);
+}
+
+/**
+ * Days a source may still publish late: an empty day older than this is
+ * marked as having no rates and never asked again.
+ */
+const LATE_PUBLISH_DAYS = 7;
+
+/** `date` (`YYYY-MM-DD`) moved by `days` calendar days. */
+function addDays(date: string, days: number): string {
+  const d = new Date(`${date}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
+/**
+ * Official MDL rates per calendar day, read through a local cache: a day is
+ * asked from the provider once, all of its currencies are saved, and every
+ * later lookup for that day is answered from PostgreSQL.
+ */
+@Injectable()
+export class ExchangeRateService {
+  private readonly log = new Logger(ExchangeRateService.name);
+  /** Fetches running in this process, by date; parallel lookups share one. */
+  private readonly inFlight = new Map<string, Promise<void>>();
+
+  constructor(
+    private readonly em: EntityManager,
+    @Inject(EXCHANGE_RATE_PROVIDER)
+    private readonly provider: ExchangeRateProvider,
+  ) {}
+
+  get source(): string {
+    return this.provider.source;
+  }
+
+  /**
+   * Loads up to `max` unsaved days (oldest first) so SQL can read their
+   * rates. Never throws: a day that could not be loaded is only logged and
+   * returned in `missing`, so a rate problem never fails a request. A day
+   * saved without rates is missing too. The first provider outage stops the
+   * loop, so a down provider costs one call, not one timeout per day.
+   */
+  async ensureDays(
+    dates: string[],
+    opts: { max: number },
+  ): Promise<{ missing: string[] }> {
+    const today = chisinauToday();
+    const unique = [...new Set(dates)].sort();
+    const missing = new Set<string>();
+    const candidates: string[] = [];
+    for (const d of unique) {
+      if (isCalendarDate(d) && d <= today) candidates.push(d);
+      else missing.add(d);
+    }
+
+    try {
+      let unsaved = candidates;
+      if (candidates.length > 0) {
+        const saved = (await this.em.getConnection().execute(
+          `SELECT rate_date::text AS rate_date, currency_count
+             FROM exchange_rate_days
+             WHERE source = ? AND rate_date = ANY(?::date[])`,
+          [this.provider.source, `{${candidates.join(',')}}`],
+        )) as { rate_date: string; currency_count: number }[];
+        const savedDates = new Set(saved.map((r) => r.rate_date));
+        unsaved = candidates.filter((d) => !savedDates.has(d));
+        // Marked empty: the source never published that day.
+        for (const r of saved)
+          if (r.currency_count === 0) missing.add(r.rate_date);
+      }
+
+      const toFetch = unsaved.slice(0, Math.max(0, opts.max));
+      unsaved.slice(toFetch.length).forEach((d) => missing.add(d));
+      for (const [i, d] of toFetch.entries()) {
+        try {
+          await this.ensureDay(d);
+        } catch (e) {
+          if (e instanceof ServiceUnavailableException) {
+            toFetch.slice(i).forEach((left) => missing.add(left));
+            this.log.warn(
+              `Rates unavailable from ${d}, skipped ${toFetch.length - i} day(s): ${e.message}`,
+            );
+            break;
+          }
+          missing.add(d);
+          this.log.warn(`No rates for ${d}: ${(e as Error).message}`);
+        }
+      }
+    } catch (e) {
+      this.log.warn(`Could not check saved rate days: ${(e as Error).message}`);
+      candidates.forEach((d) => missing.add(d));
+    }
+    return { missing: [...missing].sort() };
+  }
+
+  /** MDL for one unit of `currency` on `date` (`YYYY-MM-DD`). */
+  async getRate(currency: Currency, date: string): Promise<number> {
+    this.assertDate(date);
+    if (currency === Currency.MDL) return 1;
+
+    const saved = await this.findRate(currency, date);
+    if (saved !== null) return saved;
+
+    await this.ensureDay(date);
+    const fetched = await this.findRate(currency, date);
+    if (fetched === null) {
+      throw new NotFoundException(
+        `No ${this.provider.source} rate for ${currency} on ${date}`,
+      );
+    }
+    return fetched;
+  }
+
+  /** Every saved rate of `date`, MDL per unit, with MDL itself as 1. */
+  async getRatesForDay(
+    date: string,
+  ): Promise<Partial<Record<Currency, number>>> {
+    this.assertDate(date);
+    await this.ensureDay(date);
+    const rows = (await this.em.getConnection().execute(
+      `SELECT currency, rate::text AS rate FROM exchange_rates
+         WHERE source = ? AND rate_date = ?`,
+      [this.provider.source, date],
+    )) as { currency: Currency; rate: string }[];
+
+    const rates: Partial<Record<Currency, number>> = { [Currency.MDL]: 1 };
+    for (const r of rows) rates[r.currency] = Number(r.rate);
+    return rates;
+  }
+
+  /** `amount` of `from` in `to` at the rates of `date`, rounded to cents. */
+  async convert(
+    amount: number,
+    from: Currency,
+    to: Currency,
+    date: string,
+  ): Promise<number> {
+    this.assertDate(date);
+    if (from === to) return amount;
+    const [fromRate, toRate] = await Promise.all([
+      this.getRate(from, date),
+      this.getRate(to, date),
+    ]);
+    return Math.round(((amount * fromRate) / toRate) * 100) / 100;
+  }
+
+  private assertDate(date: string): void {
+    if (!isCalendarDate(date)) {
+      throw new BadRequestException('date must be a YYYY-MM-DD calendar day');
+    }
+    if (date > chisinauToday()) {
+      throw new BadRequestException(`No rates exist yet for ${date}`);
+    }
+  }
+
+  private async findRate(
+    currency: Currency,
+    date: string,
+  ): Promise<number | null> {
+    const [row] = (await this.em.getConnection().execute(
+      `SELECT rate::text AS rate FROM exchange_rates
+         WHERE source = ? AND rate_date = ? AND currency = ?`,
+      [this.provider.source, date, currency],
+    )) as { rate: string }[];
+    return row ? Number(row.rate) : null;
+  }
+
+  /** Makes sure `date` was fetched; throws when the provider has nothing. */
+  private async ensureDay(date: string): Promise<void> {
+    const [marker] = (await this.em
+      .getConnection()
+      .execute(
+        'SELECT 1 FROM exchange_rate_days WHERE source = ? AND rate_date = ?',
+        [this.provider.source, date],
+      )) as unknown[];
+    if (marker) return;
+
+    let pending = this.inFlight.get(date);
+    if (!pending) {
+      pending = this.fetchAndSave(date).finally(() =>
+        this.inFlight.delete(date),
+      );
+      this.inFlight.set(date, pending);
+    }
+    await pending;
+  }
+
+  private async fetchAndSave(date: string): Promise<void> {
+    const day = await this.provider.fetchDay(date);
+    if (!day) {
+      // A recent day may still be published later, so it gets no marker; an
+      // old one never will, and its empty marker stops asking again.
+      if (date < addDays(chisinauToday(), -LATE_PUBLISH_DAYS)) {
+        await this.saveDay(date, []);
+      }
+      throw new NotFoundException(
+        `No ${this.provider.source} rates published for ${date}`,
+      );
+    }
+
+    const rates = day.rates.filter((r) => KNOWN_CURRENCIES.has(r.currency));
+    const skipped = day.rates.length - rates.length;
+    if (skipped > 0) {
+      this.log.debug(
+        `Skipped ${skipped} currency code(s) outside Currency for ${date}`,
+      );
+    }
+    await this.saveDay(date, rates);
+  }
+
+  /** Saves `rates` of `date` and its marker; none marks a day without rates. */
+  private async saveDay(date: string, rates: FetchedRate[]): Promise<void> {
+    // Other instances may save the same day at once: rows and marker are
+    // written together and a duplicate is ignored, never an error.
+    await this.em.fork().transactional(async (tx) => {
+      const conn = tx.getConnection();
+      if (rates.length > 0) {
+        await conn.execute(
+          `INSERT INTO exchange_rates
+             (source, rate_date, currency, base_currency, rate, nominal)
+           VALUES ${rates.map(() => `(?, ?, ?, 'MDL', ?, ?)`).join(', ')}
+           ON CONFLICT (source, rate_date, currency) DO NOTHING`,
+          rates.flatMap((r: FetchedRate) => [
+            this.provider.source,
+            date,
+            r.currency,
+            r.rate,
+            r.nominal,
+          ]),
+          'run',
+          tx.getTransactionContext(),
+        );
+      }
+      await conn.execute(
+        `INSERT INTO exchange_rate_days (source, rate_date, currency_count)
+         VALUES (?, ?, ?)
+         ON CONFLICT (source, rate_date) DO NOTHING`,
+        [this.provider.source, date, rates.length],
+        'run',
+        tx.getTransactionContext(),
+      );
+    });
+  }
+}

@@ -57,4 +57,10 @@ export function applyTestEnv(env: NodeJS.ProcessEnv = process.env): void {
   for (const name of Object.keys(env)) {
     if (name.startsWith('AI_')) delete env[name];
   }
+
+  // No queue or events hub, so the app boots without Redis; the batch e2e
+  // spec turns it on.
+  env.BILL_BATCH_ENABLED = 'false';
+  delete env.BILL_BATCH_CONCURRENCY;
+  delete env.BILL_BATCH_ATTEMPTS;
 }

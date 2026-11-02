@@ -61,6 +61,7 @@ import { BILL_ITEM_TOLERANCE, readBillItemTolerance } from './bill-totals';
     { provide: DRAFT_RETENTION_DAYS, useFactory: readDraftRetentionDays },
     { provide: BILL_ITEM_TOLERANCE, useFactory: readBillItemTolerance },
   ],
-  exports: [BillAiOrchestrator],
+  // Batch parsing (BillBatchModule) reuses the bill writes and the ingest core.
+  exports: [BillAiOrchestrator, BillCrudService, BillPhotoIngestService],
 })
 export class BillModule {}

@@ -6,6 +6,9 @@ import { redisConnectionOptions } from '../../../config/redis';
 import { Bill } from '../../../entities/bill.entity';
 import { BillBatch } from '../../../entities/bill-batch.entity';
 import { BillBatchItem } from '../../../entities/bill-batch-item.entity';
+import { Household } from '../../../entities/household.entity';
+import { HouseholdMember } from '../../../entities/household-member.entity';
+import { HouseholdMemberGuard } from '../../household/guards/household-member.guard';
 import { StorageModule } from '../../storage/storage.module';
 import { BillModule } from '../bill.module';
 import {
@@ -15,6 +18,7 @@ import {
   readBillBatchEnv,
 } from './bill-batch.env';
 import { BillBatchService } from './bill-batch.service';
+import { BillBatchController } from './bill-batch.controller';
 import {
   BILL_EVENTS_REDIS,
   BillEventsPublisher,
@@ -39,7 +43,9 @@ function eventsRedis(maxRetriesPerRequest: number | null): Redis {
 /**
  * Batch photo parsing: the BullMQ queue and worker, events and BillBatchService. With
  * BILL_BATCH_ENABLED=false nothing touches Redis; only BILL_BATCH_DISABLED is
- * provided and the batch endpoints answer 503.
+ * provided and the batch endpoints answer 503. The controller is registered
+ * either way, so its routes win over BillController's `bills/:id`; see
+ * AppModule.
  */
 @Module({})
 export class BillBatchModule {
@@ -49,9 +55,13 @@ export class BillBatchModule {
     if (!env.enabled) {
       return {
         module: BillBatchModule,
+        // For HouseholdMemberGuard; the ORM is already connected.
+        imports: [MikroOrmModule.forFeature([Household, HouseholdMember])],
+        controllers: [BillBatchController],
         providers: [
           envProvider,
           { provide: BILL_BATCH_DISABLED, useValue: true },
+          HouseholdMemberGuard,
         ],
         exports: [BILL_BATCH_ENV, BILL_BATCH_DISABLED],
       };
@@ -66,12 +76,20 @@ export class BillBatchModule {
           },
         }),
         BullModule.registerQueue({ name: BILL_PHOTO_QUEUE }),
-        MikroOrmModule.forFeature([Bill, BillBatch, BillBatchItem]),
+        MikroOrmModule.forFeature([
+          Bill,
+          BillBatch,
+          BillBatchItem,
+          Household,
+          HouseholdMember,
+        ]),
         StorageModule,
         BillModule,
       ],
+      controllers: [BillBatchController],
       providers: [
         envProvider,
+        HouseholdMemberGuard,
         // Publishing is best effort: fail fast rather than hold a worker.
         { provide: BILL_EVENTS_REDIS, useFactory: () => eventsRedis(1) },
         // The subscription waits out a Redis outage instead of failing.

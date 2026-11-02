@@ -22,4 +22,8 @@ export type AuthenticatedUser = Pick<
   | 'currency'
   | 'language_code'
   | 'email_verified_at'
-> & { sid: string };
+> & {
+  sid: string;
+  /** Expiry of the access token, in seconds since the epoch. */
+  exp: number;
+};

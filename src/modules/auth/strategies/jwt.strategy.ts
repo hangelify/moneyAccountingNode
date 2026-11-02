@@ -48,7 +48,8 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
       !hasTyp(header.typ, ACCESS_TOKEN_TYP) ||
       !payload.sub ||
       payload.type !== 'access' ||
-      !payload.sid
+      !payload.sid ||
+      !payload.exp
     ) {
       throw new UnauthorizedException('Invalid token payload');
     }
@@ -100,6 +101,10 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
       );
     }
 
-    return { ...(user as Omit<AuthenticatedUser, 'sid'>), sid: session.id };
+    return {
+      ...(user as Omit<AuthenticatedUser, 'sid' | 'exp'>),
+      sid: session.id,
+      exp: payload.exp,
+    };
   }
 }

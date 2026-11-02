@@ -42,8 +42,10 @@ export const APP_THROTTLERS = [{ name: 'default', ttl: 60_000, limit: 100 }];
     AiGatewayModule.forRoot({
       providers: [AnthropicProvider, OpenAiProvider, DeepSeekProvider],
     }),
-    BillModule,
+    // Before BillModule: Express matches routes in registration order, and
+    // BillController's GET bills/:id would otherwise catch GET bills/events.
     BillBatchModule.register(),
+    BillModule,
     MarketModule,
     HouseholdModule,
     RetentionModule,

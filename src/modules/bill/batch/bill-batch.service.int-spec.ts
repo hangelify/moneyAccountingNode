@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { MikroORM, EntityManager } from '@mikro-orm/core';
+import { MikroORM, EntityManager, LockMode } from '@mikro-orm/core';
 import { PostgreSqlDriver } from '@mikro-orm/postgresql';
 import { MikroOrmModule } from '@mikro-orm/nestjs';
 import { Test } from '@nestjs/testing';
@@ -298,7 +298,9 @@ describe('BillBatchService (PostgreSQL)', () => {
 
       expect(a.changed).toBe(true);
       expect(typeof a.billId).toBe('string');
-      expect(b).toEqual({ changed: false, billId: a.billId });
+      // The second item still runs.
+      expect(a.completion).toBeNull();
+      expect(b).toEqual({ changed: false, billId: a.billId, completion: null });
       const [stored] = await itemsOf(res.batch_id);
       expect(stored.status).toBe(BillBatchItemStatus.FAILED);
       const bills = await orm.em
@@ -311,8 +313,8 @@ describe('BillBatchService (PostgreSQL)', () => {
       // A finished item cannot become done, and the batch is still running.
       expect(await service.markItemDone(first.id, a.billId!)).toEqual({
         changed: false,
+        completion: null,
       });
-      expect(await service.completionOf(res.batch_id)).toBeNull();
 
       await service.markItemProcessing(second.id);
       expect((await itemsOf(res.batch_id))[1].status).toBe(
@@ -325,11 +327,7 @@ describe('BillBatchService (PostgreSQL)', () => {
       const draftId = await makeBill(BillStatus.DRAFT);
       expect(await service.markItemDone(second.id, draftId)).toEqual({
         changed: true,
-      });
-      expect(await service.completionOf(res.batch_id)).toEqual({
-        total: 2,
-        done: 1,
-        failed: 1,
+        completion: { total: 2, done: 1, failed: 1 },
       });
 
       const batch = await service.getBatch(householdId, res.batch_id);
@@ -339,6 +337,41 @@ describe('BillBatchService (PostgreSQL)', () => {
         bill_id: draftId,
         parse_error_code: null,
       });
+    });
+
+    it('reports completion to exactly one of two items finishing at once', async () => {
+      const res = await service.createBatch({
+        householdId,
+        userId,
+        images: images(2),
+      });
+      const [d1, d2] = [
+        await makeBill(BillStatus.DRAFT),
+        await makeBill(BillStatus.DRAFT),
+      ];
+
+      // Hold both item rows so the two calls start together, each in its own
+      // fork and transaction, once the rows are released.
+      const holder = orm.em.fork();
+      await holder.begin();
+      await holder.find(
+        BillBatchItem,
+        { id: { $in: res.items.map((i) => i.id) } },
+        { lockMode: LockMode.PESSIMISTIC_WRITE },
+      );
+      const pending = Promise.all([
+        service.markItemDone(res.items[0].id, d1),
+        service.markItemDone(res.items[1].id, d2),
+      ]);
+      await new Promise((r) => setTimeout(r, 300));
+      await holder.commit();
+      const results = await pending;
+
+      expect(results.map((r) => r.changed)).toEqual([true, true]);
+      const completions = results
+        .map((r) => r.completion)
+        .filter((c) => c !== null);
+      expect(completions).toEqual([{ total: 2, done: 2, failed: 0 }]);
     });
 
     it('loads an item with its batch household and creator for a job', async () => {
@@ -375,7 +408,11 @@ describe('BillBatchService (PostgreSQL)', () => {
           message: 'save failed',
           billId,
         }),
-      ).toEqual({ changed: true, billId });
+      ).toEqual({
+        changed: true,
+        billId,
+        completion: { total: 1, done: 0, failed: 1 },
+      });
     });
   });
 

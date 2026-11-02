@@ -55,11 +55,14 @@ describe('BillPhotoProcessor', () => {
       findItemForJob: jest.fn(() => Promise.resolve(item)),
       markItemProcessing: jest.fn().mockResolvedValue({ changed: true }),
       markItemQueued: jest.fn().mockResolvedValue({ changed: true }),
-      markItemDone: jest.fn().mockResolvedValue({ changed: true }),
-      markItemFailed: jest
+      markItemDone: jest
         .fn()
-        .mockResolvedValue({ changed: true, billId: 'failed-bill' }),
-      completionOf: jest.fn().mockResolvedValue(null),
+        .mockResolvedValue({ changed: true, completion: null }),
+      markItemFailed: jest.fn().mockResolvedValue({
+        changed: true,
+        billId: 'failed-bill',
+        completion: null,
+      }),
     };
     ingest = { ingest: jest.fn() };
     storage = {
@@ -356,11 +359,13 @@ describe('BillPhotoProcessor', () => {
       requestId: 'req-1',
       parsed: {},
     });
-    batches.completionOf.mockResolvedValue({ total: 3, done: 2, failed: 1 });
+    batches.markItemDone.mockResolvedValue({
+      changed: true,
+      completion: { total: 3, done: 2, failed: 1 },
+    });
 
     await processor.process(asJob(fakeJob()), 'tok');
 
-    expect(batches.completionOf).toHaveBeenCalledWith('batch-1');
     expect(published()).toEqual([
       'item.processing',
       'item.done',
@@ -378,6 +383,23 @@ describe('BillPhotoProcessor', () => {
     });
   });
 
+  it('publishes batch.completed after a failed last item', async () => {
+    ingest.ingest.mockResolvedValue({ kind: 'not_a_receipt', requestId: 'r' });
+    batches.markItemFailed.mockResolvedValue({
+      changed: true,
+      billId: 'failed-bill',
+      completion: { total: 1, done: 0, failed: 1 },
+    });
+
+    await processor.process(asJob(fakeJob()), 'tok');
+
+    expect(published()).toEqual([
+      'item.processing',
+      'item.failed',
+      'batch.completed',
+    ]);
+  });
+
   it('publishes nothing more when another call already finished the item', async () => {
     ingest.ingest.mockResolvedValue({
       kind: 'draft',
@@ -386,12 +408,14 @@ describe('BillPhotoProcessor', () => {
       requestId: 'req-1',
       parsed: {},
     });
-    batches.markItemDone.mockResolvedValue({ changed: false });
-    batches.completionOf.mockResolvedValue({ total: 1, done: 1, failed: 0 });
+    // A finished item never reports completion; see BillBatchService.
+    batches.markItemDone.mockResolvedValue({
+      changed: false,
+      completion: null,
+    });
 
     await processor.process(asJob(fakeJob()), 'tok');
 
     expect(published()).toEqual(['item.processing']);
-    expect(batches.completionOf).not.toHaveBeenCalled();
   });
 });

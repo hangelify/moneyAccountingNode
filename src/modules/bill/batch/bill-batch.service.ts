@@ -44,6 +44,13 @@ export interface BillPhotoJob {
   itemId: string;
 }
 
+/** Item counts of a batch whose items are all done or failed. */
+export interface BatchCompletion {
+  total: number;
+  done: number;
+  failed: number;
+}
+
 /** What the worker needs of an item and its batch. */
 export interface BillPhotoJobItem {
   id: string;
@@ -216,23 +223,30 @@ export class BillBatchService {
     return this.moveUnfinished(itemId, BillBatchItemStatus.QUEUED);
   }
 
+  /**
+   * `completion` is set only by the call that finished the batch's last item,
+   * so `batch.completed` can be published exactly once.
+   */
   async markItemDone(
     itemId: string,
     billId: string,
-  ): Promise<{ changed: boolean }> {
+  ): Promise<{ changed: boolean; completion: BatchCompletion | null }> {
     return this.em.fork().transactional(async (em) => {
-      const item = await this.lockUnfinished(em, itemId);
-      if (!item) return { changed: false };
+      const item = await this.lockItem(em, itemId);
+      if (!item || !UNFINISHED.includes(item.status)) {
+        return { changed: false, completion: null };
+      }
       item.status = BillBatchItemStatus.DONE;
       item.bill = em.getReference(Bill, billId);
       item.updated_at = new Date();
-      return { changed: true };
+      return { changed: true, completion: await this.completionIn(em, item) };
     });
   }
 
   /**
    * Fails the item and, unless `billId` is given, creates its failed bill in
    * the same transaction, so a re-run after a crash finds the item finished.
+   * `completion` as in markItemDone.
    */
   async markItemFailed(
     itemId: string,
@@ -242,14 +256,20 @@ export class BillBatchService {
       aiRequestId?: string | null;
       billId?: string;
     },
-  ): Promise<{ changed: boolean; billId: string | null }> {
+  ): Promise<{
+    changed: boolean;
+    billId: string | null;
+    completion: BatchCompletion | null;
+  }> {
     return this.em.fork().transactional(async (em) => {
-      const item = await em.findOne(BillBatchItem, itemId, {
-        lockMode: LockMode.PESSIMISTIC_WRITE,
-      });
-      if (!item) return { changed: false, billId: null };
+      const item = await this.lockItem(em, itemId);
+      if (!item) return { changed: false, billId: null, completion: null };
       if (!UNFINISHED.includes(item.status)) {
-        return { changed: false, billId: item.bill?.id ?? null };
+        return {
+          changed: false,
+          billId: item.bill?.id ?? null,
+          completion: null,
+        };
       }
       let billId = args.billId;
       if (!billId) {
@@ -270,17 +290,46 @@ export class BillBatchService {
       item.status = BillBatchItemStatus.FAILED;
       item.bill = em.getReference(Bill, billId);
       item.updated_at = new Date();
-      return { changed: true, billId };
+      return {
+        changed: true,
+        billId,
+        completion: await this.completionIn(em, item),
+      };
+    });
+  }
+
+  /**
+   * Locks the item's batch row, then the item. Every call that finishes an
+   * item takes the batch lock first, so they run one after another and only
+   * the last one sees the batch complete.
+   */
+  private async lockItem(
+    em: EntityManager,
+    itemId: string,
+  ): Promise<BillBatchItem | null> {
+    const found = await em.findOne(BillBatchItem, itemId);
+    if (!found) return null;
+    await em.findOneOrFail(BillBatch, found.batch.id, {
+      lockMode: LockMode.PESSIMISTIC_WRITE,
+    });
+    // Read again under the lock: another call may have just finished it.
+    return em.findOne(BillBatchItem, itemId, {
+      lockMode: LockMode.PESSIMISTIC_WRITE,
+      refresh: true,
     });
   }
 
   /** Item counts once every item is done or failed; null while any runs. */
-  async completionOf(
-    batchId: string,
-  ): Promise<{ total: number; done: number; failed: number } | null> {
-    const items = await this.em
-      .fork()
-      .find(BillBatchItem, { batch: batchId }, { fields: ['status'] });
+  private async completionIn(
+    em: EntityManager,
+    item: BillBatchItem,
+  ): Promise<BatchCompletion | null> {
+    await em.flush();
+    const items = await em.find(
+      BillBatchItem,
+      { batch: item.batch.id },
+      { refresh: true },
+    );
     if (items.some((i) => UNFINISHED.includes(i.status))) return null;
     const count = (s: BillBatchItemStatus) =>
       items.filter((i) => i.status === s).length;
@@ -378,14 +427,14 @@ export class BillBatchService {
     items: BillBatchItem[],
   ): Promise<void> {
     const createdBy = items[0]?.batch.created_by?.id ?? null;
-    let changed = false;
+    let completion: BatchCompletion | null = null;
     for (const item of items) {
       const res = await this.markItemFailed(item.id, {
         code: BillParseErrorCode.AI_FAILED,
         message: QUEUE_FAILED_MESSAGE,
       });
       if (!res.changed) continue;
-      changed = true;
+      completion ??= res.completion;
       await this.events.publish(householdId, {
         type: 'item.failed',
         data: {
@@ -400,23 +449,16 @@ export class BillBatchService {
         },
       });
     }
-    const done = changed ? await this.completionOf(batchId) : null;
-    if (done) {
+    if (completion) {
       await this.events.publish(householdId, {
         type: 'batch.completed',
-        data: { batch_id: batchId, ...done, created_by_user_id: createdBy },
+        data: {
+          batch_id: batchId,
+          ...completion,
+          created_by_user_id: createdBy,
+        },
       });
     }
-  }
-
-  private async lockUnfinished(
-    em: EntityManager,
-    itemId: string,
-  ): Promise<BillBatchItem | null> {
-    const item = await em.findOne(BillBatchItem, itemId, {
-      lockMode: LockMode.PESSIMISTIC_WRITE,
-    });
-    return item && UNFINISHED.includes(item.status) ? item : null;
   }
 
   private async moveUnfinished(

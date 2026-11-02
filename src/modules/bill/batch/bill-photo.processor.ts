@@ -17,7 +17,11 @@ import type { IngestResult } from '../bill-photo-ingest.service';
 import { BILL_BATCH_ENV, BILL_PHOTO_QUEUE } from './bill-batch.env';
 import type { BillBatchEnv } from './bill-batch.env';
 import { BillBatchService } from './bill-batch.service';
-import type { BillPhotoJob, BillPhotoJobItem } from './bill-batch.service';
+import type {
+  BatchCompletion,
+  BillPhotoJob,
+  BillPhotoJobItem,
+} from './bill-batch.service';
 import { BillEventsPublisher } from './bill-events.publisher';
 import type { ItemEvent } from './bill-events.types';
 
@@ -182,12 +186,13 @@ export class BillPhotoProcessor
   }
 
   private async done(item: BillPhotoJobItem, billId: string): Promise<void> {
-    if (!(await this.batches.markItemDone(item.id, billId)).changed) return;
+    const res = await this.batches.markItemDone(item.id, billId);
+    if (!res.changed) return;
     await this.publishItem(item, 'item.done', {
       status: BillBatchItemStatus.DONE,
       bill_id: billId,
     });
-    await this.publishIfComplete(item);
+    await this.publishIfComplete(item, res.completion);
   }
 
   private async fail(
@@ -208,12 +213,17 @@ export class BillPhotoProcessor
       parse_error_code: code,
       parse_error_message: message,
     });
-    await this.publishIfComplete(item);
+    await this.publishIfComplete(item, res.completion);
   }
 
-  /** Only the call that finished an item may announce the batch. */
-  private async publishIfComplete(item: BillPhotoJobItem): Promise<void> {
-    const done = await this.batches.completionOf(item.batchId);
+  /**
+   * `completion` comes from the mark call that finished the batch's last
+   * item, so exactly one call announces the batch.
+   */
+  private async publishIfComplete(
+    item: BillPhotoJobItem,
+    done: BatchCompletion | null,
+  ): Promise<void> {
     if (!done) return;
     await this.events.publish(item.householdId, {
       type: 'batch.completed',

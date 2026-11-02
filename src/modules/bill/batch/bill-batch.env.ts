@@ -13,6 +13,11 @@ export interface BillBatchEnv {
   concurrency: number;
   /** BILL_BATCH_ATTEMPTS: tries of one photo before it becomes a failed bill. */
   attempts: number;
+  /**
+   * BILL_BATCH_MAX_CONCURRENT_UPLOADS: `parse-photos` requests one process
+   * accepts at once; each may buffer up to 20 × 10 MB.
+   */
+  maxConcurrentUploads: number;
 }
 
 function readEnabled(env: Env): boolean {
@@ -29,5 +34,11 @@ export function readBillBatchEnv(env: Env = process.env): BillBatchEnv {
     enabled: readEnabled(env),
     concurrency: readInt(env, 'BILL_BATCH_CONCURRENCY', 2, 1),
     attempts: readInt(env, 'BILL_BATCH_ATTEMPTS', 3, 1),
+    maxConcurrentUploads: readInt(
+      env,
+      'BILL_BATCH_MAX_CONCURRENT_UPLOADS',
+      2,
+      1,
+    ),
   };
 }

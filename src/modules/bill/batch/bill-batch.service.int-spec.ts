@@ -38,7 +38,12 @@ describe('BillBatchService (PostgreSQL)', () => {
   let householdId: string;
   let otherHouseholdId: string;
 
-  const env: BillBatchEnv = { enabled: true, concurrency: 2, attempts: 3 };
+  const env: BillBatchEnv = {
+    enabled: true,
+    concurrency: 2,
+    attempts: 3,
+    maxConcurrentUploads: 2,
+  };
   let queue: { addBulk: jest.Mock };
   let storage: { put: jest.Mock };
   let quota: { reserveDaily: jest.Mock };

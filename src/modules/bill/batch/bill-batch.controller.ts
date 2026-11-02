@@ -53,6 +53,10 @@ import {
   BillBatchEnabledGuard,
 } from './bill-batch-disabled';
 import {
+  BillBatchBusyFilter,
+  BillBatchUploadSlotGuard,
+} from './bill-batch-upload-slots';
+import {
   BillBatchService,
   BillQuotaExceededException,
 } from './bill-batch.service';
@@ -82,8 +86,10 @@ export class BillBatchController {
 
   @Post('bills/parse-photos')
   @HttpCode(HttpStatus.ACCEPTED)
-  // Counts the first photo; BillBatchService counts the rest.
-  @UseGuards(UserThrottlerGuard)
+  // The slot guard comes first, so a busy refusal is neither buffered nor
+  // counted. UserThrottlerGuard counts the first photo; BillBatchService
+  // counts the rest.
+  @UseGuards(BillBatchUploadSlotGuard, UserThrottlerGuard)
   @UseInterceptors(
     FilesInterceptor('images', MAX_BATCH_FILES, {
       limits: {
@@ -93,7 +99,12 @@ export class BillBatchController {
       },
     }),
   )
-  @UseFilters(AiGatewayErrorFilter, AiUsageLimitFilter, AiHttpExceptionFilter)
+  @UseFilters(
+    BillBatchBusyFilter,
+    AiGatewayErrorFilter,
+    AiUsageLimitFilter,
+    AiHttpExceptionFilter,
+  )
   @ApiOperation({
     summary:
       'Upload 1–20 receipt photos; each is parsed in the background into a draft or a failed bill',
@@ -128,6 +139,8 @@ export class BillBatchController {
     const images = [];
     for (const [index, file] of files.entries()) {
       const image = await prepareFile(file.buffer, index);
+      // Only the prepared copy is kept; the upload can be freed.
+      (file as { buffer?: Buffer }).buffer = undefined;
       images.push({
         buffer: image.buffer,
         mediaType: image.mediaType,

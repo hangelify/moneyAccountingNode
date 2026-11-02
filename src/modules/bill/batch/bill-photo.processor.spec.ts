@@ -13,7 +13,12 @@ import type { BillPhotoJob, BillPhotoJobItem } from './bill-batch.service';
 import { BillPhotoProcessor } from './bill-photo.processor';
 
 describe('BillPhotoProcessor', () => {
-  const env: BillBatchEnv = { enabled: true, concurrency: 4, attempts: 3 };
+  const env: BillBatchEnv = {
+    enabled: true,
+    concurrency: 4,
+    attempts: 3,
+    maxConcurrentUploads: 2,
+  };
   const NOW = 1_800_000_000_000;
 
   let item: BillPhotoJobItem;

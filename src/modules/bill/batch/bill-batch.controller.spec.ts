@@ -15,6 +15,10 @@ import {
   BillBatchDisabledFilter,
   BillBatchEnabledGuard,
 } from './bill-batch-disabled';
+import {
+  BillBatchBusyFilter,
+  BillBatchUploadSlotGuard,
+} from './bill-batch-upload-slots';
 import { BILL_BATCH_DISABLED } from './bill-batch.env';
 import {
   BillBatchService,
@@ -234,6 +238,75 @@ describe('BillBatchController', () => {
       });
     });
 
+    describe('concurrent uploads (2 per process by default)', () => {
+      let image: Buffer;
+      beforeAll(async () => {
+        image = await jpeg();
+      });
+      // Sent when awaited or then-ed.
+      const upload = () =>
+        request(app.getHttpServer())
+          .post(`/households/${HID}/bills/parse-photos`)
+          .attach('images', image, 'a.jpg');
+
+      async function until(cond: () => boolean): Promise<void> {
+        for (let i = 0; i < 200 && !cond(); i++) {
+          await new Promise((r) => setTimeout(r, 10));
+        }
+        expect(cond()).toBe(true);
+      }
+
+      it('answers 503 with Retry-After to a third upload and reads none of it', async () => {
+        let finish!: () => void;
+        const held = new Promise<void>((r) => (finish = r));
+        createBatch.mockImplementation(() => held.then(() => batch));
+
+        const first = upload().then((r) => r);
+        const second = upload().then((r) => r);
+        await until(() => createBatch.mock.calls.length === 2);
+
+        const third = await upload();
+        expect(third.status).toBe(503);
+        expect(third.headers['retry-after']).toBe('5');
+        expect(third.body).toEqual({
+          statusCode: 503,
+          error: 'Service Unavailable',
+          message: 'Too many batch uploads in progress, try again shortly',
+          request_id: null,
+        });
+        expect(createBatch).toHaveBeenCalledTimes(2);
+
+        finish();
+        expect((await first).status).toBe(202);
+        expect((await second).status).toBe(202);
+        // Both slots are free again.
+        createBatch.mockResolvedValue(batch);
+        const results = await Promise.all([
+          upload().then((r) => r),
+          upload().then((r) => r),
+        ]);
+        expect(results.map((r) => r.status)).toEqual([202, 202]);
+      });
+
+      it('releases the slot after a success and after an error', async () => {
+        for (let i = 0; i < 3; i++) {
+          expect((await upload()).status).toBe(202);
+        }
+        createBatch.mockRejectedValue(new Error('boom'));
+        for (let i = 0; i < 3; i++) {
+          expect((await upload()).status).toBe(500);
+        }
+        for (let i = 0; i < 3; i++) {
+          const res = await request(app.getHttpServer())
+            .post(`/households/${HID}/bills/parse-photos`)
+            .attach('images', Buffer.from('plain text'), 'a.txt');
+          expect(res.status).toBe(415);
+        }
+        createBatch.mockResolvedValue(batch);
+        expect((await upload()).status).toBe(202);
+      });
+    });
+
     it('answers a batch of the household', async () => {
       await request(app.getHttpServer())
         .get(`/households/${HID}/bill-batches/${batch.batch_id}`)
@@ -272,15 +345,18 @@ describe('BillBatchController', () => {
           BillBatchController.prototype,
           name,
         )!.value as object;
-        expect(Reflect.getMetadata(GUARDS_METADATA, handler)).toEqual([
-          UserThrottlerGuard,
-        ]);
+        expect(Reflect.getMetadata(GUARDS_METADATA, handler)).toEqual(
+          name === 'parsePhotos'
+            ? [BillBatchUploadSlotGuard, UserThrottlerGuard]
+            : [UserThrottlerGuard],
+        );
         expect(
           Reflect.getMetadata(EXCEPTION_FILTERS_METADATA, BillBatchController),
         ).toEqual([BillBatchDisabledFilter]);
         expect(
           Reflect.getMetadata(EXCEPTION_FILTERS_METADATA, handler),
         ).toEqual([
+          ...(name === 'parsePhotos' ? [BillBatchBusyFilter] : []),
           AiGatewayErrorFilter,
           AiUsageLimitFilter,
           AiHttpExceptionFilter,

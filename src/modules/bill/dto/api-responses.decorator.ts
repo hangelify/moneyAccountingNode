@@ -321,7 +321,13 @@ const BATCH_DISABLED =
   'Batch photo parsing is disabled (BILL_BATCH_ENABLED=false).';
 
 /** Errors shared by parse-photos and retry; every body is AiErrorResponseDto. */
-const batchAiErrors = (limits: string) => [
+const batchAiErrors = (
+  limits: string,
+  unavailable: Parameters<typeof ApiServiceUnavailableResponse>[0] = {
+    type: AiErrorResponseDto,
+    description: BATCH_DISABLED,
+  },
+) => [
   ApiUnauthorizedResponse({
     type: AiErrorResponseDto,
     description: 'Missing or invalid JWT.',
@@ -340,10 +346,7 @@ const batchAiErrors = (limits: string) => [
     },
     description: limits,
   }),
-  ApiServiceUnavailableResponse({
-    type: AiErrorResponseDto,
-    description: BATCH_DISABLED,
-  }),
+  ApiServiceUnavailableResponse(unavailable),
 ];
 
 export const ApiParsePhotosResponses = () =>
@@ -371,6 +374,20 @@ export const ApiParsePhotosResponses = () =>
     }),
     ...batchAiErrors(
       'Per-user AI limit (per minute, or per 24 h counting every photo) or daily AI budget exceeded.',
+      {
+        type: AiErrorResponseDto,
+        headers: {
+          'Retry-After': {
+            description:
+              'Seconds to wait; set (5) only when the server is busy',
+            schema: { type: 'integer' },
+          },
+        },
+        description:
+          `${BATCH_DISABLED} Or too many batch uploads are in progress on ` +
+          'this server (BILL_BATCH_MAX_CONCURRENT_UPLOADS); nothing was read ' +
+          'or counted, retry after Retry-After seconds.',
+      },
     ),
   );
 

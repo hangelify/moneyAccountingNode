@@ -46,7 +46,6 @@ import {
 } from './dto/parsed-bill-response.dto';
 import { CreateBillDto } from './dto/create-bill.dto';
 import { UpdateBillDto } from './dto/update-bill.dto';
-import { BillResponseDto } from './dto/bill-response.dto';
 import {
   BillDetailResponseDto,
   DraftImageResponseDto,
@@ -513,7 +512,10 @@ export class BillController {
 
   @Put(':id')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Update top-level bill fields' })
+  @ApiOperation({
+    summary:
+      'Update any bill (draft, confirmed or duplicate): fields, market and items; omitted fields are kept',
+  })
   @ApiParam({
     name: 'id',
     description: 'Bill unique identifier',
@@ -525,7 +527,7 @@ export class BillController {
     @CurrentHousehold() ctx: HouseholdContext,
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateBillDto,
-  ): Promise<BillResponseDto> {
+  ): Promise<BillDetailResponseDto> {
     return this.billCrud.updateBill(id, ctx.householdId, dto);
   }
 

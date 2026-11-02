@@ -27,7 +27,11 @@ import { Currency } from '../../types/currency.enum';
 import { ListBillsQueryDto } from './dto/list-bills-query.dto';
 import { CreateBillDto, CreateBillItemDto } from './dto/create-bill.dto';
 import { UpdateBillDto } from './dto/update-bill.dto';
-import { ConfirmBillDto, ConfirmBillItemDto } from './dto/confirm-bill.dto';
+import {
+  ConfirmBillDto,
+  ConfirmBillItemDto,
+  NewMarketDto,
+} from './dto/confirm-bill.dto';
 import type {
   ParsedBillResponseDto,
   ParsedBillItemResponseDto,
@@ -354,48 +358,56 @@ export class BillCrudService {
     id: string,
     householdId: string,
     dto: UpdateBillDto,
-  ): Promise<BillResponseDto> {
-    const bill = await this.billRepository.findOne(
-      { id, household: { id: householdId }, deleted_at: null },
-      { populate: ['market', 'billSubCategories'] },
-    );
-    if (!bill) throw new NotFoundException(`Bill with ID ${id} not found`);
+  ): Promise<BillDetailResponseDto> {
+    if (dto.market_id !== undefined && dto.new_market !== undefined) {
+      throw new BadRequestException(
+        'Send either market_id or new_market, not both',
+      );
+    }
+    // Validate before touching the bill: a rejected update keeps its items.
+    if (dto.items) this.checkLineIds(dto.items);
+    const subCats = dto.items
+      ? await this.findSubCategories(householdId, dto.items)
+      : new Map<string, SubCategory>();
 
-    if (dto.market_id !== undefined) {
-      const market = await this.marketRepository.findOne({
-        id: dto.market_id,
-        household: { id: householdId },
-        deleted_at: null,
-      });
-      if (!market) {
-        throw new BadRequestException(
-          `Market with ID ${dto.market_id} not found or belongs to another user`,
-        );
+    const updated = await this.em.transactional(async (em) => {
+      const bill = await em.findOne(
+        Bill,
+        { id, household: { id: householdId }, deleted_at: null },
+        { lockMode: LockMode.PESSIMISTIC_WRITE },
+      );
+      if (!bill) throw new NotFoundException(`Bill with ID ${id} not found`);
+      // Not joined above: FOR UPDATE cannot lock the nullable side of a join.
+      await em.populate(bill, ['market']);
+
+      const market = await this.resolveMarket(em, householdId, dto);
+      if (market) bill.market = market;
+      if (dto.bill_date !== undefined) {
+        bill.bill_date = dto.bill_date;
+        bill.bill_date_inferred = false;
       }
-      bill.market = market;
-    }
-    if (dto.bill_date !== undefined) {
-      bill.bill_date = dto.bill_date;
-      bill.bill_date_inferred = false;
-    }
-    if (dto.currency !== undefined) bill.currency = dto.currency;
-    if (dto.total_amount !== undefined) bill.amount = dto.total_amount;
-    if (dto.description !== undefined) bill.description = dto.description;
-    if (dto.fiscal_register_id !== undefined)
-      bill.fiscal_register_id = dto.fiscal_register_id;
-    if (dto.fiscal_receipt_number !== undefined)
-      bill.fiscal_receipt_number = dto.fiscal_receipt_number;
-    if (dto.purchase_time !== undefined) bill.purchase_time = dto.purchase_time;
+      if (dto.currency !== undefined) bill.currency = dto.currency;
+      if (dto.total_amount !== undefined) bill.amount = dto.total_amount;
+      if (dto.description !== undefined) bill.description = dto.description;
+      if (dto.fiscal_register_id !== undefined)
+        bill.fiscal_register_id = dto.fiscal_register_id;
+      if (dto.fiscal_receipt_number !== undefined)
+        bill.fiscal_receipt_number = dto.fiscal_receipt_number;
+      if (dto.purchase_time !== undefined)
+        bill.purchase_time = dto.purchase_time;
 
-    await this.em.persist(bill).flush();
-    await this.warmRate(householdId, bill);
-    const { household_currency, household_amount } = (
-      await this.conversion.forBills(householdId, [id])
-    ).get(id)!;
+      const lines = dto.items
+        ? await this.applyItems(em, bill, dto.items, subCats)
+        : await em.find(BillSubCategory, { bill: bill.id });
+      await em.flush();
+      await em.populate(lines, ['sub_category.category']);
+      return { bill, dto: this.toDetailDto(bill, lines) };
+    });
+    await this.warmRate(householdId, updated.bill);
     return {
-      ...this.toListDto(bill, bill.billSubCategories.getItems()),
-      household_currency,
-      household_amount,
+      ...updated.dto,
+      ...(await this.conversion.forBills(householdId, [id])).get(id),
+      ...(await this.duplicateInfo(householdId, updated.bill)),
     };
   }
 
@@ -593,14 +605,7 @@ export class BillCrudService {
     dto: ConfirmBillDto,
   ): Promise<BillDetailResponseDto> {
     // Validate before touching the draft: a rejected confirm keeps its items.
-    const lineIds = new Set<string>();
-    for (const { id: lineId } of dto.items) {
-      if (!lineId) continue;
-      if (lineIds.has(lineId)) {
-        throw new BadRequestException(`Duplicate item id ${lineId} in items`);
-      }
-      lineIds.add(lineId);
-    }
+    this.checkLineIds(dto.items);
     const subCats = await this.findSubCategories(householdId, dto.items);
 
     const confirmed = await this.em.transactional(async (em) => {
@@ -619,29 +624,9 @@ export class BillCrudService {
       bill.confirmed_by = em.getReference(User, userId);
       bill.confirmed_at = new Date();
 
-      // Resolve market
-      if (dto.market_id) {
-        const market = await em.findOne(Market, {
-          id: dto.market_id,
-          household: { id: householdId },
-          deleted_at: null,
-        });
-        if (!market) {
-          throw new BadRequestException(
-            `Market with ID ${dto.market_id} not found or belongs to another user`,
-          );
-        }
-        bill.market = market;
-      } else if (dto.new_market) {
-        bill.market = await this.findOrCreateMarket(
-          em,
-          householdId,
-          dto.new_market,
-        );
-      } else {
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-        bill.market = null as any;
-      }
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+      bill.market =
+        (await this.resolveMarket(em, householdId, dto)) ?? (null as any);
 
       // Apply overrides
       bill.bill_date = dto.bill_date;
@@ -656,7 +641,7 @@ export class BillCrudService {
       if (dto.purchase_time !== undefined)
         bill.purchase_time = dto.purchase_time;
 
-      const bscEntities = await this.confirmItems(em, bill, dto.items, subCats);
+      const bscEntities = await this.applyItems(em, bill, dto.items, subCats);
 
       if (dto.duplicate_of_id) {
         await this.duplicates.linkAsDuplicate(
@@ -789,12 +774,52 @@ export class BillCrudService {
     return byId;
   }
 
+  /** Throws 400 when two items name the same bill line. */
+  private checkLineIds(items: { id?: string }[]): void {
+    const lineIds = new Set<string>();
+    for (const { id: lineId } of items) {
+      if (!lineId) continue;
+      if (lineIds.has(lineId)) {
+        throw new BadRequestException(`Duplicate item id ${lineId} in items`);
+      }
+      lineIds.add(lineId);
+    }
+  }
+
   /**
-   * Updates the draft lines named by id in place, adds the lines without
+   * The market named by `market_id` (400 when it is not the household's) or
+   * found or created from `new_market`; undefined when neither is given.
+   */
+  private async resolveMarket(
+    em: EntityManager,
+    householdId: string,
+    dto: { market_id?: string; new_market?: NewMarketDto },
+  ): Promise<Market | undefined> {
+    if (dto.market_id) {
+      const market = await em.findOne(Market, {
+        id: dto.market_id,
+        household: { id: householdId },
+        deleted_at: null,
+      });
+      if (!market) {
+        throw new BadRequestException(
+          `Market with ID ${dto.market_id} not found or belongs to another user`,
+        );
+      }
+      return market;
+    }
+    if (dto.new_market) {
+      return this.findOrCreateMarket(em, householdId, dto.new_market);
+    }
+    return undefined;
+  }
+
+  /**
+   * Updates the bill lines named by id in place, adds the lines without
    * one and removes the rest. A kept line keeps what the model read (name,
    * unit, confidence) unless the user changed it.
    */
-  private async confirmItems(
+  private async applyItems(
     em: EntityManager,
     bill: Bill,
     items: ConfirmBillItemDto[],
@@ -812,7 +837,7 @@ export class BillCrudService {
         const draftLine = drafted.get(item.id);
         if (!draftLine) {
           throw new BadRequestException(
-            `Item with ID ${item.id} is not a line of this draft`,
+            `Item with ID ${item.id} is not a line of this bill`,
           );
         }
         drafted.delete(item.id);

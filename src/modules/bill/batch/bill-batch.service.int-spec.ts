@@ -24,6 +24,7 @@ import { StubProvider } from '../../exchange-rate/testing/stub-exchange-rate.pro
 import {
   BillBatchService,
   BillQuotaExceededException,
+  PROCESSING_FAILED_MESSAGE,
   QUEUE_FAILED_MESSAGE,
 } from './bill-batch.service';
 import type { BillBatchEnv } from './bill-batch.env';
@@ -44,7 +45,7 @@ describe('BillBatchService (PostgreSQL)', () => {
     attempts: 3,
     maxConcurrentUploads: 2,
   };
-  let queue: { addBulk: jest.Mock };
+  let queue: { addBulk: jest.Mock; getJob: jest.Mock };
   let storage: { put: jest.Mock };
   let quota: { reserveDaily: jest.Mock };
   let gateway: { assertWithinBudget: jest.Mock };
@@ -118,7 +119,10 @@ describe('BillBatchService (PostgreSQL)', () => {
   }
 
   beforeEach(() => {
-    queue = { addBulk: jest.fn().mockResolvedValue([]) };
+    queue = {
+      addBulk: jest.fn().mockResolvedValue([]),
+      getJob: jest.fn().mockResolvedValue(undefined),
+    };
     storage = {
       put: jest.fn((_buf: Buffer, _type: string, hid: string) =>
         Promise.resolve({ key: `ai/images/${hid}/${randomUUID()}.jpg` }),
@@ -428,6 +432,101 @@ describe('BillBatchService (PostgreSQL)', () => {
         billId,
         completion: { total: 1, done: 0, failed: 1 },
       });
+    });
+  });
+
+  describe('sweepStaleItems', () => {
+    const MIN = 60_000;
+
+    async function batchAged(n: number, ageMs: number) {
+      const res = await service.createBatch({
+        householdId,
+        userId,
+        images: images(n),
+      });
+      await orm.em
+        .fork()
+        .nativeUpdate(
+          BillBatchItem,
+          { batch: res.batch_id },
+          { updated_at: new Date(Date.now() - ageMs) },
+        );
+      publisher.publish.mockClear();
+      return res;
+    }
+
+    const jobIn = (state: string) => ({
+      getState: jest.fn().mockResolvedValue(state),
+    });
+
+    it('fails a stale item whose job is gone, with a failed bill and events', async () => {
+      const res = await batchAged(1, 20 * MIN);
+      const [item] = res.items;
+      await orm.em
+        .fork()
+        .nativeUpdate(
+          BillBatchItem,
+          { id: item.id },
+          { status: BillBatchItemStatus.PROCESSING },
+        );
+
+      expect(await service.sweepStaleItems()).toBeGreaterThanOrEqual(1);
+
+      expect(queue.getJob).toHaveBeenCalledWith(item.id);
+      const [stored] = await itemsOf(res.batch_id);
+      expect(stored.status).toBe(BillBatchItemStatus.FAILED);
+      expect(stored.updated_at.getTime()).toBeGreaterThan(Date.now() - MIN);
+      expect(stored.bill?.status).toBe(BillStatus.FAILED);
+      expect(stored.bill?.parse_error_code).toBe(BillParseErrorCode.AI_FAILED);
+      expect(stored.bill?.parse_error_message).toBe(PROCESSING_FAILED_MESSAGE);
+      const events = (
+        publisher.publish.mock.calls as [
+          string,
+          { type: string; data: { batch_id: string } },
+        ][]
+      ).filter((c) => c[1].data.batch_id === res.batch_id);
+      expect(events.map((c) => [c[0], c[1].type])).toEqual([
+        [householdId, 'item.failed'],
+        [householdId, 'batch.completed'],
+      ]);
+    });
+
+    it('fails a stale item whose job already failed or completed', async () => {
+      const res = await batchAged(2, 20 * MIN);
+      queue.getJob.mockImplementation((id: string) =>
+        Promise.resolve(jobIn(id === res.items[0].id ? 'failed' : 'completed')),
+      );
+
+      await service.sweepStaleItems();
+
+      expect((await itemsOf(res.batch_id)).map((i) => i.status)).toEqual([
+        BillBatchItemStatus.FAILED,
+        BillBatchItemStatus.FAILED,
+      ]);
+    });
+
+    it.each(['waiting', 'delayed', 'active', 'prioritized'])(
+      'leaves a stale item whose job is %s',
+      async (state) => {
+        const res = await batchAged(1, 20 * MIN);
+        queue.getJob.mockResolvedValue(jobIn(state));
+
+        await service.sweepStaleItems();
+
+        const [stored] = await itemsOf(res.batch_id);
+        expect(stored.status).toBe(BillBatchItemStatus.QUEUED);
+        expect(stored.bill).toBeNull();
+      },
+    );
+
+    it('leaves an item updated within the last 15 minutes', async () => {
+      const res = await batchAged(1, 5 * MIN);
+
+      await service.sweepStaleItems();
+
+      expect(queue.getJob).not.toHaveBeenCalledWith(res.items[0].id);
+      const [stored] = await itemsOf(res.batch_id);
+      expect(stored.status).toBe(BillBatchItemStatus.QUEUED);
     });
   });
 

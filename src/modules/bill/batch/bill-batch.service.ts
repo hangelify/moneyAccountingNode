@@ -35,6 +35,19 @@ import { BillBatchResponseDto } from './dto/bill-batch-response.dto';
 
 export const QUEUE_FAILED_MESSAGE =
   'The photo could not be queued; retry later';
+export const PROCESSING_FAILED_MESSAGE = 'Processing failed; retry later';
+
+/** An unfinished item untouched this long, without a live job, is stuck. */
+export const STALE_ITEM_MS = 15 * 60_000;
+const SWEEP_BATCH_SIZE = 200;
+/** BullMQ states in which the item's job will still run. */
+const LIVE_JOB_STATES = new Set([
+  'waiting',
+  'active',
+  'delayed',
+  'prioritized',
+  'waiting-children',
+]);
 
 const JOB_RETENTION_SEC = 86_400;
 const BACKOFF_MS = 5_000;
@@ -430,39 +443,102 @@ export class BillBatchService {
     batchId: string,
     items: BillBatchItem[],
   ): Promise<void> {
-    const createdBy = items[0]?.batch.created_by?.id ?? null;
-    let completion: BatchCompletion | null = null;
+    const createdById = items[0]?.batch.created_by?.id ?? null;
     for (const item of items) {
-      const res = await this.markItemFailed(item.id, {
-        code: BillParseErrorCode.AI_FAILED,
-        message: QUEUE_FAILED_MESSAGE,
-      });
-      if (!res.changed) continue;
-      completion ??= res.completion;
-      await this.events.publish(householdId, {
-        type: 'item.failed',
-        data: {
-          batch_id: batchId,
-          item_id: item.id,
+      await this.failAndAnnounce(
+        {
+          id: item.id,
           position: item.position,
-          status: BillBatchItemStatus.FAILED,
-          created_by_user_id: createdBy,
-          bill_id: res.billId!,
-          parse_error_code: BillParseErrorCode.AI_FAILED,
-          parse_error_message: QUEUE_FAILED_MESSAGE,
+          batchId,
+          householdId,
+          createdById,
         },
-      });
+        QUEUE_FAILED_MESSAGE,
+      );
     }
-    if (completion) {
-      await this.events.publish(householdId, {
+  }
+
+  /**
+   * Fails items left `queued`/`processing` whose job will never run: the
+   * worker's last DB write failed, or the process stopped between the batch
+   * commit and queueing its jobs. An item counts as stuck once untouched for
+   * STALE_ITEM_MS and its job (id = item id) is missing or finished. Safe to
+   * run on several instances: markItemFailed changes an item once.
+   * Returns the number of items it failed.
+   */
+  async sweepStaleItems(now = new Date()): Promise<number> {
+    const cutoff = new Date(now.getTime() - STALE_ITEM_MS);
+    const stale = await this.em.fork().find(
+      BillBatchItem,
+      { status: { $in: UNFINISHED }, updated_at: { $lt: cutoff } },
+      {
+        populate: ['batch'],
+        orderBy: { updated_at: 'asc' },
+        limit: SWEEP_BATCH_SIZE,
+      },
+    );
+    let failed = 0;
+    for (const item of stale) {
+      const job = await this.queue.getJob(item.id);
+      if (job && LIVE_JOB_STATES.has(await job.getState())) continue;
+      const changed = await this.failAndAnnounce(
+        {
+          id: item.id,
+          position: item.position,
+          batchId: item.batch.id,
+          householdId: item.batch.household.id,
+          createdById: item.batch.created_by?.id ?? null,
+        },
+        PROCESSING_FAILED_MESSAGE,
+      );
+      if (changed) failed++;
+    }
+    return failed;
+  }
+
+  /**
+   * Fails one unfinished item with an `ai_failed` bill and publishes
+   * `item.failed`, then `batch.completed` if it was the batch's last item.
+   */
+  private async failAndAnnounce(
+    item: {
+      id: string;
+      position: number;
+      batchId: string;
+      householdId: string;
+      createdById: string | null;
+    },
+    message: string,
+  ): Promise<boolean> {
+    const res = await this.markItemFailed(item.id, {
+      code: BillParseErrorCode.AI_FAILED,
+      message,
+    });
+    if (!res.changed) return false;
+    await this.events.publish(item.householdId, {
+      type: 'item.failed',
+      data: {
+        batch_id: item.batchId,
+        item_id: item.id,
+        position: item.position,
+        status: BillBatchItemStatus.FAILED,
+        created_by_user_id: item.createdById,
+        bill_id: res.billId!,
+        parse_error_code: BillParseErrorCode.AI_FAILED,
+        parse_error_message: message,
+      },
+    });
+    if (res.completion) {
+      await this.events.publish(item.householdId, {
         type: 'batch.completed',
         data: {
-          batch_id: batchId,
-          ...completion,
-          created_by_user_id: createdBy,
+          batch_id: item.batchId,
+          ...res.completion,
+          created_by_user_id: item.createdById,
         },
       });
     }
+    return true;
   }
 
   private async moveUnfinished(

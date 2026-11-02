@@ -17,7 +17,10 @@ import { BillPhotoIngestService } from '../bill-photo-ingest.service';
 import type { IngestResult } from '../bill-photo-ingest.service';
 import { BILL_BATCH_ENV, BILL_PHOTO_QUEUE } from './bill-batch.env';
 import type { BillBatchEnv } from './bill-batch.env';
-import { BillBatchService } from './bill-batch.service';
+import {
+  BillBatchService,
+  PROCESSING_FAILED_MESSAGE,
+} from './bill-batch.service';
 import type {
   BatchCompletion,
   BillPhotoJob,
@@ -32,7 +35,6 @@ const SAVE_FAILED_MESSAGE =
   'The bill was recognized but the draft could not be saved; enter it manually';
 const BUDGET_MESSAGE = 'Daily AI budget reached; retry tomorrow';
 const UNAVAILABLE_MESSAGE = 'The AI service is unavailable; retry later';
-const PROCESSING_FAILED_MESSAGE = 'Processing failed; retry later';
 
 const FINISHED = [BillBatchItemStatus.DONE, BillBatchItemStatus.FAILED];
 

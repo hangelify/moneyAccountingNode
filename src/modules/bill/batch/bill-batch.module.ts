@@ -28,6 +28,7 @@ import {
   BillEventsHub,
 } from './bill-events.hub';
 import { BillPhotoProcessor } from './bill-photo.processor';
+import { BillBatchSweeper } from './bill-batch.sweeper';
 
 const log = new Logger('BillBatchModule');
 
@@ -100,6 +101,7 @@ export class BillBatchModule {
         BillEventsPublisher,
         BillEventsHub,
         BillBatchService,
+        BillBatchSweeper,
         // The worker; registered only here, so a disabled app runs no jobs.
         BillPhotoProcessor,
       ],

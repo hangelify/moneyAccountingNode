@@ -3,6 +3,7 @@ import { BILL_BATCH_DISABLED, BILL_BATCH_ENV } from './bill-batch.env';
 import { BillBatchService } from './bill-batch.service';
 import { BillEventsHub } from './bill-events.hub';
 import { BillPhotoProcessor } from './bill-photo.processor';
+import { BillBatchSweeper } from './bill-batch.sweeper';
 import { BillBatchController } from './bill-batch.controller';
 import { HouseholdMemberGuard } from '../../household/guards/household-member.guard';
 
@@ -37,6 +38,7 @@ describe('BillBatchModule.register', () => {
     );
     expect(mod.exports).not.toContain(BILL_BATCH_DISABLED);
     expect(mod.providers).toContain(BillPhotoProcessor);
+    expect(mod.providers).toContain(BillBatchSweeper);
     expect(mod.controllers).toEqual([BillBatchController]);
   });
 });

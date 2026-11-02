@@ -66,7 +66,7 @@ services:
 
   # Development SMTP server: catches every email, web UI on :8025.
   mailpit:
-    image: axllent/mailpit:v1.31.5
+    image: axllent/mailpit:v1.32.0
     container_name: accounting_mailpit
     restart: unless-stopped
     ports:

@@ -26,11 +26,10 @@ import {
 
 const log = new Logger('BillBatchModule');
 
-function eventsRedis(): Redis {
-  // Events are best effort: fail fast rather than hold a worker on a retry.
+function eventsRedis(maxRetriesPerRequest: number | null): Redis {
   const redis = new Redis({
     ...redisConnectionOptions(),
-    maxRetriesPerRequest: 1,
+    maxRetriesPerRequest,
   });
   redis.on('error', (err: Error) => log.warn(err.message));
   return redis;
@@ -72,8 +71,13 @@ export class BillBatchModule {
       ],
       providers: [
         envProvider,
-        { provide: BILL_EVENTS_REDIS, useFactory: eventsRedis },
-        { provide: BILL_EVENTS_SUBSCRIBER_FACTORY, useValue: eventsRedis },
+        // Publishing is best effort: fail fast rather than hold a worker.
+        { provide: BILL_EVENTS_REDIS, useFactory: () => eventsRedis(1) },
+        // The subscription waits out a Redis outage instead of failing.
+        {
+          provide: BILL_EVENTS_SUBSCRIBER_FACTORY,
+          useValue: () => eventsRedis(null),
+        },
         BillEventsPublisher,
         BillEventsHub,
         BillBatchService,

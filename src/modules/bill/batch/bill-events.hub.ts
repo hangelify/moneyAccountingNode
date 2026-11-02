@@ -73,12 +73,14 @@ export class BillEventsHub implements OnModuleDestroy {
     subscriber.on('pmessage', (_pattern, channel, message) =>
       this.dispatch(channel, message),
     );
-    // ioredis re-subscribes by itself after a reconnect.
-    subscriber
-      .psubscribe(BILL_EVENTS_PATTERN)
-      .catch((err: Error) =>
-        this.log.warn(`Could not subscribe to bill events: ${err.message}`),
-      );
+    // ioredis re-subscribes after a reconnect only once PSUBSCRIBE was
+    // acknowledged; if it failed, drop the connection so the next stream()
+    // opens a new one and subscribes again.
+    subscriber.psubscribe(BILL_EVENTS_PATTERN).catch((err: Error) => {
+      this.log.warn(`Could not subscribe to bill events: ${err.message}`);
+      if (this.subscriber === subscriber) this.subscriber = undefined;
+      subscriber.quit().catch(() => undefined);
+    });
   }
 
   private dispatch(channel: string, message: string): void {

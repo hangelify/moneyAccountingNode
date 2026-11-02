@@ -12,9 +12,13 @@ class FakeSubscriber implements BillEventsSubscriber {
     message: string,
   ) => void;
 
+  constructor(private readonly failSubscribe = false) {}
+
   psubscribe(pattern: string): Promise<unknown> {
     this.patterns.push(pattern);
-    return Promise.resolve(1);
+    return this.failSubscribe
+      ? Promise.reject(new Error('Connection is closed.'))
+      : Promise.resolve(1);
   }
 
   on(
@@ -98,6 +102,24 @@ describe('BillEventsHub', () => {
     fake.emit('bill-events:h-a', '{not json');
     fake.emit('bill-events:h-a', JSON.stringify(event('batch-a')));
     expect(seen).toEqual([event('batch-a')]);
+  });
+
+  it('opens a new connection after the subscription failed', async () => {
+    const opened = [new FakeSubscriber(true), new FakeSubscriber()];
+    let next = 0;
+    const retrying = new BillEventsHub(() => opened[next++]);
+
+    const s1 = retrying.stream('h-a').subscribe();
+    await new Promise((r) => setImmediate(r));
+    expect(opened[0].quitCalls).toBe(1);
+
+    const seen: BillEvent[] = [];
+    retrying.stream('h-a').subscribe((e) => seen.push(e));
+    expect(next).toBe(2);
+    expect(opened[1].patterns).toEqual(['bill-events:*']);
+    opened[1].emit('bill-events:h-a', JSON.stringify(event('batch-a')));
+    expect(seen).toEqual([event('batch-a')]);
+    s1.unsubscribe();
   });
 
   it('closes the connection and completes streams on shutdown', async () => {

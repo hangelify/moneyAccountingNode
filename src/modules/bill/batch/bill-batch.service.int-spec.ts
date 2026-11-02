@@ -393,7 +393,7 @@ describe('BillBatchService (PostgreSQL)', () => {
 
       const res = await service.retry(householdId, userId, id);
 
-      expect(quota.reserveDaily).toHaveBeenCalledWith(userId, 1);
+      expect(quota.reserveDaily).toHaveBeenCalledWith(userId, 0);
       expect(gateway.assertWithinBudget).toHaveBeenCalledWith(userId);
       expect(res.total).toBe(1);
       expect(res.items[0].status).toBe('queued');

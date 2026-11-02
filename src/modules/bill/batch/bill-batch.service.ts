@@ -155,7 +155,8 @@ export class BillBatchService {
         .findOne(Bill, { id: billId, household: householdId }),
       billId,
     );
-    await this.assertQuota(userId, 1);
+    // UserThrottlerGuard on the route already counted the one photo.
+    await this.assertQuota(userId, 0);
 
     const { batch, items } = await this.em.fork().transactional(async (em) => {
       const bill = this.assertRetriable(

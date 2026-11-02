@@ -6,6 +6,7 @@ import {
   IsOptional,
   IsInt,
   IsPositive,
+  NotEquals,
   IsArray,
   ArrayMinSize,
   ArrayMaxSize,
@@ -42,11 +43,12 @@ export class CreateBillItemDto {
   @ApiProperty({
     example: 8.99,
     description:
-      'Amount paid for the item after discounts; the items of a bill add up to its total_amount',
+      'Amount paid for the item after discounts; negative for a sales or discount line. The items of a bill add up to its total_amount',
   })
   @IsNumber()
   @MaxDecimalPlaces(2)
-  @IsPositive()
+  @NotEquals(0)
+  @Min(-MAX_MONEY_AMOUNT)
   @Max(MAX_MONEY_AMOUNT)
   amount!: number;
 

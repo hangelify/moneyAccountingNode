@@ -737,7 +737,8 @@ export class BillCrudService {
   /**
    * Never throws: the write stands even if the look-alike lookup fails. A
    * draft whose date was inferred has no reliable date, so only its receipt
-   * ids can match.
+   * ids can match. A failed bill always has an inferred date, so the same
+   * applies to it.
    */
   private async candidatesOf(
     householdId: string,
@@ -750,7 +751,9 @@ export class BillCrudService {
         {
           excludeBillId: bill.id,
           fiscalOnly:
-            bill.status === BillStatus.DRAFT && bill.bill_date_inferred,
+            (bill.status === BillStatus.DRAFT ||
+              bill.status === BillStatus.FAILED) &&
+            bill.bill_date_inferred,
         },
       );
     } catch (err) {

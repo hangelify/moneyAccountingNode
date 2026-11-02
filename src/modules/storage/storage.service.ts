@@ -6,6 +6,7 @@ import {
   CreateBucketCommand,
   HeadBucketCommand,
   GetObjectCommand,
+  type GetObjectCommandOutput,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { createHash } from 'crypto';
@@ -24,6 +25,8 @@ export interface StorageService {
     householdId?: string,
   ): Promise<{ key: string }>;
   exists(key: string): Promise<boolean>;
+  /** Reads a stored image back; throws when the key does not exist. */
+  get(key: string): Promise<{ buffer: Buffer; mediaType: ImageMediaType }>;
   getSignedUrl(key: string, expiresInSec?: number): Promise<string>;
 }
 
@@ -35,6 +38,22 @@ const EXTENSION_MAP: Record<ImageMediaType, string> = {
   'image/jpeg': 'jpg',
   'image/webp': 'webp',
 };
+
+function resolveMediaType(
+  contentType: string | undefined,
+  key: string,
+): ImageMediaType {
+  if (contentType && Object.hasOwn(EXTENSION_MAP, contentType)) {
+    return contentType as ImageMediaType;
+  }
+  const ext = key.split('.').pop()?.toLowerCase();
+  for (const [type, e] of Object.entries(EXTENSION_MAP)) {
+    if (e === ext || (ext === 'jpeg' && e === 'jpg')) {
+      return type as ImageMediaType;
+    }
+  }
+  throw new Error(`Unsupported stored image type for key: ${key}`);
+}
 
 function isNotFoundError(err: unknown): boolean {
   if (typeof err !== 'object' || err === null) {
@@ -115,6 +134,27 @@ export class S3StorageService implements StorageService {
       }
       throw err;
     }
+  }
+
+  async get(
+    key: string,
+  ): Promise<{ buffer: Buffer; mediaType: ImageMediaType }> {
+    let res: GetObjectCommandOutput;
+    try {
+      res = await this.client.send(
+        new GetObjectCommand({ Bucket: this.bucket, Key: key }),
+      );
+    } catch (err: unknown) {
+      if (isNotFoundError(err)) {
+        throw new Error(`Stored image not found: ${key}`);
+      }
+      throw err;
+    }
+    if (!res.Body) {
+      throw new Error(`Stored image not found: ${key}`);
+    }
+    const buffer = Buffer.from(await res.Body.transformToByteArray());
+    return { buffer, mediaType: resolveMediaType(res.ContentType, key) };
   }
 
   async getSignedUrl(key: string, expiresInSec = 900): Promise<string> {

@@ -211,6 +211,7 @@ describe('AiGatewayService', () => {
     mockStorage = {
       put: putSpy,
       exists: jest.fn().mockResolvedValue(true),
+      get: jest.fn(),
       getSignedUrl: jest.fn().mockResolvedValue('https://signed.example/x'),
     };
   });

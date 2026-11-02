@@ -34,8 +34,6 @@ export class BillParseCategorizeTask extends AiTask<
   ]);
   readonly inputSchema = InputSchema;
   readonly outputSchema = ParsedAndCategorizedBillSchema;
-  override readonly modelOverrides = { anthropic: 'claude-sonnet-4-6' };
-  override readonly maxOutputTokens = 4096;
   override readonly temperature = 0;
 
   buildRequest(input: Input): Promise<TaskRequest> {

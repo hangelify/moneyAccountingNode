@@ -10,7 +10,7 @@ import { LlmRequest, LlmResponse } from '../types/llm-request';
 import { readOptionalKey, readModelWhenConfigured } from './provider.env';
 import { toUsage } from './usage';
 import { withRetry } from '../internal/retry';
-import { AI_CALL_CONFIG } from '../internal/ai-call-config';
+import { AI_CALL_CONFIG, readInt } from '../internal/ai-call-config';
 import type { AiCallConfig } from '../internal/ai-call-config';
 import { isTransient, retryAfterMs } from '../internal/transient';
 import {
@@ -20,12 +20,15 @@ import {
 } from '../internal/error-classifier';
 import { toAnthropicOutputSchema } from '../internal/provider-json-schema';
 
+const DEFAULT_MAX_OUTPUT_TOKENS = 16_000;
+
 @Injectable()
 export class AnthropicProvider implements LlmProvider {
   readonly name: ProviderName = 'anthropic';
   readonly capabilities = new Set<Capability>(['text', 'vision', 'json']);
   readonly isConfigured: boolean;
   readonly defaultModel: string;
+  private readonly maxOutputTokens: number;
   private readonly client?: Anthropic;
 
   constructor(@Inject(AI_CALL_CONFIG) private readonly config: AiCallConfig) {
@@ -33,6 +36,14 @@ export class AnthropicProvider implements LlmProvider {
     this.isConfigured = !!key;
     this.defaultModel =
       readModelWhenConfigured('ANTHROPIC_API_KEY', 'ANTHROPIC_MODEL') ?? '';
+    // Thinking counts toward the limit on current models, so it leaves room
+    // for thinking as well as the answer.
+    this.maxOutputTokens = readInt(
+      process.env,
+      'ANTHROPIC_MAX_OUTPUT_TOKENS',
+      DEFAULT_MAX_OUTPUT_TOKENS,
+      1,
+    );
     if (key) this.client = new Anthropic({ apiKey: key, maxRetries: 0 });
   }
 
@@ -76,7 +87,7 @@ export class AnthropicProvider implements LlmProvider {
     // Opus 5.5 and Sonnet 5.5 also reject a forced tool call.
     const body: Record<string, unknown> = {
       model,
-      max_tokens: req.maxOutputTokens ?? 4096,
+      max_tokens: req.maxOutputTokens ?? this.maxOutputTokens,
       system,
       messages,
     };

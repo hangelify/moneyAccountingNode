@@ -44,6 +44,19 @@ export interface BillPhotoJob {
   itemId: string;
 }
 
+/** What the worker needs of an item and its batch. */
+export interface BillPhotoJobItem {
+  id: string;
+  batchId: string;
+  position: number;
+  status: BillBatchItemStatus;
+  imageKey: string;
+  imageSha256: string;
+  householdId: string;
+  /** Null once the uploader's account is deleted. */
+  createdById: string | null;
+}
+
 /** The daily AI quota cannot cover the batch; the controller sets Retry-After. */
 export class BillQuotaExceededException extends ThrottlerException {
   constructor(
@@ -175,6 +188,23 @@ export class BillBatchService {
     });
     await this.enqueue(householdId, batch.id, items);
     return this.getBatch(householdId, batch.id);
+  }
+
+  async findItemForJob(itemId: string): Promise<BillPhotoJobItem | null> {
+    const item = await this.em
+      .fork()
+      .findOne(BillBatchItem, itemId, { populate: ['batch'] });
+    if (!item) return null;
+    return {
+      id: item.id,
+      batchId: item.batch.id,
+      position: item.position,
+      status: item.status,
+      imageKey: item.image_key,
+      imageSha256: item.image_sha256,
+      householdId: item.batch.household.id,
+      createdById: item.batch.created_by?.id ?? null,
+    };
   }
 
   async markItemProcessing(itemId: string): Promise<{ changed: boolean }> {

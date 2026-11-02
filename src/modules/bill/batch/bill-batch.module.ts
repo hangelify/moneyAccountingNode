@@ -23,6 +23,7 @@ import {
   BILL_EVENTS_SUBSCRIBER_FACTORY,
   BillEventsHub,
 } from './bill-events.hub';
+import { BillPhotoProcessor } from './bill-photo.processor';
 
 const log = new Logger('BillBatchModule');
 
@@ -36,7 +37,7 @@ function eventsRedis(maxRetriesPerRequest: number | null): Redis {
 }
 
 /**
- * Batch photo parsing: the BullMQ queue, events and BillBatchService. With
+ * Batch photo parsing: the BullMQ queue and worker, events and BillBatchService. With
  * BILL_BATCH_ENABLED=false nothing touches Redis; only BILL_BATCH_DISABLED is
  * provided and the batch endpoints answer 503.
  */
@@ -81,6 +82,8 @@ export class BillBatchModule {
         BillEventsPublisher,
         BillEventsHub,
         BillBatchService,
+        // The worker; registered only here, so a disabled app runs no jobs.
+        BillPhotoProcessor,
       ],
       exports: [
         BILL_BATCH_ENV,

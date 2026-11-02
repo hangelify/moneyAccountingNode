@@ -341,6 +341,27 @@ describe('BillBatchService (PostgreSQL)', () => {
       });
     });
 
+    it('loads an item with its batch household and creator for a job', async () => {
+      const res = await service.createBatch({
+        householdId,
+        userId,
+        images: images(2),
+      });
+      const second = (await itemsOf(res.batch_id))[1];
+
+      expect(await service.findItemForJob(second.id)).toEqual({
+        id: second.id,
+        batchId: res.batch_id,
+        position: 1,
+        status: BillBatchItemStatus.QUEUED,
+        imageKey: second.image_key,
+        imageSha256: second.image_sha256,
+        householdId,
+        createdById: userId,
+      });
+      expect(await service.findItemForJob(randomUUID())).toBeNull();
+    });
+
     it('keeps a given bill instead of creating one', async () => {
       const res = await service.createBatch({
         householdId,

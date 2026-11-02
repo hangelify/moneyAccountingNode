@@ -13,6 +13,7 @@ import { BillParserTask } from './tasks/bill-parser.task';
 import { BillParseCategorizeTask } from './tasks/bill-parse-categorize.task';
 import { BillAiOrchestrator } from './bill-ai.orchestrator';
 import { BillPhotoService } from './bill-photo.service';
+import { BillPhotoIngestService } from './bill-photo-ingest.service';
 import { BillCrudService } from './bill-crud.service';
 import { BillDuplicatesService } from './bill-duplicates.service';
 import { BillDashboardService } from './bill-dashboard.service';
@@ -50,6 +51,7 @@ import { BILL_ITEM_TOLERANCE, readBillItemTolerance } from './bill-totals';
     BillParseCategorizeTask,
     BillAiOrchestrator,
     BillPhotoService,
+    BillPhotoIngestService,
     BillCrudService,
     BillDashboardService,
     BillDuplicatesService,

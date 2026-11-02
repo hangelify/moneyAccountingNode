@@ -15,6 +15,7 @@ import { createHash } from 'node:crypto';
 import sharp from 'sharp';
 import { BillController } from './bill.controller';
 import { BillPhotoService } from './bill-photo.service';
+import { BillPhotoIngestService } from './bill-photo-ingest.service';
 import { BillCrudService } from './bill-crud.service';
 import { BillDuplicatesService } from './bill-duplicates.service';
 import { BillDashboardService } from './bill-dashboard.service';
@@ -73,6 +74,7 @@ describe('BillController', () => {
       controllers: [BillController],
       providers: [
         { provide: BillPhotoService, useValue: { parseAndCategorize } },
+        BillPhotoIngestService,
         { provide: BillCrudService, useValue: billCrudMock },
         {
           provide: BillDuplicatesService,

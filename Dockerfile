@@ -2,7 +2,7 @@
 # Jenkins builds `--target test`, then `--target runtime`; a plain
 # `docker build .` produces the runtime image (last stage).
 
-FROM node:24-alpine AS deps
+FROM node:26-alpine AS deps
 
 WORKDIR /app
 
@@ -28,7 +28,7 @@ COPY scripts ./scripts
 RUN npm run build
 
 # --- Production image ---
-FROM node:24-alpine AS runtime
+FROM node:26-alpine AS runtime
 
 WORKDIR /app
 

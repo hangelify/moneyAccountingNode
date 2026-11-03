@@ -156,6 +156,52 @@ describe('Email verification (e2e)', () => {
     });
   });
 
+  describe('access gate', () => {
+    const households = (user: TestUser) =>
+      http().get('/households').set('Authorization', auth(user));
+
+    it('refuses gated routes to an unverified user', async () => {
+      const jane = await registerUser(app, 'jane', { verified: false });
+
+      await households(jane)
+        .expect(403)
+        .expect((r) =>
+          expect((r.body as { error: string }).error).toBe(
+            'email_not_verified',
+          ),
+        );
+    });
+
+    it('keeps the profile and the sessions open', async () => {
+      const jane = await registerUser(app, 'jane', { verified: false });
+
+      await http().get('/auth/me').set('Authorization', auth(jane)).expect(200);
+      await http()
+        .get('/auth/sessions')
+        .set('Authorization', auth(jane))
+        .expect(200);
+    });
+
+    it('opens gated routes right after verification, with the same token', async () => {
+      const jane = await registerUser(app, 'jane', { verified: false });
+      await households(jane).expect(403);
+
+      await verify(verificationTokenFor(app, jane.email)).expect(204);
+
+      await households(jane).expect(200);
+    });
+
+    it('still refreshes the session of an unverified user', async () => {
+      const jane = await registerUser(app, 'jane', { verified: false });
+
+      await http()
+        .post('/auth/refresh')
+        .set('X-Client-Type', 'mobile')
+        .send({ refresh_token: jane.refreshToken })
+        .expect(200);
+    });
+  });
+
   describe('household invites', () => {
     const invite = (by: TestUser, email: string) =>
       http()
@@ -177,9 +223,10 @@ describe('Email verification (e2e)', () => {
       await accept(jane, token)
         .expect(403)
         .expect((r) =>
-          expect((r.body as { message: string }).message).toBe(
-            'Email address is not verified',
-          ),
+          expect(r.body).toMatchObject({
+            error: 'email_not_verified',
+            message: 'Email address is not verified',
+          }),
         );
 
       await verify(verificationTokenFor(app, jane.email)).expect(204);

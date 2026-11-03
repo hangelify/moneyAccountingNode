@@ -17,7 +17,6 @@ import {
 import { MAIL_SENDER } from '../../src/modules/mail/mail-sender';
 import { InMemoryMailSender } from './mail';
 import type { TokenResponseDto } from '../../src/modules/auth/dto/token-response.dto';
-import type { HouseholdResponseDto } from '../../src/modules/household/dto/household-response.dto';
 
 export interface TestAppOptions {
   /** TRUST_PROXY value, as main.ts would read it. */
@@ -92,6 +91,8 @@ let userSeq = 0;
  * Registers a user; registration also creates their personal household.
  * The email is marked verified directly in the database unless
  * `verified: false`, so specs do not spend the verify-email rate limit.
+ * The household id is read from the database: an unverified user cannot
+ * list households.
  */
 export async function registerUser(
   app: NestExpressApplication,
@@ -106,26 +107,24 @@ export async function registerUser(
     .send({ email, password, first_name: label })
     .expect(201);
   const tokens = reg.body as TokenResponseDto;
+  const connection = app.get(MikroORM).em.getConnection();
   if (verified) {
-    await app
-      .get(MikroORM)
-      .em.getConnection()
-      .execute(
-        'update users set email_verified_at = now(), email_verification_token_hash = null, email_verification_expires_at = null where email = ?',
-        [email],
-      );
+    await connection.execute(
+      'update users set email_verified_at = now(), email_verification_token_hash = null, email_verification_expires_at = null where email = ?',
+      [email],
+    );
   }
 
-  const list = await request(app.getHttpServer())
-    .get('/households')
-    .set('Authorization', `Bearer ${tokens.access_token}`)
-    .expect(200);
+  const [household] = (await connection.execute(
+    'select m.household_id from household_members m join users u on u.id = m.user_id where u.email = ?',
+    [email],
+  )) as { household_id: string }[];
 
   return {
     email,
     password,
     accessToken: tokens.access_token,
     refreshToken: tokens.refresh_token,
-    householdId: (list.body as HouseholdResponseDto[])[0].id,
+    householdId: household.household_id,
   };
 }

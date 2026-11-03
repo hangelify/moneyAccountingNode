@@ -1,5 +1,6 @@
 import { GUARDS_METADATA } from '@nestjs/common/constants';
 import { AuthController } from './auth.controller';
+import { ALLOW_UNVERIFIED_KEY } from './decorators/allow-unverified.decorator';
 
 describe('AuthController – @Throttle metadata', () => {
   const THROTTLER_NAME = 'default';
@@ -45,5 +46,29 @@ describe('AuthController – login guards', () => {
     const method = AuthController.prototype[methodName];
     const guards: unknown = Reflect.getMetadata(GUARDS_METADATA, method);
     expect(guards).toBeUndefined();
+  });
+});
+
+describe('AuthController – @AllowUnverified metadata', () => {
+  it('opens exactly the routes an unverified user needs', () => {
+    const open = [
+      'getProfile',
+      'resendVerification',
+      'logout',
+      'logoutAll',
+      'listSessions',
+      'revokeSession',
+    ];
+    const marked = Object.getOwnPropertyNames(AuthController.prototype).filter(
+      (name) =>
+        Reflect.getMetadata(
+          ALLOW_UNVERIFIED_KEY,
+          Reflect.get(AuthController.prototype, name) as object,
+        ) === true,
+    );
+    expect(marked.sort()).toEqual([...open].sort());
+    expect(
+      Reflect.getMetadata(ALLOW_UNVERIFIED_KEY, AuthController),
+    ).toBeUndefined();
   });
 });

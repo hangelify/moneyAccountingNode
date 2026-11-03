@@ -42,6 +42,7 @@ import {
 } from './dto/token-response.dto';
 import { UserProfileDto } from '../user/dto/user-profile.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
+import { AllowUnverified } from './decorators/allow-unverified.decorator';
 import { CurrentUser } from './decorators/current-user.decorator';
 import type { AuthenticatedUser } from './types/jwt-payload.interface';
 import { ClientMode, resolveClientMode } from './client-mode';
@@ -255,6 +256,7 @@ export class AuthController {
   }
 
   @UseGuards(JwtAuthGuard)
+  @AllowUnverified()
   @Post('logout')
   @HttpCode(HttpStatus.OK)
   @ApiBearerAuth('JWT-auth')
@@ -294,6 +296,7 @@ export class AuthController {
   }
 
   @UseGuards(JwtAuthGuard)
+  @AllowUnverified()
   @Post('logout-all')
   @HttpCode(HttpStatus.OK)
   @ApiBearerAuth('JWT-auth')
@@ -347,6 +350,7 @@ export class AuthController {
     description: 'Current password is incorrect, or the new one is invalid',
   })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ status: 403, description: 'Email address is not verified' })
   async changePassword(
     @CurrentUser() user: AuthenticatedUser,
     @Body() dto: ChangePasswordDto,
@@ -387,6 +391,7 @@ export class AuthController {
 
   @Throttle({ default: { limit: 3, ttl: 60_000 } })
   @UseGuards(JwtAuthGuard)
+  @AllowUnverified()
   @Post('resend-verification')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiBearerAuth('JWT-auth')
@@ -414,6 +419,7 @@ export class AuthController {
   }
 
   @UseGuards(JwtAuthGuard)
+  @AllowUnverified()
   @Get('sessions')
   @Header('Cache-Control', 'no-store')
   @ApiBearerAuth('JWT-auth')
@@ -427,6 +433,7 @@ export class AuthController {
   }
 
   @UseGuards(JwtAuthGuard)
+  @AllowUnverified()
   @Delete('sessions/:id')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiBearerAuth('JWT-auth')
@@ -456,6 +463,7 @@ export class AuthController {
   }
 
   @UseGuards(JwtAuthGuard)
+  @AllowUnverified()
   @Get('me')
   @ApiBearerAuth('JWT-auth')
   @ApiOperation({ summary: 'Get current user profile' })

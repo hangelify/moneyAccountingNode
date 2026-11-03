@@ -2,7 +2,7 @@ import type { NestExpressApplication } from '@nestjs/platform-express';
 import request from 'supertest';
 import { createTestApp, resetThrottling } from './utils/app';
 import { TokenResponseDto } from '../src/modules/auth/dto/token-response.dto';
-import { HouseholdResponseDto } from '../src/modules/household/dto/household-response.dto';
+import { MikroORM } from '@mikro-orm/core';
 
 describe('Auth Registration (e2e)', () => {
   let app: NestExpressApplication;
@@ -46,12 +46,25 @@ describe('Auth Registration (e2e)', () => {
     expect(typeof body.expires_in).toBe('number');
     expect(body.expires_in).toBeGreaterThan(0);
 
-    // The new user gets a personal household and can use the token at once.
-    const households = await request(app.getHttpServer())
+    // The new user gets a personal household, but must verify the email
+    // before using the app.
+    const memberships = (await app
+      .get(MikroORM)
+      .em.getConnection()
+      .execute(
+        'select 1 from household_members m join users u on u.id = m.user_id where u.email = ?',
+        ['register-ok@example.com'],
+      )) as unknown[];
+    expect(memberships).toHaveLength(1);
+    await request(app.getHttpServer())
       .get('/households')
       .set('Authorization', `Bearer ${body.access_token}`)
-      .expect(200);
-    expect(households.body as HouseholdResponseDto[]).toHaveLength(1);
+      .expect(403)
+      .expect((res) =>
+        expect((res.body as { error: string }).error).toBe(
+          'email_not_verified',
+        ),
+      );
   });
 
   it('rejects a second registration with the same email', async () => {

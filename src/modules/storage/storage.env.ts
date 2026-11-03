@@ -6,6 +6,11 @@ export interface StorageEnv {
   accessKey: string;
   secretKey: string;
   endpoint?: string;
+  /**
+   * Endpoint browsers use to open presigned URLs, when the API reaches S3
+   * on an internal address (e.g. http://minio:9000) they cannot resolve.
+   */
+  publicEndpoint?: string;
   forcePathStyle: boolean;
 }
 
@@ -17,6 +22,7 @@ export function readStorageEnv(): StorageEnv {
     accessKey: requireEnv('S3_ACCESS_KEY'),
     secretKey: requireEnv('S3_SECRET_KEY'),
     endpoint: process.env.S3_ENDPOINT?.trim() || undefined,
+    publicEndpoint: process.env.S3_PUBLIC_ENDPOINT?.trim() || undefined,
     forcePathStyle: forcePathStyleRaw === 'true',
   };
 }

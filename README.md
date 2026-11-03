@@ -347,6 +347,7 @@ All AI provider keys are **optional**. An adapter is silently skipped at boot if
 | `S3_ACCESS_KEY` | yes | Access key ID |
 | `S3_SECRET_KEY` | yes | Secret access key |
 | `S3_ENDPOINT` | no | Custom endpoint URL — set to MinIO URL for local dev (e.g. `http://localhost:9000`) |
+| `S3_PUBLIC_ENDPOINT` | no | Endpoint used only to sign presigned URLs, when browsers cannot reach `S3_ENDPOINT` (e.g. the API talks to `http://minio:9000`, browsers use `https://budget.example.com`) |
 | `S3_FORCE_PATH_STYLE` | no | `false` | Set to `true` for MinIO and other path-style S3 servers |
 
 ### Redis

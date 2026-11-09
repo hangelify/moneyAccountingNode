@@ -111,6 +111,8 @@ describe('bill list and dashboard SQL (PostgreSQL)', () => {
         em.create(BillSubCategory, {
           bill: b,
           sub_category: sub,
+          // As the bill service does: the sub-category's category.
+          category: sub?.category ?? null,
           raw_name: 'item',
           product_count: 1,
           amount,

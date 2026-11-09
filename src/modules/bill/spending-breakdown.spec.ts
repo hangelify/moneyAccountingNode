@@ -1,6 +1,7 @@
 import { Currency } from '../../types/currency.enum';
 import {
   foldSpendingRows,
+  NO_SUB_CATEGORY_NAME,
   SpendingRow,
   UNCATEGORIZED_NAME,
 } from './spending-breakdown';
@@ -185,5 +186,77 @@ describe('foldSpendingRows', () => {
     expect(old.sub_categories[0].archived).toBe(true);
     expect(food.archived).toBe(false);
     expect(food.sub_categories[0].archived).toBe(true);
+  });
+
+  it('puts category-only lines in a last no-sub-category item of their category', () => {
+    const [eur] = foldSpendingRows([
+      row({ total: '1.00' }),
+      row({
+        sub_category_id: null,
+        sub_name: null,
+        total: '3.00',
+        lines: '2',
+      }),
+    ]);
+
+    expect(eur.categories).toEqual([
+      {
+        id: 'cat-food',
+        name: 'Food',
+        total: 4,
+        share: 100,
+        archived: false,
+        sub_categories: [
+          {
+            id: 'sub-bread',
+            name: 'bread',
+            total: 1,
+            share_of_category: 25,
+            lines: 1,
+            archived: false,
+          },
+          {
+            id: null,
+            name: NO_SUB_CATEGORY_NAME,
+            total: 3,
+            share_of_category: 75,
+            lines: 2,
+            archived: false,
+          },
+        ],
+      },
+    ]);
+  });
+
+  it('marks the no-sub-category item archived with its category', () => {
+    const [eur] = foldSpendingRows([
+      row({
+        sub_category_id: null,
+        sub_name: null,
+        category_archived: true,
+        archived: false,
+        total: '1.00',
+      }),
+    ]);
+    expect(eur.categories[0].sub_categories[0]).toMatchObject({
+      id: null,
+      archived: true,
+    });
+  });
+
+  it('keeps lines without a category uncategorized even with a sub-category', () => {
+    const [eur] = foldSpendingRows([
+      row({ category_id: null, category_name: null, total: '2.00' }),
+    ]);
+    expect(eur.categories).toEqual([
+      {
+        id: null,
+        name: UNCATEGORIZED_NAME,
+        total: 2,
+        share: 100,
+        archived: false,
+        sub_categories: [],
+      },
+    ]);
   });
 });

@@ -717,6 +717,372 @@
       "comment": null
     },
     {
+      "name": "bill_batch_items",
+      "schema": "public",
+      "columns": {
+        "batch_id": {
+          "name": "batch_id",
+          "type": "uuid",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": true,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "uuid"
+        },
+        "bill_id": {
+          "name": "bill_id",
+          "type": "uuid",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "unique": false,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "uuid"
+        },
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": true,
+          "nullable": false,
+          "unique": false,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": "gen_random_uuid()",
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "uuid"
+        },
+        "image_key": {
+          "name": "image_key",
+          "type": "varchar(255)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": false,
+          "length": 255,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "string"
+        },
+        "image_sha256": {
+          "name": "image_sha256",
+          "type": "varchar(64)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": false,
+          "length": 64,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "string"
+        },
+        "position": {
+          "name": "position",
+          "type": "int",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": false,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "integer"
+        },
+        "status": {
+          "name": "status",
+          "type": "bill_batch_item_status_enum",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": false,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": "'queued'",
+          "comment": null,
+          "collation": null,
+          "enumItems": [
+            "queued",
+            "processing",
+            "done",
+            "failed"
+          ],
+          "mappedType": "unknown",
+          "nativeEnumName": "bill_batch_item_status_enum"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamptz(6)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": false,
+          "length": 6,
+          "precision": null,
+          "scale": null,
+          "default": "now()",
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "datetime"
+        }
+      },
+      "indexes": [
+        {
+          "columnNames": [
+            "batch_id",
+            "position"
+          ],
+          "composite": true,
+          "constraint": true,
+          "keyName": "bill_batch_items_batch_id_position_unique",
+          "primary": false,
+          "unique": true,
+          "expression": "CREATE UNIQUE INDEX bill_batch_items_batch_id_position_unique ON public.bill_batch_items USING btree (batch_id, \"position\")"
+        },
+        {
+          "columnNames": [
+            "bill_id"
+          ],
+          "composite": false,
+          "constraint": false,
+          "keyName": "bill_batch_items_bill_id_index",
+          "primary": false,
+          "unique": false
+        },
+        {
+          "columnNames": [
+            "id"
+          ],
+          "composite": false,
+          "constraint": true,
+          "keyName": "bill_batch_items_pkey",
+          "primary": true,
+          "unique": true
+        }
+      ],
+      "checks": [],
+      "triggers": [],
+      "foreignKeys": {
+        "bill_batch_items_batch_id_foreign": {
+          "columnNames": [
+            "batch_id"
+          ],
+          "constraintName": "bill_batch_items_batch_id_foreign",
+          "localTableName": "public.bill_batch_items",
+          "referencedColumnNames": [
+            "id"
+          ],
+          "referencedTableName": "public.bill_batches",
+          "updateRule": "cascade",
+          "deleteRule": "cascade"
+        },
+        "bill_batch_items_bill_id_foreign": {
+          "columnNames": [
+            "bill_id"
+          ],
+          "constraintName": "bill_batch_items_bill_id_foreign",
+          "localTableName": "public.bill_batch_items",
+          "referencedColumnNames": [
+            "id"
+          ],
+          "referencedTableName": "public.bills",
+          "updateRule": "cascade",
+          "deleteRule": "set null"
+        }
+      },
+      "comment": null
+    },
+    {
+      "name": "bill_batches",
+      "schema": "public",
+      "columns": {
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamptz(6)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": false,
+          "length": 6,
+          "precision": null,
+          "scale": null,
+          "default": "now()",
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "datetime"
+        },
+        "created_by_user_id": {
+          "name": "created_by_user_id",
+          "type": "uuid",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "unique": false,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "uuid"
+        },
+        "household_id": {
+          "name": "household_id",
+          "type": "uuid",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": false,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "uuid"
+        },
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": true,
+          "nullable": false,
+          "unique": false,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": "gen_random_uuid()",
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "uuid"
+        },
+        "total": {
+          "name": "total",
+          "type": "int",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": false,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "integer"
+        }
+      },
+      "indexes": [
+        {
+          "columnNames": [
+            "created_by_user_id"
+          ],
+          "composite": false,
+          "constraint": false,
+          "keyName": "bill_batches_created_by_user_id_index",
+          "primary": false,
+          "unique": false
+        },
+        {
+          "columnNames": [
+            "household_id"
+          ],
+          "composite": false,
+          "constraint": false,
+          "keyName": "bill_batches_household_id_index",
+          "primary": false,
+          "unique": false
+        },
+        {
+          "columnNames": [
+            "id"
+          ],
+          "composite": false,
+          "constraint": true,
+          "keyName": "bill_batches_pkey",
+          "primary": true,
+          "unique": true
+        }
+      ],
+      "checks": [],
+      "triggers": [],
+      "foreignKeys": {
+        "bill_batches_created_by_user_id_foreign": {
+          "columnNames": [
+            "created_by_user_id"
+          ],
+          "constraintName": "bill_batches_created_by_user_id_foreign",
+          "localTableName": "public.bill_batches",
+          "referencedColumnNames": [
+            "id"
+          ],
+          "referencedTableName": "public.users",
+          "updateRule": "cascade",
+          "deleteRule": "set null"
+        },
+        "bill_batches_household_id_foreign": {
+          "columnNames": [
+            "household_id"
+          ],
+          "constraintName": "bill_batches_household_id_foreign",
+          "localTableName": "public.bill_batches",
+          "referencedColumnNames": [
+            "id"
+          ],
+          "referencedTableName": "public.households",
+          "updateRule": "cascade"
+        }
+      },
+      "comment": null
+    },
+    {
       "name": "bill_duplicate_dismissals",
       "schema": "public",
       "columns": {
@@ -993,6 +1359,23 @@
           "enumItems": [],
           "mappedType": "decimal"
         },
+        "category_id": {
+          "name": "category_id",
+          "type": "uuid",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "unique": false,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "uuid"
+        },
         "category_reasoning": {
           "name": "category_reasoning",
           "type": "text",
@@ -1143,6 +1526,17 @@
         },
         {
           "columnNames": [
+            "category_id"
+          ],
+          "composite": false,
+          "constraint": false,
+          "keyName": "bill_sub_categories_category_id_partial_index",
+          "primary": false,
+          "unique": false,
+          "where": "category_id IS NOT NULL"
+        },
+        {
+          "columnNames": [
             "id"
           ],
           "composite": false,
@@ -1178,6 +1572,19 @@
           "referencedTableName": "public.bills",
           "updateRule": "cascade",
           "deleteRule": "cascade"
+        },
+        "bill_sub_categories_category_id_foreign": {
+          "columnNames": [
+            "category_id"
+          ],
+          "constraintName": "bill_sub_categories_category_id_foreign",
+          "localTableName": "public.bill_sub_categories",
+          "referencedColumnNames": [
+            "id"
+          ],
+          "referencedTableName": "public.categories",
+          "updateRule": "cascade",
+          "deleteRule": "restrict"
         },
         "bill_sub_categories_sub_category_id_foreign": {
           "columnNames": [
@@ -1577,6 +1984,23 @@
           "enumItems": [],
           "mappedType": "uuid"
         },
+        "image_key": {
+          "name": "image_key",
+          "type": "varchar(255)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "unique": false,
+          "length": 255,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "string"
+        },
         "image_sha256": {
           "name": "image_sha256",
           "type": "varchar(64)",
@@ -1628,6 +2052,45 @@
           "enumItems": [],
           "mappedType": "text"
         },
+        "parse_error_code": {
+          "name": "parse_error_code",
+          "type": "bill_parse_error_enum",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "unique": false,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [
+            "not_a_receipt",
+            "ai_failed",
+            "save_failed"
+          ],
+          "mappedType": "unknown",
+          "nativeEnumName": "bill_parse_error_enum"
+        },
+        "parse_error_message": {
+          "name": "parse_error_message",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "unique": false,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "text"
+        },
         "purchase_time": {
           "name": "purchase_time",
           "type": "time(6)",
@@ -1662,7 +2125,8 @@
           "enumItems": [
             "draft",
             "confirmed",
-            "duplicate"
+            "duplicate",
+            "failed"
           ],
           "mappedType": "unknown",
           "nativeEnumName": "bill_status_enum"
@@ -1830,6 +2294,12 @@
           "expression": "(status = 'duplicate'::text) = (duplicate_of_id IS NOT NULL)",
           "definition": "CHECK ((((status)::text = 'duplicate'::text) = (duplicate_of_id IS NOT NULL)))",
           "columnName": "duplicate_of_id"
+        },
+        {
+          "name": "bills_parse_error_check",
+          "expression": "(status = 'failed'::text) = (parse_error_code IS NOT NULL)",
+          "definition": "CHECK ((((status)::text = 'failed'::text) = (parse_error_code IS NOT NULL)))",
+          "columnName": "parse_error_code"
         }
       ],
       "triggers": [],
@@ -3739,7 +4209,7 @@
           "autoincrement": false,
           "primary": false,
           "nullable": false,
-          "unique": false,
+          "unique": true,
           "length": null,
           "precision": null,
           "scale": null,
@@ -3812,6 +4282,18 @@
           "primary": false,
           "unique": false,
           "where": "deleted_at IS NULL"
+        },
+        {
+          "columnNames": [
+            "household_id",
+            "lower(name::text)"
+          ],
+          "composite": true,
+          "constraint": false,
+          "keyName": "markets_household_id_lower_name_unique",
+          "primary": false,
+          "unique": true,
+          "expression": "CREATE UNIQUE INDEX markets_household_id_lower_name_unique ON public.markets USING btree (household_id, lower((name)::text)) WHERE (deleted_at IS NULL)"
         },
         {
           "columnNames": [
@@ -5418,13 +5900,33 @@
         "FAILED"
       ]
     },
+    "bill_batch_item_status_enum": {
+      "name": "bill_batch_item_status_enum",
+      "schema": "public",
+      "items": [
+        "queued",
+        "processing",
+        "done",
+        "failed"
+      ]
+    },
+    "bill_parse_error_enum": {
+      "name": "bill_parse_error_enum",
+      "schema": "public",
+      "items": [
+        "not_a_receipt",
+        "ai_failed",
+        "save_failed"
+      ]
+    },
     "bill_status_enum": {
       "name": "bill_status_enum",
       "schema": "public",
       "items": [
         "draft",
         "confirmed",
-        "duplicate"
+        "duplicate",
+        "failed"
       ]
     },
     "currency_enum": {

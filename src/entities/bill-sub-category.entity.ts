@@ -2,6 +2,7 @@ import type { Rel } from '@mikro-orm/core';
 import { Entity, Property, ManyToOne } from '@mikro-orm/decorators/legacy';
 import { BaseEntity } from './base.entity';
 import { Bill } from './bill.entity';
+import { Category } from './category.entity';
 import { SubCategory } from './sub-category.entity';
 
 @Entity({ tableName: 'bill_sub_categories' })
@@ -11,6 +12,10 @@ export class BillSubCategory extends BaseEntity {
 
   @ManyToOne(() => SubCategory, { nullable: true })
   sub_category?: Rel<SubCategory> | null;
+
+  // The line's category; for a line with a sub-category, the sub-category's.
+  @ManyToOne(() => Category, { nullable: true, deleteRule: 'restrict' })
+  category?: Rel<Category> | null;
 
   @Property({ type: 'varchar', length: 255, nullable: false })
   raw_name!: string;

@@ -119,6 +119,10 @@ describe('database indexes (PostgreSQL)', () => {
       'ON public.bill_sub_categories USING btree (sub_category_id) WHERE (sub_category_id IS NOT NULL)',
     ],
     [
+      'bill_sub_categories_category_id_partial_index',
+      'ON public.bill_sub_categories USING btree (category_id) WHERE (category_id IS NOT NULL)',
+    ],
+    [
       'bill_sub_categories_bill_id_index',
       'ON public.bill_sub_categories USING btree (bill_id)',
     ],

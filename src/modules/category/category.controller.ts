@@ -10,6 +10,7 @@ import {
   HttpCode,
   HttpStatus,
   UseGuards,
+  Query,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -24,6 +25,11 @@ import { BulkCreateCategoryDto } from './dto/bulk-create-category.dto';
 import { UpdateCategoryDto } from './dto/update-category.dto';
 import { CategoryResponseDto } from './dto/category-response.dto';
 import { CategoryBaseResponseDto } from './dto/category-base-response.dto';
+import {
+  DEFAULT_RECENT_CATEGORIES,
+  RecentCategoriesQueryDto,
+  RecentCategoryDto,
+} from './dto/recent-categories.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { HouseholdMemberGuard } from '../household/guards/household-member.guard';
 import type { HouseholdContext } from '../household/guards/household-member.guard';
@@ -36,6 +42,7 @@ import {
   ApiUpdateCategoryResponses,
   ApiDeleteCategoryResponses,
   ApiSeedDefaultCategoriesResponses,
+  ApiRecentCategoriesResponses,
 } from './decorators/api-responses.decorator';
 
 @ApiTags('categories')
@@ -94,6 +101,19 @@ export class CategoryController {
     @CurrentHousehold() ctx: HouseholdContext,
   ): Promise<CategoryBaseResponseDto[]> {
     return this.categoryService.getAllUserCategories(ctx.householdId);
+  }
+
+  @Get('recent')
+  @ApiOperation({ summary: 'Categories used recently, newest first' })
+  @ApiRecentCategoriesResponses()
+  async getRecentCategories(
+    @CurrentHousehold() ctx: HouseholdContext,
+    @Query() query: RecentCategoriesQueryDto,
+  ): Promise<RecentCategoryDto[]> {
+    return this.categoryService.getRecentCategories(
+      ctx.householdId,
+      query.limit ?? DEFAULT_RECENT_CATEGORIES,
+    );
   }
 
   @Get(':id')

@@ -20,6 +20,7 @@ import { AnthropicProvider } from './modules/ai-gateway/providers/anthropic.prov
 import { OpenAiProvider } from './modules/ai-gateway/providers/openai.provider';
 import { DeepSeekProvider } from './modules/ai-gateway/providers/deepseek.provider';
 import { BillModule } from './modules/bill/bill.module';
+import { BillBatchModule } from './modules/bill/batch/bill-batch.module';
 import { MarketModule } from './modules/market/market.module';
 import { HouseholdModule } from './modules/household/household.module';
 import { RetentionModule } from './modules/retention/retention.module';
@@ -42,6 +43,9 @@ export const APP_THROTTLERS = [{ name: 'default', ttl: 60_000, limit: 100 }];
     AiGatewayModule.forRoot({
       providers: [AnthropicProvider, OpenAiProvider, DeepSeekProvider],
     }),
+    // Before BillModule: Express matches routes in registration order, and
+    // BillController's GET bills/:id would otherwise catch GET bills/events.
+    BillBatchModule.register(),
     BillModule,
     MarketModule,
     HouseholdModule,

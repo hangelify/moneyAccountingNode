@@ -7,7 +7,7 @@ import { DRAFT_RETENTION_DAYS } from './draft-cleanup.env';
 
 const DAY_MS = 86_400_000;
 
-/** Soft-deletes AI drafts nobody confirmed within the retention period. */
+/** Soft-deletes AI drafts and failed bills nobody confirmed within the retention period. */
 @Injectable()
 export class DraftCleanupService {
   private readonly log = new Logger(DraftCleanupService.name);
@@ -39,7 +39,7 @@ export class DraftCleanupService {
     return this.em.fork().nativeUpdate(
       Bill,
       {
-        status: BillStatus.DRAFT,
+        status: { $in: [BillStatus.DRAFT, BillStatus.FAILED] },
         deleted_at: null,
         created_at: { $lt: cutoff },
       },

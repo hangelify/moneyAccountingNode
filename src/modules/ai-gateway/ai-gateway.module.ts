@@ -14,6 +14,7 @@ import { AiRequest } from '../../entities/ai-request.entity';
 import { AiRequestAttempt } from '../../entities/ai-request-attempt.entity';
 import { StorageModule } from '../storage/storage.module';
 import { AiGatewayService } from './ai-gateway.service';
+import { AiUserQuota } from './ai-user-quota.service';
 import { AiRequestLogger } from './internal/ai-request-logger';
 import { AiAuditSweeper } from './internal/ai-audit-sweeper';
 import { LLM_PROVIDERS, LlmProvider } from './types/llm-provider';
@@ -127,6 +128,7 @@ export class AiGatewayModule {
       AiRequestLogger,
       AiAuditSweeper,
       AiGatewayService,
+      AiUserQuota,
       AiGatewayBootstrapper,
     ];
 
@@ -139,7 +141,7 @@ export class AiGatewayModule {
       ],
       providers,
       // Limits are exported for the per-user AI throttler on HTTP routes.
-      exports: [AiGatewayService, AI_USAGE_LIMITS],
+      exports: [AiGatewayService, AiUserQuota, AI_USAGE_LIMITS],
       global: true,
     };
   }

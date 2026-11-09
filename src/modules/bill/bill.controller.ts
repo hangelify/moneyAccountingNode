@@ -35,7 +35,7 @@ import type { AuthenticatedUser } from '../auth/types/jwt-payload.interface';
 import { HouseholdMemberGuard } from '../household/guards/household-member.guard';
 import type { HouseholdContext } from '../household/guards/household-member.guard';
 import { CurrentHousehold } from '../household/decorators/current-household.decorator';
-import { BillPhotoService } from './bill-photo.service';
+import { BillPhotoIngestService } from './bill-photo-ingest.service';
 import { BillCrudService } from './bill-crud.service';
 import { BillDuplicatesService } from './bill-duplicates.service';
 import { BillDashboardService } from './bill-dashboard.service';
@@ -108,7 +108,7 @@ export class BillController {
   private readonly log = new Logger(BillController.name);
 
   constructor(
-    private readonly billPhoto: BillPhotoService,
+    private readonly photoIngest: BillPhotoIngestService,
     private readonly billCrud: BillCrudService,
     private readonly billDuplicates: BillDuplicatesService,
     private readonly billDashboard: BillDashboardService,
@@ -153,55 +153,38 @@ export class BillController {
     // The same photo again: answer with its open draft instead of paying
     // for another AI call.
     const imageSha256 = createHash('sha256').update(image.buffer).digest('hex');
-    const existing = await this.billCrud.findDraftByImageHash(
-      ctx.householdId,
+    const result = await this.photoIngest.ingest({
+      image: image.buffer,
+      mediaType: image.mediaType,
       imageSha256,
-    );
-    if (existing) {
-      return this.duplicateResponse(ctx.householdId, existing);
-    }
+      householdId: ctx.householdId,
+      userId: user.id,
+    });
 
-    const { parsed, requestId, isReceipt } =
-      await this.billPhoto.parseAndCategorize(
-        image.buffer,
-        image.mediaType,
-        ctx.householdId,
-        user.id,
-      );
-    if (!isReceipt) {
+    if (result.kind === 'not_a_receipt') {
       throw new UnprocessableEntityException(
         aiErrorBody(
           HttpStatus.UNPROCESSABLE_ENTITY,
           'The photo is not a receipt or no items were recognized on it',
-          requestId,
+          result.requestId,
         ),
       );
     }
-
-    let draft: { id: string; duplicate: boolean };
-    try {
-      draft = await this.billCrud.createDraftFromParsed(
-        ctx.householdId,
-        user.id,
-        parsed,
-        { imageSha256, aiRequestId: requestId },
-      );
-    } catch (err) {
-      // The AI call is already paid for: hand back what it recognized so the
-      // client can create the bill manually instead of paying again.
-      this.log.error(
-        `Saving the draft for AI request ${requestId} failed`,
-        err instanceof Error ? err.stack : String(err),
-      );
+    if (result.kind === 'save_failed') {
       throw new UnprocessableEntityException({
         ...aiErrorBody(
           HttpStatus.UNPROCESSABLE_ENTITY,
           'The bill was recognized but the draft could not be saved; create it manually',
-          requestId,
+          result.requestId,
         ),
-        parsed,
+        parsed: result.parsed,
       });
     }
+
+    if (result.kind === 'existing') {
+      return this.duplicateResponse(ctx.householdId, result);
+    }
+
     // Answer with the draft as saved (one line per item, values
     // clamped), so a re-upload of this photo gets the same answer.
     const stored = await this.billCrud.findDraftByImageHash(
@@ -212,7 +195,7 @@ export class BillController {
       return {
         ...stored.parsed,
         request_id: stored.requestId,
-        duplicate: draft.duplicate,
+        duplicate: result.duplicate,
         possible_duplicates: await this.possibleDuplicates(
           ctx.householdId,
           stored.parsed,
@@ -220,11 +203,11 @@ export class BillController {
       };
     }
     // Confirmed or deleted in the meantime.
-    const saved = { ...parsed, draft_id: draft.id };
+    const saved = { ...result.parsed, draft_id: result.billId };
     return {
       ...saved,
-      request_id: requestId,
-      duplicate: draft.duplicate,
+      request_id: result.requestId,
+      duplicate: result.duplicate,
       possible_duplicates: await this.possibleDuplicates(
         ctx.householdId,
         saved,

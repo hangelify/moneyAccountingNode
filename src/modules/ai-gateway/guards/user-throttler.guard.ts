@@ -18,6 +18,14 @@ import type { Response } from 'express';
 const MINUTE_MS = 60_000;
 const DAY_MS = 24 * 60 * MINUTE_MS;
 
+/** Storage key of a user's counter; shared with AiUserQuota. */
+export function userThrottlerKey(
+  name: 'ai-minute' | 'ai-day',
+  userId: string,
+): string {
+  return `user-throttler:${name}:user:${userId}`;
+}
+
 /**
  * Per-user limits on AI-backed routes (`ai-minute`, `ai-day`). The global
  * ThrottlerGuard runs before authentication and can only count by IP, so
@@ -53,7 +61,7 @@ export class UserThrottlerGuard extends ThrottlerGuard {
         'UserThrottlerGuard needs an authenticated user; list it after JwtAuthGuard',
       );
     }
-    return Promise.resolve(`user:${id}`);
+    return Promise.resolve(id);
   }
 
   protected override generateKey(
@@ -61,7 +69,7 @@ export class UserThrottlerGuard extends ThrottlerGuard {
     tracker: string,
     name: string,
   ): string {
-    return `user-throttler:${name}:${tracker}`;
+    return userThrottlerKey(name as 'ai-minute' | 'ai-day', tracker);
   }
 
   protected override throwThrottlingException(

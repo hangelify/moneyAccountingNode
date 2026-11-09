@@ -104,7 +104,7 @@ export class AiGatewayService {
 
   // Requests still in flight have no cost yet, so concurrent calls of one
   // user can overshoot the budget by what they end up costing.
-  private async assertWithinBudget(userId: string): Promise<void> {
+  async assertWithinBudget(userId: string): Promise<void> {
     const spent = await this.logger.spentSinceUsd(
       userId,
       new Date(Date.now() - DAY_MS),

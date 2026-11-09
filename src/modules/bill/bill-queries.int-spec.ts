@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { MikroORM, EntityManager } from '@mikro-orm/core';
 import { MikroOrmModule } from '@mikro-orm/nestjs';
 import { Test } from '@nestjs/testing';
@@ -10,6 +11,7 @@ import { Market } from '../../entities/market.entity';
 import { SubCategory } from '../../entities/sub-category.entity';
 import { User } from '../../entities/user.entity';
 import { BillStatus } from '../../types/bill-status.enum';
+import { BillParseErrorCode } from '../../types/bill-parse-error.enum';
 import { Currency } from '../../types/currency.enum';
 import { BillCrudService } from './bill-crud.service';
 import { BillDashboardService } from './bill-dashboard.service';
@@ -391,6 +393,60 @@ describe('bill list and dashboard SQL (PostgreSQL)', () => {
       const res = await get({ type: 'month', year: 2025, month: 2 });
       expect(res.by_currency).toEqual([]);
       expect(res.bills).toEqual([]);
+    });
+  });
+  describe('listDrafts', () => {
+    let draftHouseholdId: string;
+    let draftId: string;
+    let failedId: string;
+
+    beforeAll(async () => {
+      const em: EntityManager = orm.em.fork();
+      const user = em.create(User, {
+        first_name: 'Drafts',
+        email: `bill-sql-drafts-${randomUUID()}@example.com`,
+        password: 'x',
+      } as never);
+      const household = em.create(Household, {
+        name: 'Sql drafts',
+        currency: Currency.EUR,
+        created_by: user,
+      } as never);
+      const base = { household, created_by: user, bill_date: '2026-06-01' };
+      const draft = em.create(Bill, {
+        ...base,
+        status: BillStatus.DRAFT,
+        amount: 5,
+      } as never);
+      const failed = em.create(Bill, {
+        ...base,
+        status: BillStatus.FAILED,
+        amount: 0,
+        parse_error_code: BillParseErrorCode.AI_FAILED,
+        parse_error_message: 'Model unavailable',
+      } as never);
+      await em.flush();
+      draftHouseholdId = household.id;
+      draftId = draft.id;
+      failedId = failed.id;
+    });
+
+    it('lists only drafts by default', async () => {
+      const { data } = await crud.listDrafts(draftHouseholdId, {});
+      expect(data.map((b) => b.id)).toEqual([draftId]);
+    });
+
+    it('lists only failed bills with their error for status failed', async () => {
+      const { data, meta } = await crud.listDrafts(draftHouseholdId, {
+        status: 'failed',
+      });
+      expect(data.map((b) => b.id)).toEqual([failedId]);
+      expect(data[0]).toMatchObject({
+        status: BillStatus.FAILED,
+        parse_error_code: BillParseErrorCode.AI_FAILED,
+        parse_error_message: 'Model unavailable',
+      });
+      expect(meta.total).toBe(1);
     });
   });
 });

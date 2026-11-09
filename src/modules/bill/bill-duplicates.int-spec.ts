@@ -12,6 +12,7 @@ import { Bill } from '../../entities/bill.entity';
 import { Household } from '../../entities/household.entity';
 import { Market } from '../../entities/market.entity';
 import { User } from '../../entities/user.entity';
+import { BillParseErrorCode } from '../../types/bill-parse-error.enum';
 import { BillStatus } from '../../types/bill-status.enum';
 import { Currency } from '../../types/currency.enum';
 import { BillCrudService } from './bill-crud.service';
@@ -352,6 +353,26 @@ describe('possible duplicates on bill reads and writes (PostgreSQL)', () => {
     const trusted = (await crud().getBill(plain, householdId))
       .possible_duplicates;
     expect(trusted?.map((d) => d.id)).toContain(weak);
+  });
+
+  it('a failed bill with an inferred date is not weak-matched to confirmed bills', async () => {
+    const confirmed = await draft({
+      status: BillStatus.CONFIRMED,
+      amount: 0,
+      bill_date: '2026-10-05',
+    });
+    const failed = await draft({
+      status: BillStatus.FAILED,
+      amount: 0,
+      bill_date: '2026-10-05',
+      bill_date_inferred: true,
+      parse_error_code: BillParseErrorCode.AI_FAILED,
+      parse_error_message: 'Processing failed; retry later',
+    });
+
+    const found = (await crud().getBill(failed, householdId))
+      .possible_duplicates;
+    expect(found?.map((d) => d.id)).not.toContain(confirmed);
   });
 
   it('confirmBill returns possible_duplicates excluding itself', async () => {

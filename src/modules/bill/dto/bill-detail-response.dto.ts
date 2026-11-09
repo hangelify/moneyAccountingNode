@@ -4,6 +4,7 @@ import { PossibleDuplicateDto } from './bill-duplicates.dto';
 import { PaginationMetaDto } from './bill-list-response.dto';
 import { SubCategoryRefDto } from './parsed-bill-response.dto';
 import { BillStatus } from '../../../types/bill-status.enum';
+import { BillParseErrorCode } from '../../../types/bill-parse-error.enum';
 import { BillExchangeRateDto } from './household-conversion.dto';
 
 export class BillItemResponseDto {
@@ -50,6 +51,17 @@ export class BillItemResponseDto {
 export class BillDetailResponseDto extends BillResponseDto {
   @ApiProperty({ enum: BillStatus, enumName: 'BillStatus' })
   status!: BillStatus;
+
+  @ApiProperty({
+    enum: BillParseErrorCode,
+    enumName: 'BillParseErrorCode',
+    nullable: true,
+    description: 'Why the photo could not be parsed; set only on failed bills',
+  })
+  parse_error_code!: BillParseErrorCode | null;
+
+  @ApiProperty({ nullable: true, example: 'The image is not a receipt' })
+  parse_error_message!: string | null;
 
   @ApiPropertyOptional({
     example: 'LIDL DISCOUNT SRL',

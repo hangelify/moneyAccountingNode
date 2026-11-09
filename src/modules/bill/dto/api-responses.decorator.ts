@@ -11,6 +11,10 @@ import {
   ApiPayloadTooLargeResponse,
   ApiUnsupportedMediaTypeResponse,
   ApiResponse,
+  ApiAcceptedResponse,
+  ApiNotFoundResponse,
+  ApiConflictResponse,
+  ApiProduces,
 } from '@nestjs/swagger';
 import {
   AiErrorResponseDto,
@@ -25,6 +29,7 @@ import { BillDashboardResponseDto } from './bill-dashboard.dto';
 import { SpendingBreakdownResponseDto } from './spending-breakdown.dto';
 import { BillListResponseDto } from './bill-list-response.dto';
 import { DuplicateSuggestionsResponseDto } from './bill-duplicates.dto';
+import { BillBatchResponseDto } from '../batch/dto/bill-batch-response.dto';
 
 export function ApiParsePhotoResponses(): MethodDecorator & ClassDecorator {
   return applyDecorators(
@@ -310,4 +315,135 @@ export const ApiSpendingBreakdownResponses = () =>
       status: 403,
       description: 'The user is not a member of the household',
     }),
+  );
+
+const BATCH_DISABLED =
+  'Batch photo parsing is disabled (BILL_BATCH_ENABLED=false).';
+
+/** Errors shared by parse-photos and retry; every body is AiErrorResponseDto. */
+const batchAiErrors = (
+  limits: string,
+  unavailable: Parameters<typeof ApiServiceUnavailableResponse>[0] = {
+    type: AiErrorResponseDto,
+    description: BATCH_DISABLED,
+  },
+) => [
+  ApiUnauthorizedResponse({
+    type: AiErrorResponseDto,
+    description: 'Missing or invalid JWT.',
+  }),
+  ApiForbiddenResponse({
+    type: AiErrorResponseDto,
+    description: 'The user is not a member of the household.',
+  }),
+  ApiTooManyRequestsResponse({
+    type: AiErrorResponseDto,
+    headers: {
+      'Retry-After': {
+        description: 'Seconds to wait; absent for the daily AI budget',
+        schema: { type: 'integer' },
+      },
+    },
+    description: limits,
+  }),
+  ApiServiceUnavailableResponse(unavailable),
+];
+
+export const ApiParsePhotosResponses = () =>
+  applyDecorators(
+    ApiAcceptedResponse({
+      type: BillBatchResponseDto,
+      description:
+        'Every photo is stored and queued; results arrive on GET bills/events ' +
+        'and in GET bill-batches/:id. Each item becomes a draft or a failed bill.',
+    }),
+    ApiBadRequestResponse({
+      type: AiErrorResponseDto,
+      description:
+        'No image, more than 20 files, extra fields, or a photo that could not ' +
+        'be read ("File <0-based index>: ..."). Nothing is stored or queued.',
+    }),
+    ApiPayloadTooLargeResponse({
+      type: AiErrorResponseDto,
+      description: 'A file exceeds 10 MB.',
+    }),
+    ApiUnsupportedMediaTypeResponse({
+      type: AiErrorResponseDto,
+      description:
+        'A file is not a JPEG, PNG or WebP image ("File <0-based index>: ..."); the client-sent Content-Type is ignored.',
+    }),
+    ...batchAiErrors(
+      'Per-user AI limit (per minute, or per 24 h counting every photo) or daily AI budget exceeded.',
+      {
+        type: AiErrorResponseDto,
+        headers: {
+          'Retry-After': {
+            description:
+              'Seconds to wait; set (5) only when the server is busy',
+            schema: { type: 'integer' },
+          },
+        },
+        description:
+          `${BATCH_DISABLED} Or too many batch uploads are in progress on ` +
+          'this server (BILL_BATCH_MAX_CONCURRENT_UPLOADS); nothing was read ' +
+          'or counted, retry after Retry-After seconds.',
+      },
+    ),
+  );
+
+export const ApiBillBatchResponses = () =>
+  applyDecorators(
+    ApiOkResponse({
+      type: BillBatchResponseDto,
+      description: 'The batch and the state of each photo, in upload order.',
+    }),
+    ApiBadRequestResponse({ description: 'The id is not a UUID.' }),
+    ApiUnauthorizedResponse({ description: 'Unauthorized' }),
+    ApiForbiddenResponse({
+      description: 'The user is not a member of the household',
+    }),
+    ApiNotFoundResponse({ description: 'No such batch in the household' }),
+    ApiServiceUnavailableResponse({ description: BATCH_DISABLED }),
+  );
+
+export const ApiRetryBillResponses = () =>
+  applyDecorators(
+    ApiAcceptedResponse({
+      type: BillBatchResponseDto,
+      description:
+        'The photo of the failed bill is queued again in a new one-item batch; the failed bill is deleted.',
+    }),
+    ApiBadRequestResponse({
+      type: AiErrorResponseDto,
+      description: 'The id is not a UUID.',
+    }),
+    ApiNotFoundResponse({
+      type: AiErrorResponseDto,
+      description: 'No such bill in the household.',
+    }),
+    ApiConflictResponse({
+      type: AiErrorResponseDto,
+      description: 'The bill is not a failed bill with a stored photo.',
+    }),
+    ...batchAiErrors('Per-user AI limit or daily AI budget exceeded.'),
+  );
+
+export const ApiBillEventsResponses = () =>
+  applyDecorators(
+    ApiProduces('text/event-stream'),
+    ApiOkResponse({
+      description:
+        "Server-sent events of the household's photo batches: item.processing, " +
+        'item.done, item.failed (data as the batch items, plus batch_id and ' +
+        'created_by_user_id) and batch.completed ({ batch_id, total, done, failed, ' +
+        'created_by_user_id }). A `ping` event with empty data is sent every 25 s ' +
+        'to keep proxies from closing the connection; clients ignore it. The ' +
+        'stream ends when the access token expires; reconnect with a fresh token.',
+      content: { 'text/event-stream': { schema: { type: 'string' } } },
+    }),
+    ApiUnauthorizedResponse({ description: 'Unauthorized' }),
+    ApiForbiddenResponse({
+      description: 'The user is not a member of the household',
+    }),
+    ApiServiceUnavailableResponse({ description: BATCH_DISABLED }),
   );

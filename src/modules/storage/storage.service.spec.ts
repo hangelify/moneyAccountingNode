@@ -156,6 +156,51 @@ describe('S3StorageService', () => {
     });
   });
 
+  describe('get', () => {
+    it('get returns the body and content type', async () => {
+      const bytes = new Uint8Array([1, 2, 3]);
+      const send = jest.fn().mockResolvedValue({
+        Body: { transformToByteArray: () => Promise.resolve(bytes) },
+        ContentType: 'image/jpeg',
+      });
+      wireSendMock(send);
+
+      const svc = new S3StorageService(makeEnv());
+      const out = await svc.get('ai/images/x.jpg');
+
+      expect(out.buffer).toEqual(Buffer.from([1, 2, 3]));
+      expect(out.mediaType).toBe('image/jpeg');
+      expect(send).toHaveBeenCalledWith(expect.any(GetObjectCommand));
+    });
+
+    it('falls back to the key extension when ContentType is missing', async () => {
+      wireSendMock(
+        jest.fn().mockResolvedValue({
+          Body: {
+            transformToByteArray: () => Promise.resolve(new Uint8Array([9])),
+          },
+        }),
+      );
+      const svc = new S3StorageService(makeEnv());
+      const out = await svc.get('ai/images/x.webp');
+      expect(out.mediaType).toBe('image/webp');
+    });
+
+    it('get throws for a missing key', async () => {
+      wireSendMock(jest.fn().mockRejectedValue(new NotFoundError('missing')));
+      const svc = new S3StorageService(makeEnv());
+      await expect(svc.get('ai/images/gone.png')).rejects.toThrow(
+        'Stored image not found: ai/images/gone.png',
+      );
+    });
+
+    it('propagates other errors', async () => {
+      wireSendMock(jest.fn().mockRejectedValue(new Error('boom')));
+      const svc = new S3StorageService(makeEnv());
+      await expect(svc.get('k.png')).rejects.toThrow('boom');
+    });
+  });
+
   describe('getSignedUrl', () => {
     it('delegates to @aws-sdk/s3-request-presigner with a GetObjectCommand', async () => {
       wireSendMock(jest.fn());

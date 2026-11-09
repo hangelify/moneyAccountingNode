@@ -167,6 +167,8 @@ describe('household currency conversion (PostgreSQL)', () => {
         em.create(BillSubCategory, {
           bill: b,
           sub_category: sub,
+          // As the bill service does: the sub-category's category.
+          category: sub.category,
           raw_name: 'item',
           product_count: 1,
           amount,

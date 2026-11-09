@@ -14,7 +14,10 @@ import {
   SPENDING_PERIODS,
   type SpendingPeriod,
 } from '../../../common/utils/period-range';
-import { UNCATEGORIZED_NAME } from '../spending-breakdown';
+import {
+  NO_SUB_CATEGORY_NAME,
+  UNCATEGORIZED_NAME,
+} from '../spending-breakdown';
 import { UnconvertedDto } from './household-conversion.dto';
 
 export class SpendingBreakdownQueryDto {
@@ -82,10 +85,17 @@ export class SpendingRangeDto {
 }
 
 export class SpendingSubCategoryDto {
-  @ApiProperty({ format: 'uuid' })
-  id!: string;
+  @ApiProperty({
+    format: 'uuid',
+    nullable: true,
+    description: "null for the category's lines without a sub-category",
+  })
+  id!: string | null;
 
-  @ApiProperty({ example: 'Milk' })
+  @ApiProperty({
+    example: 'Milk',
+    description: `Sub-category name, or "${NO_SUB_CATEGORY_NAME}" for the category's lines without a sub-category (translate it on the client)`,
+  })
   name!: string;
 
   @ApiProperty({ example: 42.5 })
@@ -102,7 +112,8 @@ export class SpendingSubCategoryDto {
 
   @ApiProperty({
     description:
-      'The sub-category or its category was deleted; kept for history',
+      'The sub-category or its category was deleted; kept for history. For ' +
+      'the no-sub-category item, the category was deleted',
   })
   archived!: boolean;
 }
@@ -117,7 +128,7 @@ export class SpendingCategoryDto {
 
   @ApiProperty({
     example: 'Dairy',
-    description: `Category name, or "${UNCATEGORIZED_NAME}" for lines without a sub-category (translate it on the client)`,
+    description: `Category name, or "${UNCATEGORIZED_NAME}" for lines without a category (translate it on the client)`,
   })
   name!: string;
 
@@ -135,7 +146,9 @@ export class SpendingCategoryDto {
 
   @ApiProperty({
     type: [SpendingSubCategoryDto],
-    description: 'Sorted by total, largest first; empty for Uncategorized',
+    description:
+      'Sorted by total, largest first; the no-sub-category item (id null) ' +
+      'always last; empty for Uncategorized',
   })
   sub_categories!: SpendingSubCategoryDto[];
 }

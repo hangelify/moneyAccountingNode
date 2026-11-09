@@ -242,12 +242,10 @@ export class BillDashboardService {
               SUM(bsc.amount)::text AS total_amount
        FROM bill_sub_categories bsc
        JOIN bills b ON b.id = bsc.bill_id
-       JOIN sub_categories sc ON sc.id = bsc.sub_category_id
-       JOIN categories c ON c.id = sc.category_id
+       JOIN categories c ON c.id = bsc.category_id
        WHERE b.household_id = ? AND b.status = 'confirmed'
          AND b.bill_date >= ? AND b.bill_date < ?
          AND b.deleted_at IS NULL
-         AND bsc.sub_category_id IS NOT NULL
        GROUP BY b.currency, c.id, c.name
        ORDER BY SUM(bsc.amount) DESC, c.name`,
       [householdId, start, end],
@@ -298,12 +296,10 @@ export class BillDashboardService {
        FROM bills b
        ${householdConversionJoin('b')}
        JOIN bill_sub_categories bsc ON bsc.bill_id = b.id
-       JOIN sub_categories sc ON sc.id = bsc.sub_category_id
-       JOIN categories c ON c.id = sc.category_id
+       JOIN categories c ON c.id = bsc.category_id
        WHERE b.household_id = ? AND b.status = 'confirmed'
          AND b.bill_date >= ? AND b.bill_date < ?
          AND b.deleted_at IS NULL
-         AND bsc.sub_category_id IS NOT NULL
          AND fx.factor IS NOT NULL
        GROUP BY h.currency, c.id, c.name
        ORDER BY ROUND(SUM(bsc.amount * fx.factor), 2) DESC, c.name`,

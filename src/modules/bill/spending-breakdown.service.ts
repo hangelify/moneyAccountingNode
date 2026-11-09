@@ -13,7 +13,8 @@ import {
   loadRateDays,
 } from './household-conversion';
 
-// Names joined onto the aggregated rows (CTE `agg`) by both queries.
+// Names joined onto the aggregated rows (CTE `agg`) by both queries. The
+// category is the line's own, so lines without a sub-category keep theirs.
 const JOIN_NAMES = `SELECT agg.currency, agg.sub_category_id,
                 agg.total::text AS total, agg.lines::text AS lines,
                 sc.name AS sub_name, c.id AS category_id,
@@ -22,7 +23,7 @@ const JOIN_NAMES = `SELECT agg.currency, agg.sub_category_id,
                 (c.deleted_at IS NOT NULL OR sc.deleted_at IS NOT NULL) AS archived
          FROM agg
          LEFT JOIN sub_categories sc ON sc.id = agg.sub_category_id
-         LEFT JOIN categories c ON c.id = sc.category_id`;
+         LEFT JOIN categories c ON c.id = agg.category_id`;
 
 @Injectable()
 export class SpendingBreakdownService {
@@ -50,8 +51,8 @@ export class SpendingBreakdownService {
     );
     const source = this.exchangeRates.source;
 
-    // Aggregate the lines per (currency, sub-category) first, then join the
-    // names onto the few aggregated rows. Deleted categories and
+    // Aggregate the lines per (currency, category, sub-category) first, then
+    // join the names onto the few aggregated rows. Deleted categories and
     // sub-categories still join, so past spending keeps its labels.
     const { rows, convertedRows, unconverted } = await this.em
       .fork()
@@ -66,7 +67,7 @@ export class SpendingBreakdownService {
         );
         const rows = (await conn.execute(
           `WITH agg AS (
-           SELECT b.currency, l.sub_category_id,
+           SELECT b.currency, l.category_id, l.sub_category_id,
                   SUM(l.amount) AS total, COUNT(*) AS lines
            FROM bills b
            JOIN bill_sub_categories l ON l.bill_id = b.id
@@ -74,7 +75,7 @@ export class SpendingBreakdownService {
              AND b.deleted_at IS NULL
              AND b.bill_date >= ? AND b.bill_date < ?
              ${dto.currency ? 'AND b.currency = ?' : ''}
-           GROUP BY b.currency, l.sub_category_id
+           GROUP BY b.currency, l.category_id, l.sub_category_id
          )
          ${JOIN_NAMES}`,
           params,
@@ -82,10 +83,11 @@ export class SpendingBreakdownService {
           tx.getTransactionContext(),
         )) as SpendingRow[];
 
-        // Same lines, converted and summed per sub-category, rounded once.
+        // Same lines, converted and summed per category and sub-category,
+        // rounded once.
         const convertedRows = (await conn.execute(
           `WITH agg AS (
-           SELECT h.currency, l.sub_category_id,
+           SELECT h.currency, l.category_id, l.sub_category_id,
                   ROUND(SUM(l.amount * fx.factor), 2) AS total,
                   COUNT(*) AS lines
            FROM bills b
@@ -96,7 +98,7 @@ export class SpendingBreakdownService {
              AND b.bill_date >= ? AND b.bill_date < ?
              AND fx.factor IS NOT NULL
              ${dto.currency ? 'AND b.currency = ?' : ''}
-           GROUP BY h.currency, l.sub_category_id
+           GROUP BY h.currency, l.category_id, l.sub_category_id
          )
          ${JOIN_NAMES}`,
           [source, source, ...params],

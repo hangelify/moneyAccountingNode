@@ -4,10 +4,13 @@ import type {
   SpendingCurrencyDto,
 } from './dto/spending-breakdown.dto';
 
-/** Name of the bucket for lines without a sub-category; the client translates it. */
+/** Name of the bucket for lines without a category; the client translates it. */
 export const UNCATEGORIZED_NAME = 'Uncategorized';
 
-/** One aggregated row of the spending-breakdown query. */
+/** Name of a category's item for its lines without a sub-category; the client translates it. */
+export const NO_SUB_CATEGORY_NAME = 'No sub-category';
+
+/** One aggregated row of the spending-breakdown query, per (currency, category, sub-category). */
 export interface SpendingRow {
   currency: Currency | null;
   sub_category_id: string | null;
@@ -29,9 +32,14 @@ const byTotalThenName = (
   a: { cents: number; name: string },
   b: { cents: number; name: string },
 ) => b.cents - a.cents || a.name.localeCompare(b.name);
+// The bucket without an id (Uncategorized, No sub-category) always last.
+const byTotalNullLast = (
+  a: { id: string | null; cents: number; name: string },
+  b: { id: string | null; cents: number; name: string },
+) => (a.id === null ? 1 : b.id === null ? -1 : byTotalThenName(a, b));
 
 interface SubAcc {
-  id: string;
+  id: string | null;
   name: string;
   cents: number;
   lines: number;
@@ -43,12 +51,14 @@ interface CategoryAcc {
   cents: number;
   lines: number;
   archived: boolean;
-  subs: Map<string, SubAcc>;
+  subs: Map<string | null, SubAcc>;
 }
 
 /**
- * Folds the per (currency, sub-category) rows into one category → sub-category
- * tree per currency. Sums run in integer cents; currencies are never mixed.
+ * Folds the per (currency, category, sub-category) rows into one category →
+ * sub-category tree per currency. Sums run in integer cents; currencies are
+ * never mixed. A category's lines without a sub-category become its last item,
+ * id null.
  */
 export function foldSpendingRows(rows: SpendingRow[]): SpendingCurrencyDto[] {
   const byCurrency = new Map<
@@ -64,7 +74,7 @@ export function foldSpendingRows(rows: SpendingRow[]): SpendingCurrencyDto[] {
     }
     const cents = toCents(r.total);
     const lines = Number(r.lines);
-    const categoryId = r.sub_category_id === null ? null : r.category_id;
+    const categoryId = r.category_id;
     let cat = categories.get(categoryId);
     if (!cat) {
       cat =
@@ -89,19 +99,30 @@ export function foldSpendingRows(rows: SpendingRow[]): SpendingCurrencyDto[] {
     }
     cat.cents += cents;
     cat.lines += lines;
-    if (r.sub_category_id === null) continue;
+    if (categoryId === null) continue;
     const sub = cat.subs.get(r.sub_category_id);
     if (sub) {
       sub.cents += cents;
       sub.lines += lines;
     } else {
-      cat.subs.set(r.sub_category_id, {
-        id: r.sub_category_id,
-        name: r.sub_name ?? '',
-        cents,
-        lines,
-        archived: r.archived,
-      });
+      cat.subs.set(
+        r.sub_category_id,
+        r.sub_category_id === null
+          ? {
+              id: null,
+              name: NO_SUB_CATEGORY_NAME,
+              cents,
+              lines,
+              archived: r.category_archived,
+            }
+          : {
+              id: r.sub_category_id,
+              name: r.sub_name ?? '',
+              cents,
+              lines,
+              archived: r.archived,
+            },
+      );
     }
   }
 
@@ -113,9 +134,7 @@ export function foldSpendingRows(rows: SpendingRow[]): SpendingCurrencyDto[] {
     const totalCents = cats.reduce((s, c) => s + c.cents, 0);
     const lines = cats.reduce((s, c) => s + c.lines, 0);
     const categories: SpendingCategoryDto[] = cats
-      .sort((a, b) =>
-        a.id === null ? 1 : b.id === null ? -1 : byTotalThenName(a, b),
-      )
+      .sort(byTotalNullLast)
       .map((c) => ({
         id: c.id,
         name: c.name,
@@ -125,7 +144,7 @@ export function foldSpendingRows(rows: SpendingRow[]): SpendingCurrencyDto[] {
         sub_categories:
           c.id === null
             ? []
-            : [...c.subs.values()].sort(byTotalThenName).map((s) => ({
+            : [...c.subs.values()].sort(byTotalNullLast).map((s) => ({
                 id: s.id,
                 name: s.name,
                 total: fromCents(s.cents),

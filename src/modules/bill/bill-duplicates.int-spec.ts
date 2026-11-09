@@ -1229,6 +1229,8 @@ describe('totals and the bill list with a duplicate (PostgreSQL)', () => {
         em.create(BillSubCategory, {
           bill: b,
           sub_category: s,
+          // As the bill service does: the sub-category's category.
+          category: s.category,
           raw_name: 'item',
           product_count: 1,
           amount,

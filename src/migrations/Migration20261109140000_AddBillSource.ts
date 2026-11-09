@@ -1,9 +1,14 @@
 import { Migration } from '@mikro-orm/migrations';
 
-/** Bills read by the AI parser came from a photo; the rest were typed in. */
+/**
+ * Bills with an AI request or a stored receipt image came from a photo (a
+ * failed photo may have no AI request); the rest were typed in.
+ */
 export const BACKFILL_BILL_SOURCE = `
   update bills
   set    source = case when ai_request_id is not null
+                         or image_key is not null
+                         or image_sha256 is not null
                        then 'photo' else 'manual' end::bill_source;
 `;
 

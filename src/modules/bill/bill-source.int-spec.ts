@@ -159,4 +159,19 @@ describe('bill source (PostgreSQL)', () => {
     expect(await sourceOf(fromPhoto)).toBe('photo');
     expect(await sourceOf(byHand)).toBe('manual');
   });
+
+  it('backfills photo for a failed photo kept without an AI request', async () => {
+    const failed = randomUUID();
+    await sql(
+      `insert into bills (id, household_id, bill_date, amount, status, currency,
+                          image_key, image_sha256, parse_error_code, source)
+       values (?, ?, '2026-11-03', 0, 'failed', 'EUR', 'receipts/x.jpg', ?,
+               'ai_failed', 'bank')`,
+      [failed, householdId, 'a'.repeat(64)],
+    );
+
+    await sql(BACKFILL_BILL_SOURCE);
+
+    expect(await sourceOf(failed)).toBe('photo');
+  });
 });

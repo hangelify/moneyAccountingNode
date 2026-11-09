@@ -746,6 +746,7 @@ describe('BillCrudService', () => {
             price_per_kg: null,
             final_price: 28.2,
             sub_category: null,
+            category: null,
             category_confidence: 0.34,
             category_reasoning: undefined,
           },
@@ -793,6 +794,7 @@ describe('BillCrudService', () => {
               name: 'sausages',
               category_name: 'Meat & Fish',
             },
+            category: null,
             category_confidence: 0.95,
             category_reasoning: '"Carnaciori" are sausages.',
           },
@@ -824,6 +826,7 @@ describe('BillCrudService', () => {
         price_per_kg: null,
         final_price: 1,
         sub_category: { id, name: id, category_name: 'x' },
+        category: null,
         category_confidence: 0.9,
       });
 
@@ -870,6 +873,7 @@ describe('BillCrudService', () => {
             price_per_kg: null,
             final_price: 1,
             sub_category: { id: 'foreign-id', name: 'x', category_name: 'x' },
+            category: null,
             category_confidence: 0.9,
           },
         ],
@@ -894,6 +898,7 @@ describe('BillCrudService', () => {
         price_per_kg: null,
         final_price,
         sub_category: { id: 'milk-id', name: 'milk', category_name: 'Dairy' },
+        category: null,
         category_confidence: 0.96,
         category_reasoning: 'milk',
       });
@@ -948,6 +953,7 @@ describe('BillCrudService', () => {
               name: 'milk',
               category_name: 'Dairy',
             },
+            category: null,
             category_confidence: 0.96,
             category_reasoning: 'milk',
           },
@@ -959,6 +965,7 @@ describe('BillCrudService', () => {
             price_per_kg: null,
             final_price: 72.5,
             sub_category: null,
+            category: null,
             category_confidence: 0.1,
             category_reasoning: undefined,
           },
@@ -991,6 +998,7 @@ describe('BillCrudService', () => {
         price_per_kg: null,
         final_price: 1.2,
         sub_category: null,
+        category: null,
         category_confidence: 0.5,
       };
       const base: ParsedBillResponseDto = {

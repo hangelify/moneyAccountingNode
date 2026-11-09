@@ -2,7 +2,7 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { BillResponseDto } from './bill-response.dto';
 import { PossibleDuplicateDto } from './bill-duplicates.dto';
 import { PaginationMetaDto } from './bill-list-response.dto';
-import { SubCategoryRefDto } from './parsed-bill-response.dto';
+import { CategoryRefDto, SubCategoryRefDto } from './parsed-bill-response.dto';
 import { BillStatus } from '../../../types/bill-status.enum';
 import { BillParseErrorCode } from '../../../types/bill-parse-error.enum';
 import { BillExchangeRateDto } from './household-conversion.dto';
@@ -16,6 +16,14 @@ export class BillItemResponseDto {
 
   @ApiProperty({ type: SubCategoryRefDto, nullable: true })
   sub_category!: SubCategoryRefDto | null;
+
+  @ApiProperty({
+    type: CategoryRefDto,
+    nullable: true,
+    description:
+      "The line's category, set with or without a sub-category; null when the line has none",
+  })
+  category!: CategoryRefDto | null;
 
   @ApiProperty({ example: 2 })
   product_count!: number;

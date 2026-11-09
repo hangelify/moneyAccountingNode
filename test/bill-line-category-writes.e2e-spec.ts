@@ -86,6 +86,7 @@ describe('Bill line category_id on writes (e2e)', () => {
           price_per_kg: null,
           final_price: 1,
           sub_category: id ? { id, name: 'x', category_name: 'x' } : null,
+          category: null,
           category_confidence: 0.9,
         })),
       }),

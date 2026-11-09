@@ -1,6 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Currency } from '../../../types/currency.enum';
 import { BillStatus } from '../../../types/bill-status.enum';
+import { BillSource } from '../../../types/bill-source.enum';
 
 export class BillMarketRefDto {
   @ApiProperty({ format: 'uuid' })
@@ -34,6 +35,14 @@ export class BillResponseDto {
 
   @ApiPropertyOptional()
   description?: string;
+
+  @ApiProperty({
+    enum: BillSource,
+    enumName: 'BillSource',
+    description:
+      'Where the bill came from: a photo, a hand entry or a bank import',
+  })
+  source!: BillSource;
 
   @ApiPropertyOptional({ type: BillMarketRefDto })
   market?: BillMarketRefDto;

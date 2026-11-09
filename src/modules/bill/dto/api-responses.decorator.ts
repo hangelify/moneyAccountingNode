@@ -15,6 +15,8 @@ import {
   ApiNotFoundResponse,
   ApiConflictResponse,
   ApiProduces,
+  ApiExtraModels,
+  getSchemaPath,
 } from '@nestjs/swagger';
 import {
   AiErrorResponseDto,
@@ -30,6 +32,11 @@ import { SpendingBreakdownResponseDto } from './spending-breakdown.dto';
 import { BillListResponseDto } from './bill-list-response.dto';
 import { DuplicateSuggestionsResponseDto } from './bill-duplicates.dto';
 import { BillBatchResponseDto } from '../batch/dto/bill-batch-response.dto';
+import {
+  ManualBatchErrorResponseDto,
+  ManualBatchResponseDto,
+  ValidationErrorResponseDto,
+} from './manual-batch-response.dto';
 
 export function ApiParsePhotoResponses(): MethodDecorator & ClassDecorator {
   return applyDecorators(
@@ -116,6 +123,37 @@ export const ApiCreateBillResponses = () =>
       description: 'duplicate_of_id names no bill of the household',
     }),
     ApiResponse({ status: 401, description: 'Unauthorized' }),
+  );
+
+export const ApiManualBatchResponses = () =>
+  applyDecorators(
+    ApiResponse({
+      status: 201,
+      type: ManualBatchResponseDto,
+      description: 'Every row saved as a confirmed bill, in row order',
+    }),
+    ApiResponse({
+      status: 200,
+      type: ManualBatchResponseDto,
+      description:
+        'client_batch_id was used before: the bills that submit saved, deleted ones included; nothing new is saved',
+    }),
+    ApiExtraModels(ManualBatchErrorResponseDto, ValidationErrorResponseDto),
+    ApiBadRequestResponse({
+      description:
+        'Nothing is saved. A body that fails validation answers with message: string[], each naming its row as rows.N.field. Rows naming a category, sub-category or market the household does not have answer with errors[], one entry per bad row',
+      schema: {
+        oneOf: [
+          { $ref: getSchemaPath(ValidationErrorResponseDto) },
+          { $ref: getSchemaPath(ManualBatchErrorResponseDto) },
+        ],
+      },
+    }),
+    ApiUnauthorizedResponse({ description: 'Unauthorized' }),
+    ApiForbiddenResponse({ description: 'Not a member of the household' }),
+    ApiTooManyRequestsResponse({
+      description: 'More than 20 batches a minute',
+    }),
   );
 
 export const ApiListBillsResponses = () =>

@@ -14,3 +14,20 @@ export function isCalendarDate(v: unknown): v is string {
 export function todayIsoDate(now: Date = new Date()): string {
   return now.toISOString().slice(0, 10);
 }
+
+/** The day of `now` in Chisinau as `YYYY-MM-DD`; it may differ from UTC. */
+export function chisinauToday(now: Date = new Date()): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Europe/Chisinau',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(now);
+}
+
+/** `day` moved by `n` calendar days (negative goes back). */
+export function addCalendarDays(day: string, n: number): string {
+  const d = new Date(`${day}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+}

@@ -14,6 +14,14 @@ import { UpdateCategoryDto } from './dto/update-category.dto';
 import { CategoryResponseDto } from './dto/category-response.dto';
 import { CategoryBaseResponseDto } from './dto/category-base-response.dto';
 import { assertUniqueNames } from '../../common/utils/unique-names.util';
+import {
+  addCalendarDays,
+  chisinauToday,
+} from '../../common/utils/calendar-date';
+import {
+  RECENT_CATEGORIES_DAYS,
+  RecentCategoryDto,
+} from './dto/recent-categories.dto';
 
 @Injectable()
 export class CategoryService {
@@ -170,6 +178,48 @@ export class CategoryService {
       description: c.description,
       created_at: c.created_at,
       updated_at: c.updated_at,
+    }));
+  }
+
+  /**
+   * The (category, sub-category) pairs of the household's confirmed bills of
+   * the last 90 days, newest use first. Deleted categories and sub-categories
+   * are left out: they can no longer be picked.
+   */
+  async getRecentCategories(
+    householdId: string,
+    limit: number,
+  ): Promise<RecentCategoryDto[]> {
+    const since = addCalendarDays(chisinauToday(), -RECENT_CATEGORIES_DAYS);
+    const rows = (await this.em.getConnection().execute(
+      `SELECT c.id AS category_id, c.name AS category_name,
+              sc.id AS sub_category_id, sc.name AS sub_category_name,
+              max(b.bill_date)::text AS last_used_at
+       FROM   bills b
+       JOIN   bill_sub_categories l ON l.bill_id = b.id
+       JOIN   categories c ON c.id = l.category_id AND c.deleted_at IS NULL
+       LEFT   JOIN sub_categories sc ON sc.id = l.sub_category_id
+       WHERE  b.household_id = ? AND b.status = 'confirmed'
+         AND  b.deleted_at IS NULL AND b.bill_date >= ?
+         AND  (l.sub_category_id IS NULL OR sc.deleted_at IS NULL)
+       GROUP  BY c.id, c.name, sc.id, sc.name
+       ORDER  BY max(b.bill_date) DESC, max(b.created_at) DESC,
+                 c.id, sc.id NULLS FIRST
+       LIMIT  ?`,
+      [householdId, since, limit],
+    )) as Array<{
+      category_id: string;
+      category_name: string;
+      sub_category_id: string | null;
+      sub_category_name: string | null;
+      last_used_at: string;
+    }>;
+    return rows.map((r) => ({
+      category: { id: r.category_id, name: r.category_name },
+      sub_category: r.sub_category_id
+        ? { id: r.sub_category_id, name: r.sub_category_name! }
+        : null,
+      last_used_at: r.last_used_at,
     }));
   }
 

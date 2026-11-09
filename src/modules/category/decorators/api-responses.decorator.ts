@@ -2,6 +2,7 @@ import { applyDecorators } from '@nestjs/common';
 import { ApiResponse } from '@nestjs/swagger';
 import { CategoryResponseDto } from '../dto/category-response.dto';
 import { CategoryBaseResponseDto } from '../dto/category-base-response.dto';
+import { RecentCategoryDto } from '../dto/recent-categories.dto';
 
 /**
  * Common API responses used across category endpoints
@@ -80,6 +81,18 @@ export const ApiGetAllCategoriesResponses = () =>
       description: 'Categories retrieved successfully',
       type: [CategoryBaseResponseDto],
     }),
+    ApiUnauthorizedResponse(),
+  );
+
+export const ApiRecentCategoriesResponses = () =>
+  applyDecorators(
+    ApiResponse({
+      status: 200,
+      description:
+        "Category and sub-category pairs of the household's confirmed bills of the last 90 days, newest use first; deleted ones left out",
+      type: [RecentCategoryDto],
+    }),
+    ApiResponse({ status: 400, description: 'limit is not 1..50' }),
     ApiUnauthorizedResponse(),
   );
 

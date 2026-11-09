@@ -15,6 +15,7 @@ import { BillAiOrchestrator } from './bill-ai.orchestrator';
 import { BillPhotoService } from './bill-photo.service';
 import { BillPhotoIngestService } from './bill-photo-ingest.service';
 import { BillCrudService } from './bill-crud.service';
+import { ManualBillBatchService } from './manual-bill-batch.service';
 import { BillDuplicatesService } from './bill-duplicates.service';
 import { BillDashboardService } from './bill-dashboard.service';
 import { SpendingBreakdownService } from './spending-breakdown.service';
@@ -55,6 +56,7 @@ import { BILL_ITEM_TOLERANCE, readBillItemTolerance } from './bill-totals';
     BillPhotoService,
     BillPhotoIngestService,
     BillCrudService,
+    ManualBillBatchService,
     BillDashboardService,
     BillDuplicatesService,
     SpendingBreakdownService,

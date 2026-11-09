@@ -11,13 +11,14 @@ import { HouseholdMemberGuard } from '../household/guards/household-member.guard
 describe('CategoryController', () => {
   let controller: CategoryController;
   const seedForHousehold = jest.fn();
+  const getRecentCategories = jest.fn();
 
   beforeEach(async () => {
     seedForHousehold.mockReset();
     const mod = await Test.createTestingModule({
       controllers: [CategoryController],
       providers: [
-        { provide: CategoryService, useValue: {} },
+        { provide: CategoryService, useValue: { getRecentCategories } },
         { provide: CategoryDefaultsService, useValue: { seedForHousehold } },
       ],
     })
@@ -56,5 +57,27 @@ describe('CategoryController', () => {
       JwtAuthGuard,
       HouseholdMemberGuard,
     ]);
+  });
+
+  describe('getRecentCategories', () => {
+    const ctx = { householdId: 'hh-1', role: 'owner' } as never;
+
+    it('asks for 10 pairs by default', async () => {
+      getRecentCategories.mockResolvedValue([]);
+
+      await controller.getRecentCategories(ctx, {});
+
+      expect(getRecentCategories).toHaveBeenCalledWith('hh-1', 10);
+    });
+
+    it('passes the limit through', async () => {
+      const recent = [{ category: { id: 'c', name: 'Food' } }];
+      getRecentCategories.mockResolvedValue(recent);
+
+      const result = await controller.getRecentCategories(ctx, { limit: 3 });
+
+      expect(getRecentCategories).toHaveBeenCalledWith('hh-1', 3);
+      expect(result).toBe(recent);
+    });
   });
 });

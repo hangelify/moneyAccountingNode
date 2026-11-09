@@ -20,7 +20,10 @@ import { AiRequest } from './ai-request.entity';
 import { Currency } from '../types/currency.enum';
 import { BillStatus } from '../types/bill-status.enum';
 import { BillParseErrorCode } from '../types/bill-parse-error.enum';
+import { BillSource } from '../types/bill-source.enum';
 import { HourMinuteType } from '../types/hour-minute.type';
+
+export const BILLS_CLIENT_BATCH_UNIQUE = 'bills_household_client_batch_unique';
 
 @Entity({ tableName: 'bills' })
 // Dashboard and bill list: household + status, range on bill_date.
@@ -64,6 +67,16 @@ import { HourMinuteType } from '../types/hour-minute.type';
   expression:
     'create index "bills_household_fiscal_index" on "bills" ("household_id", "fiscal_register_id", "fiscal_receipt_number") where "deleted_at" is null and "fiscal_receipt_number" is not null',
 })
+// One manual quick-entry submit (HAN-48): a replay finds its bills. Deleted
+// bills keep their key, so a replay never brings them back.
+@Index({
+  name: BILLS_CLIENT_BATCH_UNIQUE,
+  expression: `create unique index "${BILLS_CLIENT_BATCH_UNIQUE}" on "bills" ("household_id", "client_batch_id", "client_batch_index") where "client_batch_id" is not null`,
+})
+@Check({
+  name: 'bills_client_batch_check',
+  expression: '(client_batch_id is null) = (client_batch_index is null)',
+})
 @Check({
   name: 'bills_duplicate_of_check',
   expression: `(status::text = 'duplicate') = (duplicate_of_id is not null)`,
@@ -100,6 +113,16 @@ export class Bill extends BaseEntity {
     default: BillStatus.CONFIRMED,
   })
   status: BillStatus = BillStatus.CONFIRMED;
+
+  /** Where the bill came from; the app's writers always name it. */
+  @Enum({
+    items: () => BillSource,
+    type: 'enum',
+    nativeEnumName: 'bill_source',
+    nullable: false,
+    default: BillSource.MANUAL,
+  })
+  source: BillSource = BillSource.MANUAL;
 
   @Property({ type: 'text', nullable: true })
   market_name_raw?: string;
@@ -182,6 +205,14 @@ export class Bill extends BaseEntity {
   /** Human-readable reason for a failed bill. */
   @Property({ type: 'text', nullable: true })
   parse_error_message?: string | null;
+
+  /** The manual quick-entry submit this bill was saved from. */
+  @Property({ type: 'uuid', nullable: true })
+  client_batch_id?: string | null;
+
+  /** The bill's row in that submit, from 0. */
+  @Property({ type: 'smallint', nullable: true })
+  client_batch_index?: number | null;
 
   /** S3 key of the receipt photo; set on every bill created from a batch. */
   @Property({ type: 'varchar', nullable: true })

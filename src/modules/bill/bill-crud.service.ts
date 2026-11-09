@@ -109,6 +109,19 @@ export interface DraftSource {
   imageKey?: string;
 }
 
+/**
+ * Sets the line's sub-category and, with it, the line's category: the
+ * column must stay the sub-category's category. `subCat` needs its category
+ * loaded.
+ */
+function assignLineCategory(
+  bsc: BillSubCategory,
+  subCat: SubCategory | null,
+): void {
+  bsc.sub_category = subCat;
+  bsc.category = subCat?.category ?? null;
+}
+
 function toDraftItem(it: ParsedBillItemResponseDto) {
   const quantity = inRange(it.quantity, MAX_QUANTITY);
   const confidence = inRange(it.category_confidence, 1);
@@ -465,6 +478,7 @@ export class BillCrudService {
     bill.purchase_time = dto.purchase_time ?? undefined;
     this.em.persist(bill);
 
+    const subCats = await this.findDraftSubCategories(householdId, dto.items);
     // One row per receipt line, even when lines share a sub-category.
     for (const raw of dto.items) {
       const item = toDraftItem(raw);
@@ -480,12 +494,10 @@ export class BillCrudService {
       bsc.category_confidence = item.category_confidence;
       if (item.category_reasoning != null)
         bsc.category_reasoning = item.category_reasoning;
-      if (item.sub_category) {
-        bsc.sub_category = this.em.getReference(
-          SubCategory,
-          item.sub_category.id,
-        );
-      }
+      assignLineCategory(
+        bsc,
+        (item.sub_category && subCats.get(item.sub_category.id)) || null,
+      );
       this.em.persist(bsc);
     }
 
@@ -829,6 +841,29 @@ export class BillCrudService {
     return byId;
   }
 
+  /**
+   * The household's sub-categories the model picked for a draft, with their
+   * categories, in one query. Soft-deleted ones count: one may be deleted
+   * between the parse and the save. An id the household does not own is
+   * left out, and its line is saved without a sub-category.
+   */
+  private async findDraftSubCategories(
+    householdId: string,
+    items: ParsedBillItemResponseDto[],
+  ): Promise<Map<string, SubCategory>> {
+    const ids = new Set<string>();
+    for (const { sub_category } of items) {
+      if (sub_category) ids.add(sub_category.id);
+    }
+    if (!ids.size) return new Map();
+
+    const found = await this.subCategoryRepository.find(
+      { id: { $in: [...ids] }, category: { household: { id: householdId } } },
+      { populate: ['category'] },
+    );
+    return new Map(found.map((s) => [s.id, s]));
+  }
+
   /** Throws 400 when two items name the same bill line. */
   private checkLineIds(items: { id?: string }[]): void {
     const lineIds = new Set<string>();
@@ -917,7 +952,7 @@ export class BillCrudService {
         bsc.bill = bill;
         em.persist(bsc);
       }
-      bsc.sub_category = subCat;
+      assignLineCategory(bsc, subCat);
       // The DTO requires raw_name on a new line without a sub-category.
       bsc.raw_name = item.raw_name ?? bsc.raw_name ?? subCat!.name;
       bsc.product_count = item.product_count;
@@ -938,7 +973,7 @@ export class BillCrudService {
       const subCat = subCats.get(item.sub_category_id)!;
       const bsc = new BillSubCategory();
       bsc.bill = bill;
-      bsc.sub_category = subCat;
+      assignLineCategory(bsc, subCat);
       bsc.raw_name = subCat.name;
       bsc.product_count = item.product_count;
       bsc.amount = item.amount;

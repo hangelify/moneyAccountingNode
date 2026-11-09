@@ -58,7 +58,7 @@ function makeService() {
     findOne: jest.fn(),
   } as unknown as EntityRepository<Market>;
   const subCategoryRepo = {
-    find: jest.fn(),
+    find: jest.fn().mockResolvedValue([]),
   } as unknown as EntityRepository<SubCategory>;
   const mockExecute = jest.fn();
   const em = {
@@ -760,13 +760,17 @@ describe('BillCrudService', () => {
       const bsc = calls[1][0] as BillSubCategory;
       expect(bsc.raw_name).toBe('Paine Pumpern');
       expect(bsc.unit).toBe('piece');
-      expect(bsc.sub_category).toBeUndefined();
+      expect(bsc.sub_category).toBeNull();
+      expect(bsc.category).toBeNull();
       expect(bsc.category_confidence).toBeCloseTo(0.34);
       expect(bsc.amount).toBeCloseTo(28.2);
     });
 
     it('sets all new fields for categorized items', async () => {
-      const { service, em } = makeService();
+      const { service, em, subCategoryRepo } = makeService();
+      const meat = { id: 'cat-meat', name: 'Meat & Fish' };
+      const sausages = { id: 'scat-1', name: 'sausages', category: meat };
+      (subCategoryRepo.find as jest.Mock).mockResolvedValue([sausages]);
       const parsed: ParsedBillResponseDto = {
         draft_id: '',
         market_name: null,
@@ -806,10 +810,82 @@ describe('BillCrudService', () => {
       expect(bsc.category_confidence).toBeCloseTo(0.95);
       expect(bsc.category_reasoning).toBe('"Carnaciori" are sausages.');
       expect(bsc.product_weight).toBeCloseTo(0.539);
+      expect(bsc.sub_category).toBe(sausages);
+      expect(bsc.category).toBe(meat);
+    });
+
+    it('looks up the picked sub-categories in the household, deleted ones included', async () => {
+      const { service, subCategoryRepo } = makeService();
+      const line = (id: string) => ({
+        name: id,
+        quantity: 1,
+        unit: null,
+        weight_kg: null,
+        price_per_kg: null,
+        final_price: 1,
+        sub_category: { id, name: id, category_name: 'x' },
+        category_confidence: 0.9,
+      });
+
+      await service.createDraftFromParsed(householdId, userId, {
+        draft_id: '',
+        market_name: null,
+        bill_date: null,
+        currency: null,
+        total_amount: 2,
+        fiscal_register_id: null,
+        fiscal_receipt_number: null,
+        purchase_time: null,
+        items: [line('a'), line('b'), line('a')],
+      });
+
+      expect(subCategoryRepo.find as jest.Mock).toHaveBeenCalledTimes(1);
+      expect(subCategoryRepo.find as jest.Mock).toHaveBeenCalledWith(
+        {
+          id: { $in: ['a', 'b'] },
+          category: { household: { id: householdId } },
+        },
+        { populate: ['category'] },
+      );
+    });
+
+    it('saves a line whose sub-category is not the household’s without one', async () => {
+      const { service, em } = makeService();
+
+      await service.createDraftFromParsed(householdId, userId, {
+        draft_id: '',
+        market_name: null,
+        bill_date: null,
+        currency: null,
+        total_amount: 1,
+        fiscal_register_id: null,
+        fiscal_receipt_number: null,
+        purchase_time: null,
+        items: [
+          {
+            name: 'foreign',
+            quantity: 1,
+            unit: null,
+            weight_kg: null,
+            price_per_kg: null,
+            final_price: 1,
+            sub_category: { id: 'foreign-id', name: 'x', category_name: 'x' },
+            category_confidence: 0.9,
+          },
+        ],
+      });
+
+      const calls = (em.persist as jest.Mock).mock.calls as [unknown][];
+      const bsc = calls[1][0] as BillSubCategory;
+      expect(bsc.sub_category).toBeNull();
+      expect(bsc.category).toBeNull();
     });
 
     it('keeps items of one sub_category as separate rows with their own names', async () => {
-      const { service, em } = makeService();
+      const { service, em, subCategoryRepo } = makeService();
+      (subCategoryRepo.find as jest.Mock).mockResolvedValue([
+        { id: 'milk-id', name: 'milk', category: { id: 'dairy-id' } },
+      ]);
       const line = (name: string, final_price: number) => ({
         name,
         quantity: 1,
@@ -845,7 +921,11 @@ describe('BillCrudService', () => {
     });
 
     it('handles a mix of categorized and uncategorized items producing separate rows', async () => {
-      const { service, em } = makeService();
+      const { service, em, subCategoryRepo } = makeService();
+      const dairy = { id: 'dairy-id', name: 'Dairy' };
+      (subCategoryRepo.find as jest.Mock).mockResolvedValue([
+        { id: 'milk-id', name: 'milk', category: dairy },
+      ]);
       const parsed: ParsedBillResponseDto = {
         draft_id: '',
         market_name: null,
@@ -893,9 +973,11 @@ describe('BillCrudService', () => {
       const bsc1 = calls[1][0] as BillSubCategory;
       const bsc2 = calls[2][0] as BillSubCategory;
       expect(bsc1.raw_name).toBe('Lapte 1L');
-      expect(bsc1.sub_category).toBeDefined();
+      expect(bsc1.sub_category?.id).toBe('milk-id');
+      expect(bsc1.category).toBe(dairy);
       expect(bsc2.raw_name).toBe('Unknown item');
-      expect(bsc2.sub_category).toBeUndefined();
+      expect(bsc2.sub_category).toBeNull();
+      expect(bsc2.category).toBeNull();
     });
 
     // The DTO normally comes out of the zod schema; these guard the DB

@@ -15,6 +15,17 @@ export class SubCategoryRefDto {
   category_name!: string;
 }
 
+export class CategoryRefDto {
+  @ApiProperty({
+    format: 'uuid',
+    example: '00000000-0000-0000-0000-000000000002',
+  })
+  id!: string;
+
+  @ApiProperty({ example: 'Bread' })
+  name!: string;
+}
+
 export class ParsedBillItemResponseDto {
   @ApiPropertyOptional({
     format: 'uuid',
@@ -43,6 +54,14 @@ export class ParsedBillItemResponseDto {
 
   @ApiProperty({ type: SubCategoryRefDto, nullable: true })
   sub_category!: SubCategoryRefDto | null;
+
+  @ApiProperty({
+    type: CategoryRefDto,
+    nullable: true,
+    description:
+      "The line's category, set with or without a sub-category; null when the line has none. Ignored when saving a draft: the category follows the sub-category",
+  })
+  category!: CategoryRefDto | null;
 
   @ApiProperty({ minimum: 0, maximum: 1, example: 0.94 })
   category_confidence!: number;

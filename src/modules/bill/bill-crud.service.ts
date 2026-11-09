@@ -19,6 +19,7 @@ import { BillSubCategory } from '../../entities/bill-sub-category.entity';
 import { Market } from '../../entities/market.entity';
 import { MarketService } from '../market/market.service';
 import { SubCategory } from '../../entities/sub-category.entity';
+import { Category } from '../../entities/category.entity';
 import { User } from '../../entities/user.entity';
 import { Household } from '../../entities/household.entity';
 import { AiRequest } from '../../entities/ai-request.entity';
@@ -120,6 +121,11 @@ function assignLineCategory(
 ): void {
   bsc.sub_category = subCat;
   bsc.category = subCat?.category ?? null;
+}
+
+/** The line's own category, as answered; `category` needs its name loaded. */
+function toCategoryRef(category: Category | null | undefined) {
+  return category ? { id: category.id, name: category.name } : null;
 }
 
 function toDraftItem(it: ParsedBillItemResponseDto) {
@@ -362,7 +368,13 @@ export class BillCrudService {
   ): Promise<BillDetailResponseDto> {
     const bill = await this.billRepository.findOne(
       { id, household: { id: householdId }, deleted_at: null },
-      { populate: ['market', 'billSubCategories.sub_category.category'] },
+      {
+        populate: [
+          'market',
+          'billSubCategories.sub_category.category',
+          'billSubCategories.category',
+        ],
+      },
     );
     if (!bill) throw new NotFoundException(`Bill with ID ${id} not found`);
     const conversion = await this.conversion.forBills(householdId, [id]);
@@ -424,7 +436,7 @@ export class BillCrudService {
         ? await this.applyItems(em, bill, dto.items, subCats)
         : await em.find(BillSubCategory, { bill: bill.id });
       await em.flush();
-      await em.populate(lines, ['sub_category.category']);
+      await em.populate(lines, ['sub_category.category', 'category']);
       return { bill, dto: this.toDetailDto(bill, lines) };
     });
     await this.warmRate(householdId, updated.bill);
@@ -564,7 +576,12 @@ export class BillCrudService {
   } | null> {
     const bill = await this.billRepository.findOne(
       this.openDraftOfImage(householdId, imageSha256),
-      { populate: ['billSubCategories.sub_category.category'] },
+      {
+        populate: [
+          'billSubCategories.sub_category.category',
+          'billSubCategories.category',
+        ],
+      },
     );
     if (!bill) return null;
     return {
@@ -595,6 +612,7 @@ export class BillCrudService {
                   category_name: bsc.sub_category.category?.name ?? '',
                 }
               : null,
+            category: toCategoryRef(bsc.category),
             category_confidence: Number(bsc.category_confidence ?? 0),
             category_reasoning: bsc.category_reasoning ?? undefined,
           }),
@@ -644,7 +662,11 @@ export class BillCrudService {
         deleted_at: null,
       },
       {
-        populate: ['market', 'billSubCategories.sub_category.category'],
+        populate: [
+          'market',
+          'billSubCategories.sub_category.category',
+          'billSubCategories.category',
+        ],
         orderBy: { created_at: 'desc', id: 'desc' },
         limit,
         offset: (page - 1) * limit,
@@ -1035,6 +1057,7 @@ export class BillCrudService {
                 category_name: bsc.sub_category.category?.name ?? '',
               }
             : null,
+          category: toCategoryRef(bsc.category),
           product_count: bsc.product_count,
           // decimal columns are read back as strings.
           amount: Number(bsc.amount),

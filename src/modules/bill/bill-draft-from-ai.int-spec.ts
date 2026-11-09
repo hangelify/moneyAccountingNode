@@ -36,6 +36,7 @@ describe('draft from AI output (PostgreSQL)', () => {
   let userId: string;
   let householdId: string;
   let subCategoryId: string;
+  let categoryId: string;
 
   beforeAll(async () => {
     const mod = await Test.createTestingModule({
@@ -75,6 +76,7 @@ describe('draft from AI output (PostgreSQL)', () => {
     userId = user.id;
     householdId = household.id;
     subCategoryId = sub.id;
+    categoryId = category.id;
   });
 
   afterAll(async () => {
@@ -197,6 +199,7 @@ describe('draft from AI output (PostgreSQL)', () => {
           price_per_kg: 1e9,
           final_price: 1.5,
           sub_category: null,
+          category: null,
           category_confidence: 1.7,
         },
       ],
@@ -256,6 +259,7 @@ describe('draft from AI output (PostgreSQL)', () => {
           price_per_kg: null,
           final_price: 2.4,
           sub_category: null,
+          category: null,
           category_confidence: 0.4,
           category_reasoning: 'Unsure.',
         },
@@ -267,6 +271,7 @@ describe('draft from AI output (PostgreSQL)', () => {
           price_per_kg: 2.6,
           final_price: 1.3,
           sub_category: null,
+          category: null,
           category_confidence: 0,
         },
       ],
@@ -350,6 +355,41 @@ describe('draft from AI output (PostgreSQL)', () => {
           }),
         ]),
       );
+    });
+
+    it('gives each line of the found draft its category', async () => {
+      const hash = sha();
+      const [bread, tomatoes] = parsedDto().items;
+      await crud(orm.em.fork()).createDraftFromParsed(
+        householdId,
+        userId,
+        parsedDto({
+          items: [
+            {
+              ...bread,
+              sub_category: {
+                id: subCategoryId,
+                name: 'Bread',
+                category_name: 'Food',
+              },
+            },
+            tomatoes,
+          ],
+        }),
+        { imageSha256: hash, aiRequestId: await aiRequest() },
+      );
+
+      const found = await crud(orm.em.fork()).findDraftByImageHash(
+        householdId,
+        hash,
+      );
+
+      const byName = new Map(found?.parsed.items.map((i) => [i.name, i]));
+      expect(byName.get('BREAD')?.category).toEqual({
+        id: categoryId,
+        name: 'Food',
+      });
+      expect(byName.get('TOMATOES')?.category).toBeNull();
     });
 
     it('saves receipt identity on the draft and returns it on re-upload', async () => {

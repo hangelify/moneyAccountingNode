@@ -93,6 +93,7 @@ export class BillPhotoService {
           price_per_kg: it.price_per_kg,
           final_price: it.final_price,
           sub_category: null,
+          category: null,
           category_confidence: 0,
         }),
       ),
@@ -125,6 +126,9 @@ export class BillPhotoService {
           final_price: it.final_price,
           sub_category: sub
             ? { id: sub.id, name: sub.name, category_name: sub.category.name }
+            : null,
+          category: sub
+            ? { id: sub.category.id, name: sub.category.name }
             : null,
           category_confidence: it.category_confidence ?? 0,
           category_reasoning: it.category_reasoning ?? undefined,

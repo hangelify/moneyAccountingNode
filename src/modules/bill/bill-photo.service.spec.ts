@@ -9,8 +9,8 @@ describe('BillPhotoService', () => {
 
   function makeSubs() {
     return [
-      { id: 'sub-a', name: 'bun', category: { name: 'Bread' } },
-      { id: 'sub-b', name: 'milk', category: { name: 'Dairy' } },
+      { id: 'sub-a', name: 'bun', category: { id: 'cat-a', name: 'Bread' } },
+      { id: 'sub-b', name: 'milk', category: { id: 'cat-b', name: 'Dairy' } },
     ];
   }
 
@@ -81,6 +81,7 @@ describe('BillPhotoService', () => {
       name: 'bun',
       category_name: 'Bread',
     });
+    expect(res.items[0].category).toEqual({ id: 'cat-a', name: 'Bread' });
     expect(res.items[0].category_confidence).toBe(0.95);
     expect(res.items[0].category_reasoning).toBe('bread');
     expect(res.items[1].sub_category).toEqual({
@@ -120,6 +121,7 @@ describe('BillPhotoService', () => {
       USER_ID,
     );
     expect(res.items[0].sub_category).toBeNull();
+    expect(res.items[0].category).toBeNull();
     expect(res.items[0].category_confidence).toBe(0.1);
   });
 
@@ -342,7 +344,10 @@ describe('BillPhotoService', () => {
     ).not.toHaveBeenCalled();
     expect(
       res.items.every(
-        (i) => i.sub_category === null && i.category_confidence === 0,
+        (i) =>
+          i.sub_category === null &&
+          i.category === null &&
+          i.category_confidence === 0,
       ),
     ).toBe(true);
     expect(res).not.toHaveProperty('raw_extracted_text');

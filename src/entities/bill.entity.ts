@@ -20,6 +20,7 @@ import { AiRequest } from './ai-request.entity';
 import { Currency } from '../types/currency.enum';
 import { BillStatus } from '../types/bill-status.enum';
 import { BillParseErrorCode } from '../types/bill-parse-error.enum';
+import { BillSource } from '../types/bill-source.enum';
 import { HourMinuteType } from '../types/hour-minute.type';
 
 @Entity({ tableName: 'bills' })
@@ -100,6 +101,16 @@ export class Bill extends BaseEntity {
     default: BillStatus.CONFIRMED,
   })
   status: BillStatus = BillStatus.CONFIRMED;
+
+  /** Where the bill came from; the app's writers always name it. */
+  @Enum({
+    items: () => BillSource,
+    type: 'enum',
+    nativeEnumName: 'bill_source',
+    nullable: false,
+    default: BillSource.MANUAL,
+  })
+  source: BillSource = BillSource.MANUAL;
 
   @Property({ type: 'text', nullable: true })
   market_name_raw?: string;

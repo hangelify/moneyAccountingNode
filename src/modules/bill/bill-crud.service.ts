@@ -25,6 +25,7 @@ import { Household } from '../../entities/household.entity';
 import { AiRequest } from '../../entities/ai-request.entity';
 import { isCalendarDate, todayIsoDate } from '../../common/utils/calendar-date';
 import { BillStatus } from '../../types/bill-status.enum';
+import { BillSource } from '../../types/bill-source.enum';
 import { BillParseErrorCode } from '../../types/bill-parse-error.enum';
 import { Currency } from '../../types/currency.enum';
 import { ListBillsQueryDto } from './dto/list-bills-query.dto';
@@ -210,6 +211,7 @@ export class BillCrudService {
     const bill = new Bill();
     bill.household = this.em.getReference(Household, householdId);
     bill.created_by = this.em.getReference(User, userId);
+    bill.source = BillSource.MANUAL;
     bill.bill_date = dto.bill_date;
     bill.amount = dto.total_amount;
     bill.description = dto.description;
@@ -310,7 +312,7 @@ export class BillCrudService {
       ) as Promise<Array<{ count: string }>>,
       this.em.getConnection().execute(
         `SELECT b.id, b.bill_date::text, b.currency, b.amount::text, b.description,
-                b.status, b.duplicate_of_id, b.created_at::text,
+                b.status, b.source, b.duplicate_of_id, b.created_at::text,
                 m.id AS market_id, m.name AS market_name, m.city AS market_city,
                 abs(b.amount - i.total) > ? * i.count AS amount_mismatch,
                 h.currency AS household_currency,
@@ -336,6 +338,7 @@ export class BillCrudService {
           amount: string;
           description: string | null;
           status: BillStatus;
+          source: BillSource;
           duplicate_of_id: string | null;
           market_id: string | null;
           market_name: string | null;
@@ -365,6 +368,7 @@ export class BillCrudService {
         amount_mismatch: r.amount_mismatch,
         description: r.description ?? undefined,
         status: r.status,
+        source: r.source,
         duplicate_of_id: r.duplicate_of_id,
         market: r.market_id
           ? {
@@ -494,6 +498,7 @@ export class BillCrudService {
     bill.household = this.em.getReference(Household, householdId);
     bill.created_by = this.em.getReference(User, userId);
     bill.status = BillStatus.DRAFT;
+    bill.source = BillSource.PHOTO;
     bill.market_name_raw = dto.market_name ?? undefined;
     const billDate = toDraftDate(dto.bill_date);
     bill.bill_date = billDate.date;
@@ -572,6 +577,7 @@ export class BillCrudService {
     bill.household = em.getReference(Household, args.householdId);
     if (args.userId) bill.created_by = em.getReference(User, args.userId);
     bill.status = BillStatus.FAILED;
+    bill.source = BillSource.PHOTO;
     bill.amount = 0;
     bill.bill_date = todayIsoDate();
     bill.bill_date_inferred = true;
@@ -1098,6 +1104,7 @@ export class BillCrudService {
         this.itemTolerance,
       ),
       description: bill.description,
+      source: bill.source,
       market: this.toMarketRef(bill.market),
       created_at: bill.created_at,
     };

@@ -9,6 +9,7 @@ import request from 'supertest';
 import { MikroORM } from '@mikro-orm/core';
 import { APP_THROTTLERS, AppModule } from '../../src/app.module';
 import { configureApp } from '../../src/app.setup';
+import { loadSwaggerOptions } from '../../src/config/swagger';
 import { parseTrustProxy } from '../../src/config/trust-proxy';
 import {
   InMemoryLoginAttemptStore,
@@ -21,6 +22,8 @@ import type { TokenResponseDto } from '../../src/modules/auth/dto/token-response
 export interface TestAppOptions {
   /** TRUST_PROXY value, as main.ts would read it. */
   trustProxy?: string;
+  /** Environment overrides for the settings main.ts reads (e.g. NODE_ENV). */
+  env?: NodeJS.ProcessEnv;
   /** Extra provider overrides (e.g. stubbing an external API). */
   override?: (builder: TestingModuleBuilder) => TestingModuleBuilder;
 }
@@ -48,7 +51,10 @@ export async function createTestApp(
   const app = moduleFixture.createNestApplication<NestExpressApplication>({
     logger: ['error', 'warn'],
   });
-  configureApp(app, { trustProxy: parseTrustProxy(options.trustProxy) });
+  configureApp(app, {
+    trustProxy: parseTrustProxy(options.trustProxy),
+    swagger: loadSwaggerOptions({ ...process.env, ...options.env }),
+  });
   await app.init();
   return app;
 }

@@ -292,7 +292,8 @@ cp .env.example .env
 | Variable | Required | Default | Description |
 |---|---|---|---|
 | `PORT` | no | `3000` | HTTP port the API listens on |
-| `NODE_ENV` | no | `development` | `development`, `test`, or `production` |
+| `NODE_ENV` | no | `development` (`production` in the Docker image) | `development`, `test`, or `production` |
+| `SWAGGER_ENABLED` | no | `false` in production, `true` otherwise | Serve Swagger UI at `/api` (`true` / `false`; any other value stops startup). See [Swagger API Docs](#swagger-api-docs) |
 | `FRONTEND_URL` | no | `http://localhost:5173` | Frontend origin: CORS allowed origin and the `Origin` accepted by web-mode `/auth` endpoints (see [Authentication](#authentication-web-and-mobile-clients)) |
 | `LOG_LEVEL` | no | — | Logger verbosity: `debug`, `log`, `warn`, `error` |
 | `TRUST_PROXY` | no | off | Which proxies may set `X-Forwarded-For`. Unset/`false`: header ignored. Hop count (`1` for production behind a single reverse proxy) or a comma-separated list of addresses/subnets (`loopback, 10.0.0.0/8`). `true` is rejected; an invalid value stops startup. See [Rate Limiting](#rate-limiting) |
@@ -506,6 +507,8 @@ http://localhost:<PORT>/api
 
 For example with the default port: `http://localhost:3000/api`
 
+It is off when `NODE_ENV=production` (the Docker image's default); set `SWAGGER_ENABLED=true` to serve it there anyway.
+
 ### Authenticating in Swagger UI
 
 Most endpoints require a JWT access token. To authorize:
@@ -515,7 +518,7 @@ Most endpoints require a JWT access token. To authorize:
 3. In the **JWT-auth (http, Bearer)** field, paste only the token value (without the `Bearer ` prefix).
 4. Click **Authorize**, then **Close**.
 
-All subsequent requests from Swagger UI will include the `Authorization: Bearer <token>` header automatically. The authorization is persisted across page refreshes.
+All subsequent requests from Swagger UI will include the `Authorization: Bearer <token>` header automatically. Outside production the authorization is persisted across page refreshes (in the browser's localStorage).
 
 Swagger UI is served from the API's own origin, so it uses web mode. When the access token expires (see `JWT_EXPIRES_IN_MS`), call `POST /auth/refresh` with an empty body — the refresh cookie is sent automatically — then re-authorize in the UI with the new `access_token`.
 

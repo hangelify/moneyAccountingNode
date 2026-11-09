@@ -8,7 +8,11 @@ import {
 } from '@nestjs/common';
 import { EntityManager } from '@mikro-orm/core';
 import { Currency } from '../../types/currency.enum';
-import { isCalendarDate } from '../../common/utils/calendar-date';
+// BNM publishes in Moldovan time, so its `today` is Chisinau's.
+import {
+  chisinauToday,
+  isCalendarDate,
+} from '../../common/utils/calendar-date';
 import {
   EXCHANGE_RATE_PROVIDER,
   type ExchangeRateProvider,
@@ -16,16 +20,6 @@ import {
 } from './exchange-rate.provider';
 
 const KNOWN_CURRENCIES = new Set<string>(Object.values(Currency));
-
-/** BNM publishes in Moldovan time; `today` there may differ from UTC. */
-function chisinauToday(now: Date = new Date()): string {
-  return new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Europe/Chisinau',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(now);
-}
 
 /**
  * Days a source may still publish late: an empty day older than this is

@@ -6,7 +6,7 @@ describe('HTTP hardening: Swagger exposure and security headers (e2e)', () => {
   let app: NestExpressApplication;
 
   // /health opens the database connection: an app that never reached the
-  // database hangs in close() under Jest.
+  // database hangs in close() under Jest (HAN-101).
   async function startApp(options?: TestAppOptions): Promise<void> {
     app = await createTestApp(options);
     await request(app.getHttpServer()).get('/health').expect(200);
@@ -40,5 +40,18 @@ describe('HTTP hardening: Swagger exposure and security headers (e2e)', () => {
       "default-src 'self'",
     );
     expect(res.headers['x-powered-by']).toBeUndefined();
+  });
+
+  it('keeps CORS working for the frontend next to helmet', async () => {
+    await startApp();
+
+    const res = await request(app.getHttpServer())
+      .get('/health')
+      .set('Origin', process.env.FRONTEND_URL!);
+    expect(res.headers['access-control-allow-origin']).toBe(
+      process.env.FRONTEND_URL,
+    );
+    expect(res.headers['access-control-allow-credentials']).toBe('true');
+    expect(res.headers['x-content-type-options']).toBe('nosniff');
   });
 });

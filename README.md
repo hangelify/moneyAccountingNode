@@ -507,7 +507,7 @@ http://localhost:<PORT>/api
 
 For example with the default port: `http://localhost:3000/api`
 
-It is off when `NODE_ENV=production` (the Docker image's default); set `SWAGGER_ENABLED=true` to serve it there anyway.
+It is off when `NODE_ENV=production` (the Docker image's default); set `SWAGGER_ENABLED=true` to serve it there anyway. Outside localhost serve it over HTTPS only: the security headers (helmet: HSTS, CSP `upgrade-insecure-requests`) make browsers switch its requests to `https://`.
 
 ### Authenticating in Swagger UI
 

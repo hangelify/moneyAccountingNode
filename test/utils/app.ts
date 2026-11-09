@@ -22,7 +22,7 @@ import type { TokenResponseDto } from '../../src/modules/auth/dto/token-response
 export interface TestAppOptions {
   /** TRUST_PROXY value, as main.ts would read it. */
   trustProxy?: string;
-  /** Environment overrides for the settings main.ts reads (e.g. NODE_ENV). */
+  /** Environment overrides for the Swagger settings (e.g. NODE_ENV). */
   env?: NodeJS.ProcessEnv;
   /** Extra provider overrides (e.g. stubbing an external API). */
   override?: (builder: TestingModuleBuilder) => TestingModuleBuilder;

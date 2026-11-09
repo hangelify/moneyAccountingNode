@@ -13,6 +13,7 @@ import { User } from '../../entities/user.entity';
 import { BillStatus } from '../../types/bill-status.enum';
 import { BillParseErrorCode } from '../../types/bill-parse-error.enum';
 import { Currency } from '../../types/currency.enum';
+import { MarketService } from '../market/market.service';
 import { BillCrudService } from './bill-crud.service';
 import { BillDashboardService } from './bill-dashboard.service';
 import { BillDuplicatesService } from './bill-duplicates.service';
@@ -51,6 +52,7 @@ describe('bill list and dashboard SQL (PostgreSQL)', () => {
       ],
       providers: [
         BillCrudService,
+        MarketService,
         BillDashboardService,
         BillConversionService,
         BillDuplicatesService,

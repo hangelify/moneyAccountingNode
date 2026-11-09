@@ -15,6 +15,7 @@ import {
   Max,
   Length,
   Matches,
+  MaxLength,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
@@ -29,6 +30,7 @@ import {
 } from '../tasks/schemas/parsed-bill.schema';
 
 export const MAX_BILL_ITEMS = 200;
+export const MAX_BILL_DESCRIPTION_LENGTH = 1000;
 
 export class CreateBillItemDto {
   @ApiProperty({ format: 'uuid' })
@@ -83,8 +85,9 @@ export class CreateBillDto {
   @Max(MAX_MONEY_AMOUNT)
   total_amount!: number;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ maxLength: MAX_BILL_DESCRIPTION_LENGTH })
   @IsString()
+  @MaxLength(MAX_BILL_DESCRIPTION_LENGTH)
   @IsOptional()
   description?: string;
 

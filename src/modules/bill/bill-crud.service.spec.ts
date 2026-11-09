@@ -6,6 +6,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { EntityManager, EntityRepository } from '@mikro-orm/core';
+import { MarketService } from '../market/market.service';
 import { BillCrudService } from './bill-crud.service';
 import { BillDuplicatesService } from './bill-duplicates.service';
 import type { BillConversionService } from './household-conversion';
@@ -78,8 +79,10 @@ function makeService() {
     originalOf: jest.fn(),
     promoteAfterDelete: jest.fn().mockResolvedValue(undefined),
   };
+  const markets = { findOrCreate: jest.fn() };
   return {
     duplicates,
+    markets,
     service: new BillCrudService(
       billRepo,
       marketRepo,
@@ -90,6 +93,7 @@ function makeService() {
         forBills: jest.fn().mockResolvedValue(new Map()),
       } as unknown as BillConversionService,
       duplicates as unknown as BillDuplicatesService,
+      markets as unknown as MarketService,
     ),
     billRepo,
     marketRepo,

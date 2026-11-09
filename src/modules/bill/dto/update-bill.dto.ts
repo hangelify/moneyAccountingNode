@@ -12,6 +12,7 @@ import {
   ArrayMinSize,
   ArrayMaxSize,
   ValidateNested,
+  MaxLength,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiPropertyOptional } from '@nestjs/swagger';
@@ -23,17 +24,19 @@ import {
   MAX_FISCAL_ID_LENGTH,
   PURCHASE_TIME_PATTERN,
 } from '../tasks/schemas/parsed-bill.schema';
-import { MAX_BILL_ITEMS } from './create-bill.dto';
+import { MAX_BILL_DESCRIPTION_LENGTH, MAX_BILL_ITEMS } from './create-bill.dto';
 import { ConfirmBillItemDto, NewMarketDto } from './confirm-bill.dto';
 
 export class UpdateBillDto {
   @ApiPropertyOptional({
     format: 'uuid',
-    description: 'Use an existing market; not together with new_market',
+    description:
+      'Use an existing market; null unlinks the market. Not together with new_market',
+    nullable: true,
   })
   @IsUUID()
   @IsOptional()
-  market_id?: string;
+  market_id?: string | null;
 
   @ApiPropertyOptional({
     type: NewMarketDto,
@@ -63,8 +66,9 @@ export class UpdateBillDto {
   @IsOptional()
   total_amount?: number;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ maxLength: MAX_BILL_DESCRIPTION_LENGTH })
   @IsString()
+  @MaxLength(MAX_BILL_DESCRIPTION_LENGTH)
   @IsOptional()
   description?: string;
 

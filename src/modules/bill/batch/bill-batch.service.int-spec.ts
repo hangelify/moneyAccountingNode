@@ -16,6 +16,7 @@ import { BillStatus } from '../../../types/bill-status.enum';
 import { BillParseErrorCode } from '../../../types/bill-parse-error.enum';
 import { BillBatchItemStatus } from '../../../types/bill-batch-item-status.enum';
 import { Currency } from '../../../types/currency.enum';
+import { MarketService } from '../../market/market.service';
 import { BillCrudService } from '../bill-crud.service';
 import { BillDuplicatesService } from '../bill-duplicates.service';
 import { BillConversionService } from '../household-conversion';
@@ -116,6 +117,7 @@ describe('BillBatchService (PostgreSQL)', () => {
       rates,
       new BillConversionService(fork, rates),
       new BillDuplicatesService(fork),
+      new MarketService(fork.getRepository(Market), fork),
     );
   }
 

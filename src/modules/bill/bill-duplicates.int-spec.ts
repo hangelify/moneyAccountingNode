@@ -199,6 +199,7 @@ describe('possible duplicates on bill reads and writes (PostgreSQL)', () => {
       rates,
       new BillConversionService(fork, rates),
       new BillDuplicatesService(fork),
+      new MarketService(fork.getRepository(Market), fork),
     );
   }
 
@@ -409,6 +410,7 @@ describe('marking duplicates (PostgreSQL)', () => {
       rates,
       new BillConversionService(fork, rates),
       duplicates,
+      new MarketService(fork.getRepository(Market), fork),
     );
     return {
       crud,
@@ -1162,6 +1164,7 @@ describe('totals and the bill list with a duplicate (PostgreSQL)', () => {
       rates,
       new BillConversionService(fork, rates),
       duplicates,
+      new MarketService(fork.getRepository(Market), fork),
     );
     return {
       crud,

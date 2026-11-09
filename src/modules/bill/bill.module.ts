@@ -27,6 +27,7 @@ import {
   DRAFT_RETENTION_DAYS,
   readDraftRetentionDays,
 } from './draft-cleanup.env';
+import { MarketModule } from '../market/market.module';
 import { BILL_ITEM_TOLERANCE, readBillItemTolerance } from './bill-totals';
 
 @Module({
@@ -44,6 +45,7 @@ import { BILL_ITEM_TOLERANCE, readBillItemTolerance } from './bill-totals';
     ]),
     StorageModule,
     ExchangeRateModule,
+    MarketModule,
   ],
   controllers: [BillController],
   providers: [

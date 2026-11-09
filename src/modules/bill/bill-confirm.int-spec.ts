@@ -13,6 +13,7 @@ import { SubCategory } from '../../entities/sub-category.entity';
 import { User } from '../../entities/user.entity';
 import { BillStatus } from '../../types/bill-status.enum';
 import { BillParseErrorCode } from '../../types/bill-parse-error.enum';
+import { MarketService } from '../market/market.service';
 import { BillCrudService } from './bill-crud.service';
 import { ExchangeRateService } from '../exchange-rate/exchange-rate.service';
 import { StubProvider } from '../exchange-rate/testing/stub-exchange-rate.provider';
@@ -146,6 +147,7 @@ describe('confirm and create bill (PostgreSQL)', () => {
       rates,
       new BillConversionService(fork, rates),
       new BillDuplicatesService(fork),
+      new MarketService(fork.getRepository(Market), fork),
     );
   }
 

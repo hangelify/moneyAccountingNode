@@ -1,6 +1,10 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@mikro-orm/nestjs';
-import { EntityRepository, EntityManager } from '@mikro-orm/core';
+import { EntityRepository, EntityManager, sql } from '@mikro-orm/core';
 import { Market } from '../../entities/market.entity';
 import { Household } from '../../entities/household.entity';
 import { CreateMarketDto } from './dto/create-market.dto';
@@ -19,6 +23,7 @@ export class MarketService {
     householdId: string,
     dto: CreateMarketDto,
   ): Promise<MarketResponseDto> {
+    await this.assertNameFree(householdId, dto.name);
     const market = new Market();
     market.name = dto.name;
     market.city = dto.city;
@@ -27,6 +32,48 @@ export class MarketService {
     market.household = this.em.getReference(Household, householdId);
     await this.em.persist(market).flush();
     return this.toDto(market);
+  }
+
+  /**
+   * The household's live market of this name, ignoring case, created with
+   * the given details when there is none. Runs in the caller's transaction.
+   */
+  async findOrCreate(
+    em: EntityManager,
+    householdId: string,
+    dto: { name: string; city?: string; country?: string; address?: string },
+  ): Promise<Market> {
+    const conn = em.getConnection();
+    // A concurrent insert of the same name waits for the other transaction
+    // and then does nothing, so the market is read back below instead of the
+    // unique violation aborting the caller's transaction.
+    const inserted = (await conn.execute(
+      `INSERT INTO markets (name, city, country, address, household_id)
+       VALUES (?, ?, ?, ?, ?)
+       ON CONFLICT (household_id, lower(name)) WHERE deleted_at IS NULL
+       DO NOTHING
+       RETURNING id`,
+      [
+        dto.name,
+        dto.city ?? null,
+        dto.country ?? null,
+        dto.address ?? null,
+        householdId,
+      ],
+      'all',
+      em.getTransactionContext(),
+    )) as Array<{ id: string }>;
+    const [row] = inserted.length
+      ? inserted
+      : ((await conn.execute(
+          `SELECT id FROM markets
+           WHERE  household_id = ? AND lower(name) = lower(?)
+             AND  deleted_at IS NULL`,
+          [householdId, dto.name],
+          'all',
+          em.getTransactionContext(),
+        )) as Array<{ id: string }>);
+    return em.findOneOrFail(Market, row.id);
   }
 
   async listMarkets(householdId: string): Promise<MarketResponseDto[]> {
@@ -81,7 +128,10 @@ export class MarketService {
       deleted_at: null,
     });
     if (!market) throw new NotFoundException(`Market with ID ${id} not found`);
-    if (dto.name !== undefined) market.name = dto.name;
+    if (dto.name !== undefined) {
+      await this.assertNameFree(householdId, dto.name, id);
+      market.name = dto.name;
+    }
     if (dto.city !== undefined) market.city = dto.city;
     if (dto.country !== undefined) market.country = dto.country;
     if (dto.address !== undefined) market.address = dto.address;
@@ -98,6 +148,27 @@ export class MarketService {
     if (!market) throw new NotFoundException(`Market with ID ${id} not found`);
     market.deleted_at = new Date();
     await this.em.persist(market).flush();
+  }
+
+  /**
+   * 409 when another live market of the household has this name, ignoring
+   * case. A concurrent write still hits the unique index (also a 409).
+   */
+  private async assertNameFree(
+    householdId: string,
+    name: string,
+    exceptId?: string,
+  ): Promise<void> {
+    const existing = await this.marketRepository.findOne({
+      household: { id: householdId },
+      [sql.lower('name')]: name.toLowerCase(),
+      deleted_at: null,
+    });
+    if (existing && existing.id !== exceptId) {
+      throw new ConflictException(
+        `Market with name "${name}" already exists in this household`,
+      );
+    }
   }
 
   private toDto(market: Market): MarketResponseDto {

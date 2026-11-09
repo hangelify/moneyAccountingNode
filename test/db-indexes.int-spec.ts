@@ -199,13 +199,13 @@ describe('database indexes (PostgreSQL)', () => {
     expect(p).toContain('users_email_lower_unique');
   });
 
-  it('findOrCreateMarket uses markets_household_id_index', async () => {
+  it('findOrCreate looks a market up by markets_household_id_lower_name_unique', async () => {
     const p = await plan(
-      `select m0.* from markets m0
-        where m0.name ilike 'Lidl' and m0.household_id = '${hid}'
-          and m0.deleted_at is null limit 1`,
+      `select id from markets
+        where household_id = '${hid}' and lower(name) = lower('Lidl')
+          and deleted_at is null`,
     );
-    expect(p).toContain('markets_household_id_index');
+    expect(p).toContain('markets_household_id_lower_name_unique');
   });
 
   // Runs `fn` in a transaction with a fixture household and always rolls

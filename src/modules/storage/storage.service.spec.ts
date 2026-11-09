@@ -232,6 +232,56 @@ describe('S3StorageService', () => {
     });
   });
 
+  describe('getSignedUrl with a public endpoint', () => {
+    it('signs with a client on S3_PUBLIC_ENDPOINT, so browsers can open the URL', async () => {
+      wireSendMock(jest.fn());
+      mockedGetSignedUrl.mockResolvedValue('https://signed.example');
+
+      const svc = new S3StorageService(
+        makeEnv({ publicEndpoint: 'https://budget.example' }),
+      );
+      await svc.getSignedUrl('k');
+
+      expect(MockedS3Client).toHaveBeenCalledTimes(2);
+      const configs = MockedS3Client.mock.calls.map(
+        (c: [{ endpoint?: string }]) => c[0].endpoint,
+      );
+      expect(configs).toEqual([
+        'http://minio.test:9000',
+        'https://budget.example',
+      ]);
+      const signer = MockedS3Client.mock.results[1].value as unknown;
+      expect(mockedGetSignedUrl.mock.calls[0][0]).toBe(signer);
+    });
+
+    it('keeps reads and writes on the internal endpoint', async () => {
+      const send = jest.fn().mockResolvedValue({});
+      MockedS3Client.mockImplementationOnce(() => ({
+        send,
+      })).mockImplementationOnce(() => ({ send: jest.fn() }));
+
+      const svc = new S3StorageService(
+        makeEnv({ publicEndpoint: 'https://budget.example' }),
+      );
+      await svc.exists('k');
+
+      expect(send).toHaveBeenCalledTimes(1);
+    });
+
+    it('signs with the internal client when no public endpoint is set', async () => {
+      wireSendMock(jest.fn());
+      mockedGetSignedUrl.mockResolvedValue('https://signed.example');
+
+      const svc = new S3StorageService(makeEnv());
+      await svc.getSignedUrl('k');
+
+      expect(MockedS3Client).toHaveBeenCalledTimes(1);
+      expect(mockedGetSignedUrl.mock.calls[0][0]).toBe(
+        MockedS3Client.mock.results[0].value,
+      );
+    });
+  });
+
   describe('ensureBucket', () => {
     it('no-ops when the bucket already exists', async () => {
       const send = jest.fn().mockResolvedValue({});

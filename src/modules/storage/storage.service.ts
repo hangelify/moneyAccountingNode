@@ -80,19 +80,26 @@ function isNotFoundError(err: unknown): boolean {
 export class S3StorageService implements StorageService {
   private readonly logger = new Logger(S3StorageService.name);
   private readonly client: S3Client;
+  /** Signs presigned URLs; differs from `client` when S3_PUBLIC_ENDPOINT is set. */
+  private readonly signer: S3Client;
   private readonly bucket: string;
 
   constructor(@Inject(STORAGE_ENV) env: StorageEnv) {
     this.bucket = env.bucket;
-    this.client = new S3Client({
-      region: env.region,
-      endpoint: env.endpoint,
-      forcePathStyle: env.forcePathStyle,
-      credentials: {
-        accessKeyId: env.accessKey,
-        secretAccessKey: env.secretKey,
-      },
-    });
+    const makeClient = (endpoint?: string) =>
+      new S3Client({
+        region: env.region,
+        endpoint,
+        forcePathStyle: env.forcePathStyle,
+        credentials: {
+          accessKeyId: env.accessKey,
+          secretAccessKey: env.secretKey,
+        },
+      });
+    this.client = makeClient(env.endpoint);
+    this.signer = env.publicEndpoint
+      ? makeClient(env.publicEndpoint)
+      : this.client;
   }
 
   async put(
@@ -159,7 +166,7 @@ export class S3StorageService implements StorageService {
 
   async getSignedUrl(key: string, expiresInSec = 900): Promise<string> {
     return getSignedUrl(
-      this.client,
+      this.signer,
       new GetObjectCommand({ Bucket: this.bucket, Key: key }),
       { expiresIn: expiresInSec },
     );

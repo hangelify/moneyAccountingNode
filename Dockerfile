@@ -49,6 +49,10 @@ COPY --from=builder /app/dist ./dist
 # (src/) whenever it is not told otherwise; the image only ships dist/.
 ENV MIKRO_ORM_CLI_PREFER_TS=false
 
+# Production defaults (Swagger off, AI_REQUIRED on) must not depend on the
+# server's .env remembering NODE_ENV.
+ENV NODE_ENV=production
+
 COPY docker-entrypoint.sh ./
 RUN chmod +x docker-entrypoint.sh
 

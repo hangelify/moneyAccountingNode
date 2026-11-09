@@ -15,6 +15,8 @@ import {
   ApiNotFoundResponse,
   ApiConflictResponse,
   ApiProduces,
+  ApiExtraModels,
+  getSchemaPath,
 } from '@nestjs/swagger';
 import {
   AiErrorResponseDto,
@@ -33,6 +35,7 @@ import { BillBatchResponseDto } from '../batch/dto/bill-batch-response.dto';
 import {
   ManualBatchErrorResponseDto,
   ManualBatchResponseDto,
+  ValidationErrorResponseDto,
 } from './manual-batch-response.dto';
 
 export function ApiParsePhotoResponses(): MethodDecorator & ClassDecorator {
@@ -135,10 +138,16 @@ export const ApiManualBatchResponses = () =>
       description:
         'client_batch_id was used before: the bills that submit saved, deleted ones included; nothing new is saved',
     }),
+    ApiExtraModels(ManualBatchErrorResponseDto, ValidationErrorResponseDto),
     ApiBadRequestResponse({
-      type: ManualBatchErrorResponseDto,
       description:
-        'Invalid body, or rows naming a category, sub-category or market the household does not have (errors lists every bad row); nothing is saved',
+        'Nothing is saved. A body that fails validation answers with message: string[], each naming its row as rows.N.field. Rows naming a category, sub-category or market the household does not have answer with errors[], one entry per bad row',
+      schema: {
+        oneOf: [
+          { $ref: getSchemaPath(ValidationErrorResponseDto) },
+          { $ref: getSchemaPath(ManualBatchErrorResponseDto) },
+        ],
+      },
     }),
     ApiUnauthorizedResponse({ description: 'Unauthorized' }),
     ApiForbiddenResponse({ description: 'Not a member of the household' }),

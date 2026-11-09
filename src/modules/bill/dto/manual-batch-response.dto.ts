@@ -34,3 +34,18 @@ export class ManualBatchErrorResponseDto {
   @ApiProperty({ type: [ManualBatchRowErrorDto] })
   errors!: ManualBatchRowErrorDto[];
 }
+
+/** A 400 from the validation pipe: one message per failed rule. */
+export class ValidationErrorResponseDto {
+  @ApiProperty({ example: 400 })
+  statusCode!: number;
+
+  @ApiProperty({
+    type: [String],
+    example: ['rows.1.amount must be a positive number'],
+  })
+  message!: string[];
+
+  @ApiProperty({ example: 'Bad Request' })
+  error!: string;
+}

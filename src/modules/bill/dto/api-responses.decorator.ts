@@ -30,6 +30,10 @@ import { SpendingBreakdownResponseDto } from './spending-breakdown.dto';
 import { BillListResponseDto } from './bill-list-response.dto';
 import { DuplicateSuggestionsResponseDto } from './bill-duplicates.dto';
 import { BillBatchResponseDto } from '../batch/dto/bill-batch-response.dto';
+import {
+  ManualBatchErrorResponseDto,
+  ManualBatchResponseDto,
+} from './manual-batch-response.dto';
 
 export function ApiParsePhotoResponses(): MethodDecorator & ClassDecorator {
   return applyDecorators(
@@ -116,6 +120,31 @@ export const ApiCreateBillResponses = () =>
       description: 'duplicate_of_id names no bill of the household',
     }),
     ApiResponse({ status: 401, description: 'Unauthorized' }),
+  );
+
+export const ApiManualBatchResponses = () =>
+  applyDecorators(
+    ApiResponse({
+      status: 201,
+      type: ManualBatchResponseDto,
+      description: 'Every row saved as a confirmed bill, in row order',
+    }),
+    ApiResponse({
+      status: 200,
+      type: ManualBatchResponseDto,
+      description:
+        'client_batch_id was used before: the bills that submit saved, deleted ones included; nothing new is saved',
+    }),
+    ApiBadRequestResponse({
+      type: ManualBatchErrorResponseDto,
+      description:
+        'Invalid body, or rows naming a category, sub-category or market the household does not have (errors lists every bad row); nothing is saved',
+    }),
+    ApiUnauthorizedResponse({ description: 'Unauthorized' }),
+    ApiForbiddenResponse({ description: 'Not a member of the household' }),
+    ApiTooManyRequestsResponse({
+      description: 'More than 20 batches a minute',
+    }),
   );
 
 export const ApiListBillsResponses = () =>

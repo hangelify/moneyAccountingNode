@@ -14,6 +14,8 @@ import { APP_FILTER } from '@nestjs/core';
 import { createHash } from 'node:crypto';
 import sharp from 'sharp';
 import { BillController } from './bill.controller';
+import { ManualBillBatchService } from './manual-bill-batch.service';
+import { ManualBatchDto } from './dto/manual-batch.dto';
 import { BillPhotoService } from './bill-photo.service';
 import { BillPhotoIngestService } from './bill-photo-ingest.service';
 import { BillCrudService } from './bill-crud.service';
@@ -59,8 +61,10 @@ describe('BillController', () => {
   const unmarkDuplicate = jest.fn();
   const getSignedUrl = jest.fn();
   const getSpendingBreakdown = jest.fn();
+  const createBatch = jest.fn();
 
   beforeEach(async () => {
+    createBatch.mockReset();
     parseAndCategorize.mockReset();
     getSignedUrl.mockReset();
     findCandidates.mockReset();
@@ -76,6 +80,7 @@ describe('BillController', () => {
         { provide: BillPhotoService, useValue: { parseAndCategorize } },
         BillPhotoIngestService,
         { provide: BillCrudService, useValue: billCrudMock },
+        { provide: ManualBillBatchService, useValue: { createBatch } },
         {
           provide: BillDuplicatesService,
           useValue: { findCandidates, markDuplicate, unmarkDuplicate },
@@ -734,6 +739,62 @@ describe('BillController', () => {
         const msgs = await messages(query);
         expect(msgs.some((m) => m.startsWith(field))).toBe(true);
       });
+    });
+  });
+  describe('createManualBatch', () => {
+    const user = { id: 'user-1' } as never;
+    const ctx = { householdId: 'hh-1', role: 'owner' } as never;
+    const dto = { client_batch_id: 'key', rows: [] } as never;
+    const body = { client_batch_id: 'key', bills: [] };
+    const response = () => {
+      const res = { status: jest.fn() };
+      res.status.mockReturnValue(res);
+      return res;
+    };
+
+    it('answers 201 with the bills a new submit saved', async () => {
+      createBatch.mockResolvedValue({ created: true, body });
+      const res = response();
+
+      const result = await controller.createManualBatch(
+        user,
+        ctx,
+        dto,
+        res as never,
+      );
+
+      expect(createBatch).toHaveBeenCalledWith('hh-1', 'user-1', dto);
+      expect(res.status).toHaveBeenCalledWith(201);
+      expect(result).toBe(body);
+    });
+
+    it('answers 200 to a resent submit', async () => {
+      createBatch.mockResolvedValue({ created: false, body });
+      const res = response();
+
+      await controller.createManualBatch(user, ctx, dto, res as never);
+
+      expect(res.status).toHaveBeenCalledWith(200);
+    });
+
+    it('rejects an empty batch before the service runs', async () => {
+      const pipe = new ValidationPipe({
+        whitelist: true,
+        transform: true,
+        forbidNonWhitelisted: true,
+      });
+
+      const err = (await pipe
+        .transform(
+          { client_batch_id: '2b1f5c1e-3d0a-4a8e-9a43-3a5c6e8f1d20', rows: [] },
+          { type: 'body', metatype: ManualBatchDto },
+        )
+        .catch((e: unknown) => e)) as BadRequestException;
+
+      expect(err).toBeInstanceOf(BadRequestException);
+      expect(
+        (err.getResponse() as { message: string[] }).message.join(' '),
+      ).toContain('rows');
     });
   });
 });

@@ -18,7 +18,10 @@ import {
   Logger,
   UnprocessableEntityException,
   Inject,
+  Res,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
+import type { Response } from 'express';
 import { createHash } from 'node:crypto';
 import { FileInterceptor } from '@nestjs/platform-express';
 import {
@@ -36,6 +39,9 @@ import { HouseholdMemberGuard } from '../household/guards/household-member.guard
 import type { HouseholdContext } from '../household/guards/household-member.guard';
 import { CurrentHousehold } from '../household/decorators/current-household.decorator';
 import { BillPhotoIngestService } from './bill-photo-ingest.service';
+import { ManualBillBatchService } from './manual-bill-batch.service';
+import { ManualBatchDto } from './dto/manual-batch.dto';
+import { ManualBatchResponseDto } from './dto/manual-batch-response.dto';
 import { BillCrudService } from './bill-crud.service';
 import { BillDuplicatesService } from './bill-duplicates.service';
 import { BillDashboardService } from './bill-dashboard.service';
@@ -72,6 +78,7 @@ import {
 import {
   ApiParsePhotoResponses,
   ApiCreateBillResponses,
+  ApiManualBatchResponses,
   ApiListBillsResponses,
   ApiGetBillResponses,
   ApiUpdateBillResponses,
@@ -110,6 +117,7 @@ export class BillController {
   constructor(
     private readonly photoIngest: BillPhotoIngestService,
     private readonly billCrud: BillCrudService,
+    private readonly manualBatch: ManualBillBatchService,
     private readonly billDuplicates: BillDuplicatesService,
     private readonly billDashboard: BillDashboardService,
     private readonly spendingBreakdown: SpendingBreakdownService,
@@ -281,6 +289,28 @@ export class BillController {
     @Body() dto: CreateBillDto,
   ): Promise<BillDetailResponseDto> {
     return this.billCrud.createBill(ctx.householdId, user.id, dto);
+  }
+
+  @Post('manual-batch')
+  // Up to 1000 expenses a minute; the global limit stays.
+  @Throttle({ default: { limit: 20, ttl: 60_000 } })
+  @ApiOperation({
+    summary: 'Save several manual expenses at once, one bill per row',
+  })
+  @ApiManualBatchResponses()
+  async createManualBatch(
+    @CurrentUser() user: AuthenticatedUser,
+    @CurrentHousehold() ctx: HouseholdContext,
+    @Body() dto: ManualBatchDto,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<ManualBatchResponseDto> {
+    const { created, body } = await this.manualBatch.createBatch(
+      ctx.householdId,
+      user.id,
+      dto,
+    );
+    res.status(created ? HttpStatus.CREATED : HttpStatus.OK);
+    return body;
   }
 
   @Get()

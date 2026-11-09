@@ -17,6 +17,7 @@ import { ExchangeRateModule } from '../exchange-rate/exchange-rate.module';
 import { ExchangeRateService } from '../exchange-rate/exchange-rate.service';
 import { EXCHANGE_RATE_PROVIDER } from '../exchange-rate/exchange-rate.provider';
 import { StubProvider } from '../exchange-rate/testing/stub-exchange-rate.provider';
+import { MarketService } from '../market/market.service';
 import { BillCrudService } from './bill-crud.service';
 import { BillDashboardService } from './bill-dashboard.service';
 import { SpendingBreakdownService } from './spending-breakdown.service';
@@ -94,6 +95,7 @@ describe('household currency conversion (PostgreSQL)', () => {
       ],
       providers: [
         BillCrudService,
+        MarketService,
         BillConversionService,
         BillDuplicatesService,
         BillDashboardService,

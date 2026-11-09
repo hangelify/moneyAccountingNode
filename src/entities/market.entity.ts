@@ -16,6 +16,12 @@ import { Household } from './household.entity';
   expression:
     'create index "markets_household_id_index" on "markets" ("household_id") where "deleted_at" is null',
 })
+// One live market per name in a household, ignoring case.
+@Index({
+  name: 'markets_household_id_lower_name_unique',
+  expression:
+    'create unique index "markets_household_id_lower_name_unique" on "markets" ("household_id", lower("name")) where "deleted_at" is null',
+})
 export class Market extends BaseEntity {
   @Property({ type: 'varchar', length: 255, nullable: false })
   name!: string;

@@ -13,6 +13,7 @@ import {
   Length,
   Matches,
   ValidateIf,
+  MaxLength,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional, OmitType } from '@nestjs/swagger';
@@ -20,7 +21,11 @@ import { Currency } from '../../../types/currency.enum';
 import { MAX_MONEY_AMOUNT } from '../../../common/utils/money.util';
 import { IsCalendarDate } from '../../../common/validators/is-calendar-date';
 import { MaxDecimalPlaces } from '../../../common/validators/max-decimal-places';
-import { CreateBillItemDto, MAX_BILL_ITEMS } from './create-bill.dto';
+import {
+  CreateBillItemDto,
+  MAX_BILL_DESCRIPTION_LENGTH,
+  MAX_BILL_ITEMS,
+} from './create-bill.dto';
 import {
   MAX_FISCAL_ID_LENGTH,
   PURCHASE_TIME_PATTERN,
@@ -119,8 +124,9 @@ export class ConfirmBillDto {
   @Max(MAX_MONEY_AMOUNT)
   total_amount!: number;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ maxLength: MAX_BILL_DESCRIPTION_LENGTH })
   @IsString()
+  @MaxLength(MAX_BILL_DESCRIPTION_LENGTH)
   @IsOptional()
   description?: string;
 

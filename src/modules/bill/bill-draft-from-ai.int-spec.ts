@@ -14,6 +14,7 @@ import { AiRequest, AiRequestStatus } from '../../entities/ai-request.entity';
 import { BillStatus } from '../../types/bill-status.enum';
 import { BillParseErrorCode } from '../../types/bill-parse-error.enum';
 import { NotFoundException } from '@nestjs/common';
+import { MarketService } from '../market/market.service';
 import { BillCrudService } from './bill-crud.service';
 import { ExchangeRateService } from '../exchange-rate/exchange-rate.service';
 import { StubProvider } from '../exchange-rate/testing/stub-exchange-rate.provider';
@@ -110,6 +111,7 @@ describe('draft from AI output (PostgreSQL)', () => {
       rates,
       new BillConversionService(fork, rates),
       new BillDuplicatesService(fork),
+      new MarketService(fork.getRepository(Market), fork),
     );
   }
 

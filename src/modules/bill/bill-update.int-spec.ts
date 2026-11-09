@@ -12,6 +12,7 @@ import { Market } from '../../entities/market.entity';
 import { SubCategory } from '../../entities/sub-category.entity';
 import { User } from '../../entities/user.entity';
 import { BillStatus } from '../../types/bill-status.enum';
+import { MarketService } from '../market/market.service';
 import { BillCrudService } from './bill-crud.service';
 import { ExchangeRateService } from '../exchange-rate/exchange-rate.service';
 import { StubProvider } from '../exchange-rate/testing/stub-exchange-rate.provider';
@@ -114,6 +115,7 @@ describe('update bill (PostgreSQL)', () => {
       rates,
       new BillConversionService(fork, rates),
       new BillDuplicatesService(fork),
+      new MarketService(fork.getRepository(Market), fork),
     );
   }
 
@@ -246,6 +248,45 @@ describe('update bill (PostgreSQL)', () => {
     const { bill } = await load(id);
     expect(bill.market?.city).toBe('Bucharest');
     expect(result.market?.id).toBe(bill.market!.id);
+  });
+
+  it('unlinks the market when market_id is null', async () => {
+    const { id } = await makeBill(BillStatus.CONFIRMED);
+    const linked = await crud().updateBill(id, householdId, {
+      new_market: { name: `Lidl ${randomUUID()}` },
+    });
+    expect(linked.market).toBeDefined();
+
+    const result = await crud().updateBill(id, householdId, {
+      market_id: null,
+    });
+
+    const { bill } = await load(id);
+    expect(bill.market).toBeNull();
+    expect(result.market).toBeUndefined();
+  });
+
+  it('keeps the market when market_id is omitted', async () => {
+    const { id } = await makeBill(BillStatus.CONFIRMED);
+    const linked = await crud().updateBill(id, householdId, {
+      new_market: { name: `Lidl ${randomUUID()}` },
+    });
+
+    await crud().updateBill(id, householdId, { description: 'edited' });
+
+    const { bill } = await load(id);
+    expect(bill.market?.id).toBe(linked.market!.id);
+  });
+
+  it('rejects market_id null together with new_market', async () => {
+    const { id } = await makeBill(BillStatus.CONFIRMED);
+
+    await expect(
+      crud().updateBill(id, householdId, {
+        market_id: null,
+        new_market: { name: 'Lidl' },
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
   });
 
   it('rejects market_id together with new_market', async () => {

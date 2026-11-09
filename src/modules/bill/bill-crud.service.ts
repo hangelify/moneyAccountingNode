@@ -17,6 +17,7 @@ import {
 import { Bill } from '../../entities/bill.entity';
 import { BillSubCategory } from '../../entities/bill-sub-category.entity';
 import { Market } from '../../entities/market.entity';
+import { MarketService } from '../market/market.service';
 import { SubCategory } from '../../entities/sub-category.entity';
 import { User } from '../../entities/user.entity';
 import { Household } from '../../entities/household.entity';
@@ -142,6 +143,7 @@ export class BillCrudService {
     private readonly exchangeRates: ExchangeRateService,
     private readonly conversion: BillConversionService,
     private readonly duplicates: BillDuplicatesService,
+    private readonly markets: MarketService,
     @Optional()
     @Inject(BILL_ITEM_TOLERANCE)
     private readonly itemTolerance: number = DEFAULT_BILL_ITEM_TOLERANCE,
@@ -276,6 +278,7 @@ export class BillCrudService {
                 ROUND(b.amount * fx.factor, 2)::text AS household_amount
          FROM   bills b
          ${householdConversionJoin('b')}
+         -- A deleted market still shows on its bills, as history.
          LEFT   JOIN markets m ON m.id = b.market_id
          CROSS  JOIN LATERAL (
                   SELECT coalesce(sum(amount), 0) AS total, count(*) AS count
@@ -283,7 +286,7 @@ export class BillCrudService {
                   WHERE  bill_id = b.id
                 ) i
          WHERE  ${where}
-         ORDER  BY b.bill_date DESC
+         ORDER  BY b.bill_date DESC, b.created_at DESC, b.id DESC
          LIMIT  ? OFFSET ?`,
         [this.itemTolerance, source, source, ...params, limit, offset],
       ) as Promise<
@@ -383,8 +386,13 @@ export class BillCrudService {
       // Not joined above: FOR UPDATE cannot lock the nullable side of a join.
       await em.populate(bill, ['market']);
 
-      const market = await this.resolveMarket(em, householdId, dto);
-      if (market) bill.market = market;
+      if (dto.market_id === null) {
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+        bill.market = null as any;
+      } else {
+        const market = await this.resolveMarket(em, householdId, dto);
+        if (market) bill.market = market;
+      }
       if (dto.bill_date !== undefined) {
         bill.bill_date = dto.bill_date;
         bill.bill_date_inferred = false;
@@ -840,7 +848,7 @@ export class BillCrudService {
   private async resolveMarket(
     em: EntityManager,
     householdId: string,
-    dto: { market_id?: string; new_market?: NewMarketDto },
+    dto: { market_id?: string | null; new_market?: NewMarketDto },
   ): Promise<Market | undefined> {
     if (dto.market_id) {
       const market = await em.findOne(Market, {
@@ -856,7 +864,7 @@ export class BillCrudService {
       return market;
     }
     if (dto.new_market) {
-      return this.findOrCreateMarket(em, householdId, dto.new_market);
+      return this.markets.findOrCreate(em, householdId, dto.new_market);
     }
     return undefined;
   }
@@ -938,29 +946,6 @@ export class BillCrudService {
         bsc.product_weight = item.product_weight;
       return bsc;
     });
-  }
-
-  private async findOrCreateMarket(
-    em: EntityManager,
-    householdId: string,
-    dto: { name: string; city?: string; country?: string; address?: string },
-  ): Promise<Market> {
-    const existing = await em.findOne(Market, {
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-      name: { $ilike: dto.name } as any,
-      household: { id: householdId },
-      deleted_at: null,
-    });
-    if (existing) return existing;
-
-    const market = new Market();
-    market.name = dto.name;
-    market.city = dto.city;
-    market.country = dto.country;
-    market.address = dto.address;
-    market.household = em.getReference(Household, householdId);
-    em.persist(market);
-    return market;
   }
 
   private toMarketRef(market?: Market): BillMarketRefDto | undefined {

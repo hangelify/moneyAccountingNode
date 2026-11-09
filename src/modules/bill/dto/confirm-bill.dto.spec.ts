@@ -72,8 +72,19 @@ describe('ConfirmBillDto', () => {
       );
     });
 
+    it('accepts a new line with a category alone, without raw_name', async () => {
+      expect(
+        await itemErrors({
+          category_id: randomUUID(),
+          product_count: 1,
+          amount: 2,
+        }),
+      ).toEqual([]);
+    });
+
     it.each([
       ['id', { id: 'nope' }],
+      ['category_id', { category_id: 'nope' }],
       ['raw_name', { raw_name: '' }],
       ['raw_name', { raw_name: 'x'.repeat(256) }],
     ])('rejects a bad %s', async (prop, bad) => {

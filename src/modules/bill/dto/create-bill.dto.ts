@@ -16,6 +16,8 @@ import {
   Length,
   Matches,
   MaxLength,
+  ValidateIf,
+  IsDefined,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
@@ -33,9 +35,27 @@ export const MAX_BILL_ITEMS = 200;
 export const MAX_BILL_DESCRIPTION_LENGTH = 1000;
 
 export class CreateBillItemDto {
-  @ApiProperty({ format: 'uuid' })
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description: 'Send sub_category_id, category_id or both',
+  })
+  // Required, with a "must be defined" error, when category_id is missing.
+  @ValidateIf(
+    (o: CreateBillItemDto) =>
+      o.sub_category_id != null || o.category_id == null,
+  )
+  @IsDefined({ message: 'Send sub_category_id, category_id or both' })
   @IsUUID()
-  sub_category_id!: string;
+  sub_category_id?: string | null;
+
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description:
+      "The line's category, for a line without a sub-category; with a sub_category_id, it must be the sub-category's category",
+  })
+  @IsUUID()
+  @IsOptional()
+  category_id?: string;
 
   @ApiProperty({ example: 1 })
   @IsInt()

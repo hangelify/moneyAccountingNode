@@ -70,20 +70,22 @@ export class ConfirmBillItemDto extends OmitType(CreateBillItemDto, [
 
   @ApiPropertyOptional({
     format: 'uuid',
-    description: 'Omit to confirm the line without a sub-category',
+    description:
+      'Omit to confirm the line without a sub-category: under category_id, or uncategorized without one',
   })
   @IsUUID()
   @IsOptional()
-  sub_category_id?: string;
+  sub_category_id?: string | null;
 
   @ApiPropertyOptional({
     example: 'LAPTE 1L',
     description:
-      'Name as printed on the receipt. Defaults to the draft line name, else the sub-category name; required on a new line without a sub-category.',
+      'Name as printed on the receipt. Defaults to the draft line name, else the sub-category name, else the category name; required on a new line with neither.',
   })
   @ValidateIf(
     (o: ConfirmBillItemDto) =>
-      o.raw_name !== undefined || (!o.id && !o.sub_category_id),
+      o.raw_name !== undefined ||
+      (!o.id && !o.sub_category_id && !o.category_id),
   )
   @IsString()
   @Length(1, 255)

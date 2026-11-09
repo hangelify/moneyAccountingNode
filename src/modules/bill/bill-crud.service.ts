@@ -110,17 +110,37 @@ export interface DraftSource {
   imageKey?: string;
 }
 
+/** The household's sub-categories and categories the items of a write name. */
+interface LineCategories {
+  subCats: Map<string, SubCategory>;
+  categories: Map<string, Category>;
+}
+
+/** The sub-category and the category an item names, from `found`. */
+function lineCategoryOf(
+  item: { sub_category_id?: string | null; category_id?: string },
+  found: LineCategories,
+): { subCat: SubCategory | null; category: Category | null } {
+  return {
+    subCat: item.sub_category_id
+      ? found.subCats.get(item.sub_category_id)!
+      : null,
+    category: item.category_id ? found.categories.get(item.category_id)! : null,
+  };
+}
+
 /**
  * Sets the line's sub-category and, with it, the line's category: the
- * column must stay the sub-category's category. `subCat` needs its category
- * loaded.
+ * column must stay the sub-category's category. Without a sub-category the
+ * line takes `category`, or none. `subCat` needs its category loaded.
  */
 function assignLineCategory(
   bsc: BillSubCategory,
   subCat: SubCategory | null,
+  category: Category | null = null,
 ): void {
   bsc.sub_category = subCat;
-  bsc.category = subCat?.category ?? null;
+  bsc.category = subCat?.category ?? category;
 }
 
 /** The line's own category, as answered; `category` needs its name loaded. */
@@ -199,8 +219,8 @@ export class BillCrudService {
     bill.purchase_time = dto.purchase_time;
     if (market) bill.market = market;
 
-    const subCats = await this.findSubCategories(householdId, dto.items);
-    const bscEntities = this.toBillItems(bill, dto.items, subCats);
+    const found = await this.findLineCategories(householdId, dto.items);
+    const bscEntities = this.toBillItems(bill, dto.items, found);
 
     await this.em.transactional(async (em) => {
       em.persist(bill);
@@ -397,9 +417,9 @@ export class BillCrudService {
     }
     // Validate before touching the bill: a rejected update keeps its items.
     if (dto.items) this.checkLineIds(dto.items);
-    const subCats = dto.items
-      ? await this.findSubCategories(householdId, dto.items)
-      : new Map<string, SubCategory>();
+    const found = dto.items
+      ? await this.findLineCategories(householdId, dto.items)
+      : undefined;
 
     const updated = await this.em.transactional(async (em) => {
       const bill = await em.findOne(
@@ -433,7 +453,7 @@ export class BillCrudService {
         bill.purchase_time = dto.purchase_time;
 
       const lines = dto.items
-        ? await this.applyItems(em, bill, dto.items, subCats)
+        ? await this.applyItems(em, bill, dto.items, found!)
         : await em.find(BillSubCategory, { bill: bill.id });
       await em.flush();
       await em.populate(lines, ['sub_category.category', 'category']);
@@ -688,7 +708,7 @@ export class BillCrudService {
   ): Promise<BillDetailResponseDto> {
     // Validate before touching the draft: a rejected confirm keeps its items.
     this.checkLineIds(dto.items);
-    const subCats = await this.findSubCategories(householdId, dto.items);
+    const found = await this.findLineCategories(householdId, dto.items);
 
     const confirmed = await this.em.transactional(async (em) => {
       // Not filtered by status: a concurrent confirm waits on the row lock,
@@ -727,7 +747,7 @@ export class BillCrudService {
       if (dto.purchase_time !== undefined)
         bill.purchase_time = dto.purchase_time;
 
-      const bscEntities = await this.applyItems(em, bill, dto.items, subCats);
+      const bscEntities = await this.applyItems(em, bill, dto.items, found);
 
       if (dto.duplicate_of_id) {
         await this.duplicates.linkAsDuplicate(
@@ -837,7 +857,7 @@ export class BillCrudService {
    */
   private async findSubCategories(
     householdId: string,
-    items: { sub_category_id?: string }[],
+    items: { sub_category_id?: string | null }[],
   ): Promise<Map<string, SubCategory>> {
     const ids = new Set<string>();
     for (const { sub_category_id } of items) {
@@ -861,6 +881,58 @@ export class BillCrudService {
       );
     }
     return byId;
+  }
+
+  /**
+   * The household's live categories named by `category_id`, by id. Throws
+   * 400 on an unknown id.
+   */
+  private async findCategories(
+    householdId: string,
+    items: { category_id?: string }[],
+  ): Promise<Map<string, Category>> {
+    const ids = new Set<string>();
+    for (const { category_id } of items) {
+      if (category_id) ids.add(category_id);
+    }
+    if (!ids.size) return new Map();
+
+    const found = await this.em.find(Category, {
+      id: { $in: [...ids] },
+      household: { id: householdId },
+      deleted_at: null,
+    });
+    const byId = new Map(found.map((c) => [c.id, c]));
+    const missing = [...ids].filter((cid) => !byId.has(cid));
+    if (missing.length) {
+      throw new BadRequestException(
+        `Category with ID ${missing.join(', ')} not found or belongs to another user`,
+      );
+    }
+    return byId;
+  }
+
+  /**
+   * The sub-categories and categories the items name. Throws 400 on an
+   * unknown id, or on an item whose sub-category is not of its category.
+   */
+  private async findLineCategories(
+    householdId: string,
+    items: { sub_category_id?: string | null; category_id?: string }[],
+  ): Promise<LineCategories> {
+    const found: LineCategories = {
+      subCats: await this.findSubCategories(householdId, items),
+      categories: await this.findCategories(householdId, items),
+    };
+    for (const item of items) {
+      const { subCat, category } = lineCategoryOf(item, found);
+      if (subCat && category && subCat.category.id !== category.id) {
+        throw new BadRequestException(
+          `SubCategory with ID ${subCat.id} is not in Category with ID ${category.id}`,
+        );
+      }
+    }
+    return found;
   }
 
   /**
@@ -935,15 +1007,13 @@ export class BillCrudService {
     em: EntityManager,
     bill: Bill,
     items: ConfirmBillItemDto[],
-    subCats: Map<string, SubCategory>,
+    found: LineCategories,
   ): Promise<BillSubCategory[]> {
     const drafted = new Map(
       (await em.find(BillSubCategory, { bill: bill.id })).map((l) => [l.id, l]),
     );
     const lines = items.map((item) => {
-      const subCat = item.sub_category_id
-        ? subCats.get(item.sub_category_id)!
-        : null;
+      const { subCat, category } = lineCategoryOf(item, found);
       let bsc: BillSubCategory;
       if (item.id) {
         const draftLine = drafted.get(item.id);
@@ -954,8 +1024,12 @@ export class BillCrudService {
         }
         drafted.delete(item.id);
         bsc = draftLine;
-        // The model's confidence and reasoning were about its sub-category.
-        if ((bsc.sub_category?.id ?? null) !== (subCat?.id ?? null)) {
+        // The model's confidence and reasoning were about its sub-category,
+        // or, on a line without one, its category.
+        if (
+          (bsc.sub_category?.id ?? null) !== (subCat?.id ?? null) ||
+          (!subCat && (bsc.category?.id ?? null) !== (category?.id ?? null))
+        ) {
           bsc.category_confidence = null;
           bsc.category_reasoning = null;
         }
@@ -974,9 +1048,10 @@ export class BillCrudService {
         bsc.bill = bill;
         em.persist(bsc);
       }
-      assignLineCategory(bsc, subCat);
-      // The DTO requires raw_name on a new line without a sub-category.
-      bsc.raw_name = item.raw_name ?? bsc.raw_name ?? subCat!.name;
+      assignLineCategory(bsc, subCat, category);
+      // The DTO requires raw_name on a new line with neither.
+      bsc.raw_name =
+        item.raw_name ?? bsc.raw_name ?? subCat?.name ?? category!.name;
       bsc.product_count = item.product_count;
       bsc.amount = item.amount;
       bsc.product_weight = item.product_weight ?? null;
@@ -989,14 +1064,15 @@ export class BillCrudService {
   private toBillItems(
     bill: Bill,
     items: CreateBillItemDto[],
-    subCats: Map<string, SubCategory>,
+    found: LineCategories,
   ): BillSubCategory[] {
     return items.map((item) => {
-      const subCat = subCats.get(item.sub_category_id)!;
+      // The DTO requires a sub-category, a category or both.
+      const { subCat, category } = lineCategoryOf(item, found);
       const bsc = new BillSubCategory();
       bsc.bill = bill;
-      assignLineCategory(bsc, subCat);
-      bsc.raw_name = subCat.name;
+      assignLineCategory(bsc, subCat, category);
+      bsc.raw_name = subCat?.name ?? category!.name;
       bsc.product_count = item.product_count;
       bsc.amount = item.amount;
       if (item.product_weight !== undefined)

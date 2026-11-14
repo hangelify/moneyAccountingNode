@@ -656,7 +656,7 @@ If no configured provider satisfies a required AI task, the application refuses 
 
 ## Code Checks
 
-One command runs every check that needs no database (type-check, lint, architecture, copy-paste, unit tests):
+One command runs every check that needs no database (type-check, lint, architecture, copy-paste, dead code, unit tests):
 
 ```bash
 npm run verify
@@ -688,6 +688,12 @@ A frozen count may only go down:
 
 Old violations are listed in `.dependency-cruiser-known-violations.json` (1 on 2026-11-14: `src/types/express.d.ts` augments Express with the auth user type). After fixing some, run `npm run arch:baseline` (shrink-only) and commit the file.
 
+### Dead code
+
+`npm run knip` (`knip.json`) fails on unused files, exports, types and dependencies. Remove what it finds; if something is used in a way Knip cannot see, add it to `knip.json` with the reason here:
+
+- `@swc-node/register` (`ignoreDependencies`): the MikroORM CLI loads the TypeScript config and migrations through it; nothing imports it.
+
 ### Code smells
 
 - ESLint (`eslint-plugin-sonarjs` recommended + limits): cognitive complexity 15, file 300 lines, function 60 lines, 4 params, depth 3, no nested ternaries. Tests have no size limits. Old violations are in the baseline.
@@ -715,9 +721,10 @@ CI only blocks a merge when the branch requires it. In **Settings â†’ Branches â
 | `npm run lint` | Run ESLint and auto-fix |
 | `npm run lint:check` | Run ESLint without fixing (baseline applied, 0 warnings allowed) |
 | `npm run lint:prune` | Drop baseline entries for violations that were fixed |
-| `npm run verify` | type-check, lint, architecture, copy-paste check and unit tests: the same gate CI runs |
+| `npm run verify` | type-check, lint, architecture, copy-paste, dead code and unit tests: the same gate CI runs |
 | `npm run dup` | Copy-paste check (jscpd) |
 | `npm run arch` | Module boundaries and import cycles (dependency-cruiser) |
+| `npm run knip` | Unused files, exports and dependencies |
 | `npm run format` | Format all source files with Prettier |
 | `npm run type-check` | TypeScript type check without emitting |
 | `npm test` | Run unit tests |

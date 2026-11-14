@@ -1,6 +1,6 @@
 import { ValidateBy, ValidationOptions, buildMessage } from 'class-validator';
 
-export const MAX_DECIMAL_PLACES = 'maxDecimalPlaces';
+const MAX_DECIMAL_PLACES = 'maxDecimalPlaces';
 
 /**
  * Decimal-places limit for numbers. Unlike `IsNumber({ maxDecimalPlaces })`,

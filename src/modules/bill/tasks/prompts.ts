@@ -26,14 +26,6 @@ Rules:
 
 Return only the JSON that matches the provided schema.`;
 
-export const BILL_CATEGORIZER_SYSTEM_PROMPT = `You are a grocery-item categorizer.
-
-You will receive a list of items (each with an index and a product name) and a tree of the available sub-categories.
-
-For each item, pick the single best sub_category_id from the provided tree. If no sub-category is a clear match (confidence < 0.6), set sub_category_id to null. Keep \`reasoning\` to one short sentence.
-
-Return only the JSON matching the provided schema.`;
-
 export const BILL_PARSE_CATEGORIZE_SYSTEM_PROMPT = `You are a grocery-receipt parser and item categorizer.
 
 Given a photo of a supermarket bill and a list of the user's spending sub-categories, extract the full bill data AND categorize each item in one pass.

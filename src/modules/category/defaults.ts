@@ -1,4 +1,4 @@
-export interface DefaultSubCategory {
+interface DefaultSubCategory {
   name: string;
 }
 

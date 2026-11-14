@@ -2,7 +2,7 @@ import { IsInt, IsOptional, Max, Min } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
-export const MAX_RECENT_CATEGORIES = 50;
+const MAX_RECENT_CATEGORIES = 50;
 export const DEFAULT_RECENT_CATEGORIES = 10;
 /** How far back a use counts. */
 export const RECENT_CATEGORIES_DAYS = 90;

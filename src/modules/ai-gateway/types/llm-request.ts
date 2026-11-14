@@ -1,9 +1,9 @@
-export interface LlmImage {
+interface LlmImage {
   data: Buffer;
   mediaType: 'image/png' | 'image/jpeg' | 'image/webp';
 }
 
-export type LlmMessage =
+type LlmMessage =
   | { role: 'system'; text: string }
   | { role: 'user'; text: string; images?: LlmImage[] }
   | { role: 'assistant'; text: string };

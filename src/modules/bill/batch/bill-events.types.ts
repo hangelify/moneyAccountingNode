@@ -26,7 +26,7 @@ export interface ItemEvent {
   parse_error_message?: string;
 }
 
-export interface BatchCompletedEvent {
+interface BatchCompletedEvent {
   batch_id: string;
   total: number;
   done: number;

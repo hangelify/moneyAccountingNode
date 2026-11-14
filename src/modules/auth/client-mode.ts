@@ -2,7 +2,7 @@ import { BadRequestException, ForbiddenException } from '@nestjs/common';
 
 export type ClientMode = 'web' | 'mobile';
 
-export const CLIENT_TYPE_HEADER = 'x-client-type';
+const CLIENT_TYPE_HEADER = 'x-client-type';
 
 interface HeaderSource {
   get(name: string): string | undefined;

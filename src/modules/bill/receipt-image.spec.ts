@@ -3,6 +3,7 @@ import {
   UnprocessableEntityException,
   UnsupportedMediaTypeException,
 } from '@nestjs/common';
+import { crc32, deflateSync } from 'node:zlib';
 import sharp from 'sharp';
 import { prepareReceiptImage } from './receipt-image';
 
@@ -15,6 +16,30 @@ function solid(width: number, height: number): sharp.Sharp {
   return sharp({
     create: { width, height, channels: 3, background: '#808080' },
   });
+}
+
+function pngChunk(type: string, data: Buffer): Buffer {
+  const length = Buffer.alloc(4);
+  length.writeUInt32BE(data.length);
+  const body = Buffer.concat([Buffer.from(type, 'ascii'), data]);
+  const crc = Buffer.alloc(4);
+  crc.writeUInt32BE(crc32(body));
+  return Buffer.concat([length, body, crc]);
+}
+
+/** A PNG that declares its size but carries one byte of pixel data. */
+function pngHeaderOnly(width: number, height: number): Buffer {
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(width, 0);
+  ihdr.writeUInt32BE(height, 4);
+  ihdr.writeUInt8(8, 8); // bit depth
+  ihdr.writeUInt8(2, 9); // colour type: RGB
+  return Buffer.concat([
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    pngChunk('IHDR', ihdr),
+    pngChunk('IDAT', deflateSync(Buffer.alloc(1))),
+    pngChunk('IEND', Buffer.alloc(0)),
+  ]);
 }
 
 describe('prepareReceiptImage', () => {
@@ -130,12 +155,9 @@ describe('prepareReceiptImage', () => {
   });
 
   it('answers 413 for an image with too many pixels to decode safely', async () => {
-    // Tiny file, huge canvas: a decompression bomb.
-    const bomb = await sharp({
-      create: { width: 12000, height: 10000, channels: 3, background: '#fff' },
-    })
-      .png({ compressionLevel: 9 })
-      .toBuffer();
+    // Tiny file, huge canvas: a decompression bomb. The limit is checked on
+    // the header, so the pixels never need to exist.
+    const bomb = pngHeaderOnly(12000, 10000);
 
     const err = await prepareReceiptImage(bomb).catch((e: unknown) => e);
 

@@ -31,7 +31,12 @@ export class Budget extends BaseEntity {
   @Property({ type: 'timestamptz', nullable: true })
   deleted_at?: Date;
 
-  @ManyToOne(() => Household, { nullable: false })
+  @ManyToOne(() => Household, {
+    nullable: false,
+    deleteRule: 'cascade',
+    updateRule: 'no action',
+    foreignKeyName: 'budgets_household_id_fkey',
+  })
   household!: Rel<Household>;
 
   @OneToMany(() => PlaningHorizon, (planingHorizon) => planingHorizon.budget)

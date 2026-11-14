@@ -28,6 +28,9 @@ export function createMikroOrmConfig() {
       path: './dist/migrations',
       pathTs: './src/migrations',
       glob: '!(*.d).{js,ts}',
+      // One committed snapshot whatever DB_NAME is (CI, e2e and drift
+      // checks use other database names).
+      snapshotName: '.snapshot-accounting',
     },
     seeder: {
       path: './src/seeders',

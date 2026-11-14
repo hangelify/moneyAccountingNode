@@ -50,7 +50,12 @@ export class Category extends BaseEntity {
   @OneToMany(() => SubCategory, (subCategory) => subCategory.category)
   subCategories = new Collection<SubCategory>(this);
 
-  @ManyToOne(() => Household, { nullable: false, deleteRule: 'cascade' })
+  @ManyToOne(() => Household, {
+    nullable: false,
+    deleteRule: 'cascade',
+    updateRule: 'no action',
+    foreignKeyName: 'categories_household_id_fkey',
+  })
   household!: Rel<Household>;
 
   @BeforeCreate()

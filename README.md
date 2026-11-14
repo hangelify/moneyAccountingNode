@@ -464,6 +464,16 @@ npm run seed
 ---
 
 
+### Schema drift
+
+CI runs `npm run migration:drift` after `migration:fresh` (locally: point `DB_*` at a throw-away database, run `npm run migration:fresh`, then `npm run migration:drift`). It fails when
+
+- the entities describe something the migrations did not create (`schema:update` would run SQL), or
+- the entities differ from `src/migrations/.snapshot-accounting.json`, or
+- applying the migrations changes the committed snapshot.
+
+The migrations are the source of truth: change the entity to match them (foreign key names, `deleteRule`/`updateRule`, `@Index` names), or add a migration when the entity is the intended change. The snapshot file name is fixed (`snapshotName` in `src/mikro-orm.config.ts`), whatever `DB_NAME` is.
+
 ### Rules for new migrations
 
 CI runs `npm run migrations:lint` (locally: `MIGRATIONS_BASE=dev npm run migrations:lint`):

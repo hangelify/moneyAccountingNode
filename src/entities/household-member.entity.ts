@@ -4,6 +4,7 @@ import {
   Property,
   BeforeCreate,
   ManyToOne,
+  Index,
 } from '@mikro-orm/decorators/legacy';
 import { Household } from './household.entity';
 import { User } from './user.entity';
@@ -14,6 +15,8 @@ export class HouseholdMember {
     primary: true,
     nullable: false,
     deleteRule: 'cascade',
+    updateRule: 'no action',
+    foreignKeyName: 'household_members_household_id_fkey',
   })
   household!: Rel<Household>;
 
@@ -21,7 +24,10 @@ export class HouseholdMember {
     primary: true,
     nullable: false,
     deleteRule: 'cascade',
+    updateRule: 'no action',
+    foreignKeyName: 'household_members_user_id_fkey',
   })
+  @Index({ name: 'household_members_user_id_idx' })
   user!: Rel<User>;
 
   @Property({ type: 'varchar', length: 20, nullable: false, default: 'member' })

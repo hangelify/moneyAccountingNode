@@ -83,7 +83,7 @@
             "PROVIDER_ERROR",
             "UNKNOWN"
           ],
-          "mappedType": "unknown",
+          "mappedType": "enum",
           "nativeEnumName": "ai_attempt_error_code_enum"
         },
         "error_message": {
@@ -292,7 +292,7 @@
             "SUCCESS",
             "FAILED"
           ],
-          "mappedType": "unknown",
+          "mappedType": "enum",
           "nativeEnumName": "ai_attempt_status_enum"
         },
         "total_cost_usd": {
@@ -530,7 +530,7 @@
             "SUCCESS",
             "FAILED"
           ],
-          "mappedType": "unknown",
+          "mappedType": "enum",
           "nativeEnumName": "ai_request_status_enum"
         },
         "task_name": {
@@ -641,15 +641,13 @@
           "unique": false
         },
         {
-          "columnNames": [
-            "created_at"
-          ],
+          "columnNames": [],
           "composite": false,
           "constraint": false,
           "keyName": "ai_requests_pending_index",
           "primary": false,
           "unique": false,
-          "where": "status = 'PENDING'::ai_request_status_enum"
+          "expression": "create index \"ai_requests_pending_index\" on \"ai_requests\" (\"created_at\") where \"status\" = 'PENDING'"
         },
         {
           "columnNames": [
@@ -662,15 +660,13 @@
           "unique": true
         },
         {
-          "columnNames": [
-            "created_at"
-          ],
+          "columnNames": [],
           "composite": false,
           "constraint": false,
           "keyName": "ai_requests_unscrubbed_created_index",
           "primary": false,
           "unique": false,
-          "where": "prompt IS NOT NULL"
+          "expression": "create index \"ai_requests_unscrubbed_created_index\" on \"ai_requests\" (\"created_at\") where \"prompt\" is not null"
         },
         {
           "columnNames": [
@@ -842,7 +838,7 @@
             "done",
             "failed"
           ],
-          "mappedType": "unknown",
+          "mappedType": "enum",
           "nativeEnumName": "bill_batch_item_status_enum"
         },
         "updated_at": {
@@ -873,8 +869,7 @@
           "constraint": true,
           "keyName": "bill_batch_items_batch_id_position_unique",
           "primary": false,
-          "unique": true,
-          "expression": "CREATE UNIQUE INDEX bill_batch_items_batch_id_position_unique ON public.bill_batch_items USING btree (batch_id, \"position\")"
+          "unique": true
         },
         {
           "columnNames": [
@@ -1226,7 +1221,7 @@
             "other_bill_id"
           ],
           "composite": true,
-          "constraint": false,
+          "constraint": true,
           "keyName": "bill_duplicate_dismissals_pair_unique",
           "primary": false,
           "unique": true
@@ -1245,9 +1240,8 @@
       "checks": [
         {
           "name": "bill_duplicate_dismissals_order_check",
-          "expression": "bill_id < other_bill_id",
-          "definition": "CHECK ((bill_id < other_bill_id))",
-          "columnName": "bill_id"
+          "expression": "\"bill_id\" < \"other_bill_id\"",
+          "definition": "check (\"bill_id\" < \"other_bill_id\")"
         }
       ],
       "triggers": [],
@@ -1525,15 +1519,13 @@
           "unique": false
         },
         {
-          "columnNames": [
-            "category_id"
-          ],
+          "columnNames": [],
           "composite": false,
           "constraint": false,
           "keyName": "bill_sub_categories_category_id_partial_index",
           "primary": false,
           "unique": false,
-          "where": "category_id IS NOT NULL"
+          "expression": "create index \"bill_sub_categories_category_id_partial_index\" on \"bill_sub_categories\" (\"category_id\") where \"category_id\" is not null"
         },
         {
           "columnNames": [
@@ -1546,15 +1538,13 @@
           "unique": true
         },
         {
-          "columnNames": [
-            "sub_category_id"
-          ],
+          "columnNames": [],
           "composite": false,
           "constraint": false,
           "keyName": "bill_sub_categories_sub_category_id_partial_index",
           "primary": false,
           "unique": false,
-          "where": "sub_category_id IS NOT NULL"
+          "expression": "create index \"bill_sub_categories_sub_category_id_partial_index\" on \"bill_sub_categories\" (\"sub_category_id\") where \"sub_category_id\" is not null"
         }
       ],
       "checks": [],
@@ -1673,6 +1663,40 @@
           "collation": null,
           "enumItems": [],
           "mappedType": "boolean"
+        },
+        "client_batch_id": {
+          "name": "client_batch_id",
+          "type": "uuid",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "unique": false,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "uuid"
+        },
+        "client_batch_index": {
+          "name": "client_batch_index",
+          "type": "smallint",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "unique": false,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "smallint"
         },
         "confirmed_at": {
           "name": "confirmed_at",
@@ -1862,7 +1886,7 @@
             "GYD",
             "SRD"
           ],
-          "mappedType": "unknown",
+          "mappedType": "enum",
           "nativeEnumName": "currency_enum"
         },
         "deleted_at": {
@@ -1957,7 +1981,7 @@
           "autoincrement": false,
           "primary": false,
           "nullable": false,
-          "unique": true,
+          "unique": false,
           "length": null,
           "precision": null,
           "scale": null,
@@ -2071,7 +2095,7 @@
             "ai_failed",
             "save_failed"
           ],
-          "mappedType": "unknown",
+          "mappedType": "enum",
           "nativeEnumName": "bill_parse_error_enum"
         },
         "parse_error_message": {
@@ -2093,7 +2117,7 @@
         },
         "purchase_time": {
           "name": "purchase_time",
-          "type": "time(6)",
+          "type": "time",
           "unsigned": false,
           "autoincrement": false,
           "primary": false,
@@ -2107,6 +2131,28 @@
           "collation": null,
           "enumItems": [],
           "mappedType": "time"
+        },
+        "source": {
+          "name": "source",
+          "type": "bill_source",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": false,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": "'manual'",
+          "comment": null,
+          "collation": null,
+          "enumItems": [
+            "photo",
+            "manual",
+            "bank"
+          ],
+          "mappedType": "enum",
+          "nativeEnumName": "bill_source"
         },
         "status": {
           "name": "status",
@@ -2128,7 +2174,7 @@
             "duplicate",
             "failed"
           ],
-          "mappedType": "unknown",
+          "mappedType": "enum",
           "nativeEnumName": "bill_status_enum"
         },
         "updated_at": {
@@ -2181,101 +2227,67 @@
           "unique": false
         },
         {
-          "columnNames": [
-            "duplicate_of_id"
-          ],
+          "columnNames": [],
           "composite": false,
           "constraint": false,
           "keyName": "bills_duplicate_of_id_index",
           "primary": false,
           "unique": false,
-          "where": "duplicate_of_id IS NOT NULL"
+          "expression": "create index \"bills_duplicate_of_id_index\" on \"bills\" (\"duplicate_of_id\") where \"duplicate_of_id\" is not null"
         },
         {
-          "columnNames": [
-            "household_id",
-            "created_at",
-            "id"
-          ],
-          "composite": true,
+          "columnNames": [],
+          "composite": false,
+          "constraint": false,
+          "keyName": "bills_household_client_batch_unique",
+          "primary": false,
+          "unique": false,
+          "expression": "create unique index \"bills_household_client_batch_unique\" on \"bills\" (\"household_id\", \"client_batch_id\", \"client_batch_index\") where \"client_batch_id\" is not null"
+        },
+        {
+          "columnNames": [],
+          "composite": false,
           "constraint": false,
           "keyName": "bills_household_drafts_created_index",
           "primary": false,
           "unique": false,
-          "where": "(status = 'draft'::bill_status_enum) AND (deleted_at IS NULL)",
-          "columns": [
-            {
-              "name": "household_id"
-            },
-            {
-              "name": "created_at",
-              "sort": "DESC"
-            },
-            {
-              "name": "id"
-            }
-          ]
+          "expression": "create index \"bills_household_drafts_created_index\" on \"bills\" (\"household_id\", \"created_at\" desc, \"id\" desc) where \"status\" = 'draft' and \"deleted_at\" is null"
         },
         {
-          "columnNames": [
-            "household_id",
-            "fiscal_register_id",
-            "fiscal_receipt_number"
-          ],
-          "composite": true,
+          "columnNames": [],
+          "composite": false,
           "constraint": false,
           "keyName": "bills_household_fiscal_index",
           "primary": false,
           "unique": false,
-          "where": "(deleted_at IS NULL) AND (fiscal_receipt_number IS NOT NULL)"
+          "expression": "create index \"bills_household_fiscal_index\" on \"bills\" (\"household_id\", \"fiscal_register_id\", \"fiscal_receipt_number\") where \"deleted_at\" is null and \"fiscal_receipt_number\" is not null"
         },
         {
-          "columnNames": [
-            "household_id",
-            "image_sha256"
-          ],
-          "composite": true,
+          "columnNames": [],
+          "composite": false,
           "constraint": false,
           "keyName": "bills_household_image_sha256_draft_unique",
           "primary": false,
-          "unique": true,
-          "where": "(status = 'draft'::bill_status_enum) AND (deleted_at IS NULL) AND (image_sha256 IS NOT NULL)"
+          "unique": false,
+          "expression": "create unique index \"bills_household_image_sha256_draft_unique\" on \"bills\" (\"household_id\", \"image_sha256\") where \"status\" = 'draft' and \"deleted_at\" is null and \"image_sha256\" is not null"
         },
         {
-          "columnNames": [
-            "household_id",
-            "status",
-            "bill_date"
-          ],
-          "composite": true,
+          "columnNames": [],
+          "composite": false,
           "constraint": false,
           "keyName": "bills_household_status_date_index",
           "primary": false,
           "unique": false,
-          "where": "deleted_at IS NULL",
-          "columns": [
-            {
-              "name": "household_id"
-            },
-            {
-              "name": "status"
-            },
-            {
-              "name": "bill_date",
-              "sort": "DESC"
-            }
-          ]
+          "expression": "create index \"bills_household_status_date_index\" on \"bills\" (\"household_id\", \"status\", \"bill_date\" desc) where \"deleted_at\" is null"
         },
         {
-          "columnNames": [
-            "market_id"
-          ],
+          "columnNames": [],
           "composite": false,
           "constraint": false,
           "keyName": "bills_market_id_index",
           "primary": false,
           "unique": false,
-          "where": "deleted_at IS NULL"
+          "expression": "create index \"bills_market_id_index\" on \"bills\" (\"market_id\") where \"deleted_at\" is null"
         },
         {
           "columnNames": [
@@ -2290,16 +2302,19 @@
       ],
       "checks": [
         {
+          "name": "bills_client_batch_check",
+          "expression": "(client_batch_id is null) = (client_batch_index is null)",
+          "definition": "check ((client_batch_id is null) = (client_batch_index is null))"
+        },
+        {
           "name": "bills_duplicate_of_check",
-          "expression": "(status = 'duplicate'::text) = (duplicate_of_id IS NOT NULL)",
-          "definition": "CHECK ((((status)::text = 'duplicate'::text) = (duplicate_of_id IS NOT NULL)))",
-          "columnName": "duplicate_of_id"
+          "expression": "(status::text = 'duplicate') = (duplicate_of_id is not null)",
+          "definition": "check ((status::text = 'duplicate') = (duplicate_of_id is not null))"
         },
         {
           "name": "bills_parse_error_check",
-          "expression": "(status = 'failed'::text) = (parse_error_code IS NOT NULL)",
-          "definition": "CHECK ((((status)::text = 'failed'::text) = (parse_error_code IS NOT NULL)))",
-          "columnName": "parse_error_code"
+          "expression": "(status::text = 'failed') = (parse_error_code is not null)",
+          "definition": "check ((status::text = 'failed') = (parse_error_code is not null))"
         }
       ],
       "triggers": [],
@@ -2443,7 +2458,7 @@
           "autoincrement": false,
           "primary": false,
           "nullable": false,
-          "unique": true,
+          "unique": false,
           "length": null,
           "precision": null,
           "scale": null,
@@ -2490,16 +2505,13 @@
       },
       "indexes": [
         {
-          "columnNames": [
-            "household_id",
-            "lower(name::text)"
-          ],
-          "composite": true,
+          "columnNames": [],
+          "composite": false,
           "constraint": false,
           "keyName": "budgets_household_id_name_lower_unique",
           "primary": false,
-          "unique": true,
-          "expression": "CREATE UNIQUE INDEX budgets_household_id_name_lower_unique ON public.budgets USING btree (household_id, lower((name)::text)) WHERE (deleted_at IS NULL)"
+          "unique": false,
+          "expression": "create unique index \"budgets_household_id_name_lower_unique\" on \"budgets\" (\"household_id\", lower(\"name\")) where \"deleted_at\" is null"
         },
         {
           "columnNames": [
@@ -2592,7 +2604,7 @@
           "autoincrement": false,
           "primary": false,
           "nullable": false,
-          "unique": true,
+          "unique": false,
           "length": null,
           "precision": null,
           "scale": null,
@@ -2666,16 +2678,13 @@
           "unique": false
         },
         {
-          "columnNames": [
-            "household_id",
-            "lower(name::text)"
-          ],
-          "composite": true,
+          "columnNames": [],
+          "composite": false,
           "constraint": false,
           "keyName": "categories_household_id_name_lower_unique",
           "primary": false,
-          "unique": true,
-          "expression": "CREATE UNIQUE INDEX categories_household_id_name_lower_unique ON public.categories USING btree (household_id, lower((name)::text)) WHERE (deleted_at IS NULL)"
+          "unique": false,
+          "expression": "create unique index \"categories_household_id_name_lower_unique\" on \"categories\" (\"household_id\", lower(\"name\")) where \"deleted_at\" is null"
         },
         {
           "columnNames": [
@@ -2921,7 +2930,7 @@
             "GYD",
             "SRD"
           ],
-          "mappedType": "unknown",
+          "mappedType": "enum",
           "nativeEnumName": "currency_enum"
         },
         "currency": {
@@ -3044,7 +3053,7 @@
             "GYD",
             "SRD"
           ],
-          "mappedType": "unknown",
+          "mappedType": "enum",
           "nativeEnumName": "currency_enum"
         },
         "fetched_at": {
@@ -3162,28 +3171,13 @@
           "unique": true
         },
         {
-          "columnNames": [
-            "source",
-            "currency",
-            "rate_date"
-          ],
-          "composite": true,
+          "columnNames": [],
+          "composite": false,
           "constraint": false,
           "keyName": "exchange_rates_source_currency_date_index",
           "primary": false,
           "unique": false,
-          "columns": [
-            {
-              "name": "source"
-            },
-            {
-              "name": "currency"
-            },
-            {
-              "name": "rate_date",
-              "sort": "DESC"
-            }
-          ]
+          "expression": "create index \"exchange_rates_source_currency_date_index\" on \"exchange_rates\" (\"source\", \"currency\", \"rate_date\" desc)"
         },
         {
           "columnNames": [
@@ -3699,7 +3693,7 @@
             "GYD",
             "SRD"
           ],
-          "mappedType": "unknown",
+          "mappedType": "enum",
           "nativeEnumName": "currency_enum"
         },
         "deleted_at": {
@@ -3919,7 +3913,7 @@
             "WARN",
             "ERROR"
           ],
-          "mappedType": "unknown",
+          "mappedType": "enum",
           "nativeEnumName": "log_level_enum"
         },
         "message": {
@@ -3977,7 +3971,7 @@
             "AUTH",
             "DATABASE"
           ],
-          "mappedType": "unknown",
+          "mappedType": "enum",
           "nativeEnumName": "log_source_enum"
         },
         "status_code": {
@@ -4209,7 +4203,7 @@
           "autoincrement": false,
           "primary": false,
           "nullable": false,
-          "unique": true,
+          "unique": false,
           "length": null,
           "precision": null,
           "scale": null,
@@ -4273,27 +4267,22 @@
       },
       "indexes": [
         {
-          "columnNames": [
-            "household_id"
-          ],
+          "columnNames": [],
           "composite": false,
           "constraint": false,
           "keyName": "markets_household_id_index",
           "primary": false,
           "unique": false,
-          "where": "deleted_at IS NULL"
+          "expression": "create index \"markets_household_id_index\" on \"markets\" (\"household_id\") where \"deleted_at\" is null"
         },
         {
-          "columnNames": [
-            "household_id",
-            "lower(name::text)"
-          ],
-          "composite": true,
+          "columnNames": [],
+          "composite": false,
           "constraint": false,
           "keyName": "markets_household_id_lower_name_unique",
           "primary": false,
-          "unique": true,
-          "expression": "CREATE UNIQUE INDEX markets_household_id_lower_name_unique ON public.markets USING btree (household_id, lower((name)::text)) WHERE (deleted_at IS NULL)"
+          "unique": false,
+          "expression": "create unique index \"markets_household_id_lower_name_unique\" on \"markets\" (\"household_id\", lower(\"name\")) where \"deleted_at\" is null"
         },
         {
           "columnNames": [
@@ -4376,6 +4365,16 @@
         },
         {
           "columnNames": [
+            "category_id"
+          ],
+          "composite": false,
+          "constraint": false,
+          "keyName": "planing_horizon_categories_category_id_index",
+          "primary": false,
+          "unique": false
+        },
+        {
+          "columnNames": [
             "planing_horizon_id",
             "category_id"
           ],
@@ -4384,6 +4383,16 @@
           "keyName": "planing_horizon_categories_pkey",
           "primary": true,
           "unique": true
+        },
+        {
+          "columnNames": [
+            "planing_horizon_id"
+          ],
+          "composite": false,
+          "constraint": false,
+          "keyName": "planing_horizon_categories_planing_horizon_id_index",
+          "primary": false,
+          "unique": false
         },
         {
           "columnNames": [
@@ -4456,7 +4465,7 @@
           "autoincrement": false,
           "primary": false,
           "nullable": false,
-          "unique": true,
+          "unique": false,
           "length": null,
           "precision": null,
           "scale": null,
@@ -4603,7 +4612,7 @@
             "GYD",
             "SRD"
           ],
-          "mappedType": "unknown",
+          "mappedType": "enum",
           "nativeEnumName": "currency_enum"
         },
         "deleted_at": {
@@ -4716,7 +4725,7 @@
             "SEMI_ANNUAL",
             "YEARLY"
           ],
-          "mappedType": "unknown",
+          "mappedType": "enum",
           "nativeEnumName": "period_type_enum"
         },
         "updated_at": {
@@ -4749,16 +4758,13 @@
           "unique": false
         },
         {
-          "columnNames": [
-            "budget_id",
-            "lower(name::text)"
-          ],
-          "composite": true,
+          "columnNames": [],
+          "composite": false,
           "constraint": false,
           "keyName": "planing_horizons_budget_id_name_lower_unique",
           "primary": false,
-          "unique": true,
-          "expression": "CREATE UNIQUE INDEX planing_horizons_budget_id_name_lower_unique ON public.planing_horizons USING btree (budget_id, lower((name)::text)) WHERE ((deleted_at IS NULL) AND (NOT is_archived))"
+          "unique": false,
+          "expression": "create unique index \"planing_horizons_budget_id_name_lower_unique\" on \"planing_horizons\" (\"budget_id\", lower(\"name\")) where \"deleted_at\" is null and not \"is_archived\""
         },
         {
           "columnNames": [
@@ -4784,8 +4790,7 @@
             "id"
           ],
           "referencedTableName": "public.budgets",
-          "updateRule": "cascade",
-          "deleteRule": "restrict"
+          "updateRule": "cascade"
         }
       },
       "comment": null
@@ -5008,7 +5013,7 @@
             "jti"
           ],
           "composite": false,
-          "constraint": false,
+          "constraint": true,
           "keyName": "refresh_tokens_jti_unique",
           "primary": false,
           "unique": true
@@ -5038,7 +5043,7 @@
             "token_hash"
           ],
           "composite": false,
-          "constraint": false,
+          "constraint": true,
           "keyName": "refresh_tokens_token_hash_unique",
           "primary": false,
           "unique": true
@@ -5289,7 +5294,7 @@
           "autoincrement": false,
           "primary": false,
           "nullable": false,
-          "unique": true,
+          "unique": false,
           "length": null,
           "precision": null,
           "scale": null,
@@ -5414,16 +5419,13 @@
           "unique": false
         },
         {
-          "columnNames": [
-            "category_id",
-            "lower(name::text)"
-          ],
-          "composite": true,
+          "columnNames": [],
+          "composite": false,
           "constraint": false,
           "keyName": "sub_categories_category_id_name_lower_unique",
           "primary": false,
-          "unique": true,
-          "expression": "CREATE UNIQUE INDEX sub_categories_category_id_name_lower_unique ON public.sub_categories USING btree (category_id, lower((name)::text)) WHERE (deleted_at IS NULL)"
+          "unique": false,
+          "expression": "create unique index \"sub_categories_category_id_name_lower_unique\" on \"sub_categories\" (\"category_id\", lower(\"name\")) where \"deleted_at\" is null"
         },
         {
           "columnNames": [
@@ -5449,8 +5451,7 @@
             "id"
           ],
           "referencedTableName": "public.categories",
-          "updateRule": "cascade",
-          "deleteRule": "restrict"
+          "updateRule": "cascade"
         }
       },
       "comment": null
@@ -5596,7 +5597,7 @@
             "GYD",
             "SRD"
           ],
-          "mappedType": "unknown",
+          "mappedType": "enum",
           "nativeEnumName": "currency_enum"
         },
         "deleted_at": {
@@ -5674,7 +5675,7 @@
           "autoincrement": false,
           "primary": false,
           "nullable": true,
-          "unique": true,
+          "unique": false,
           "length": 64,
           "precision": null,
           "scale": null,
@@ -5754,7 +5755,7 @@
             "EN",
             "RO"
           ],
-          "mappedType": "unknown",
+          "mappedType": "enum",
           "nativeEnumName": "language_code_enum"
         },
         "last_name": {
@@ -5828,26 +5829,22 @@
       },
       "indexes": [
         {
-          "columnNames": [
-            "lower(email::text)"
-          ],
+          "columnNames": [],
           "composite": false,
           "constraint": false,
           "keyName": "users_email_lower_unique",
           "primary": false,
           "unique": true,
-          "expression": "CREATE UNIQUE INDEX users_email_lower_unique ON public.users USING btree (lower((email)::text))"
+          "expression": "create unique index \"users_email_lower_unique\" on \"users\" (lower(\"email\"))"
         },
         {
-          "columnNames": [
-            "email_verification_token_hash"
-          ],
+          "columnNames": [],
           "composite": false,
           "constraint": false,
           "keyName": "users_email_verification_token_hash_unique",
           "primary": false,
           "unique": true,
-          "where": "email_verification_token_hash IS NOT NULL"
+          "expression": "create unique index \"users_email_verification_token_hash_unique\" on \"users\" (\"email_verification_token_hash\") where \"email_verification_token_hash\" is not null"
         },
         {
           "columnNames": [
@@ -5917,6 +5914,15 @@
         "not_a_receipt",
         "ai_failed",
         "save_failed"
+      ]
+    },
+    "bill_source": {
+      "name": "bill_source",
+      "schema": "public",
+      "items": [
+        "photo",
+        "manual",
+        "bank"
       ]
     },
     "bill_status_enum": {

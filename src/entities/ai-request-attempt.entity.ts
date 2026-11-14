@@ -30,7 +30,7 @@ export enum AiAttemptErrorCode {
 
 @Entity({ tableName: 'ai_request_attempts' })
 export class AiRequestAttempt extends BaseEntity {
-  @ManyToOne(() => AiRequest, { nullable: false })
+  @ManyToOne(() => AiRequest, { nullable: false, deleteRule: 'cascade' })
   @Index()
   ai_request!: Rel<AiRequest>;
 

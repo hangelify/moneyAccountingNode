@@ -36,6 +36,7 @@ export class SubCategory extends BaseEntity {
   deleted_at?: Date;
 
   @ManyToOne(() => Category, { nullable: false })
+  @Index()
   category!: Rel<Category>;
 
   @OneToMany(

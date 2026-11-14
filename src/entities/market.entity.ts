@@ -35,7 +35,12 @@ export class Market extends BaseEntity {
   @Property({ type: 'varchar', length: 2, nullable: true })
   country?: string;
 
-  @ManyToOne(() => Household, { nullable: false })
+  @ManyToOne(() => Household, {
+    nullable: false,
+    deleteRule: 'cascade',
+    updateRule: 'no action',
+    foreignKeyName: 'markets_household_id_fkey',
+  })
   household!: Rel<Household>;
 
   @Property({ type: 'timestamptz', nullable: false, defaultRaw: 'NOW()' })

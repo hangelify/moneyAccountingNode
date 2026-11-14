@@ -28,7 +28,12 @@ export class Household extends BaseEntity {
   })
   currency!: Currency;
 
-  @ManyToOne(() => User, { nullable: false, fieldName: 'created_by' })
+  @ManyToOne(() => User, {
+    nullable: false,
+    fieldName: 'created_by',
+    foreignKeyName: 'households_created_by_fkey',
+    updateRule: 'no action',
+  })
   created_by!: Rel<User>;
 
   @Property({ type: 'timestamptz', nullable: false, defaultRaw: 'NOW()' })

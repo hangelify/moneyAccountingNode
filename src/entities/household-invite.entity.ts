@@ -20,17 +20,32 @@ import { User } from './user.entity';
   properties: ['invited_by'],
 })
 export class HouseholdInvite extends BaseEntity {
-  @ManyToOne(() => Household, { nullable: false, deleteRule: 'cascade' })
+  @ManyToOne(() => Household, {
+    nullable: false,
+    deleteRule: 'cascade',
+    updateRule: 'no action',
+    foreignKeyName: 'household_invites_household_id_fkey',
+  })
   household!: Rel<Household>;
 
   @Property({ type: 'varchar', length: 255, nullable: false })
   invitee_email!: string;
 
-  @ManyToOne(() => User, { nullable: false, fieldName: 'invited_by' })
+  @ManyToOne(() => User, {
+    nullable: false,
+    fieldName: 'invited_by',
+    updateRule: 'no action',
+    foreignKeyName: 'household_invites_invited_by_fkey',
+  })
   invited_by!: Rel<User>;
 
   /** SHA-256 hex of the raw token. Raw token is returned to client once, never persisted. */
-  @Property({ type: 'varchar', length: 64, nullable: false, unique: true })
+  @Property({
+    type: 'varchar',
+    length: 64,
+    nullable: false,
+    unique: 'household_invites_token_hash_key',
+  })
   token_hash!: string;
 
   @Property({

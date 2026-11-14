@@ -142,13 +142,20 @@ export class Bill extends BaseEntity {
   })
   ai_request?: Rel<AiRequest>;
 
-  @ManyToOne(() => Household, { nullable: false })
+  @ManyToOne(() => Household, {
+    nullable: false,
+    deleteRule: 'cascade',
+    updateRule: 'no action',
+    foreignKeyName: 'bills_household_id_fkey',
+  })
   household!: Rel<Household>;
 
   @ManyToOne(() => User, {
     nullable: true,
     deleteRule: 'set null',
+    updateRule: 'no action',
     fieldName: 'created_by_user_id',
+    foreignKeyName: 'bills_created_by_user_id_fkey',
   })
   created_by?: Rel<User>;
 
@@ -163,7 +170,12 @@ export class Bill extends BaseEntity {
   @Property({ type: 'timestamptz', nullable: true })
   confirmed_at?: Date;
 
-  @ManyToOne(() => Market, { nullable: true })
+  @ManyToOne(() => Market, {
+    nullable: true,
+    deleteRule: 'set null',
+    updateRule: 'no action',
+    foreignKeyName: 'bills_market_id_fkey',
+  })
   market?: Rel<Market> | null;
 
   @Enum({

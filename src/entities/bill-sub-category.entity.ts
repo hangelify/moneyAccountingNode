@@ -1,16 +1,33 @@
 import type { Rel } from '@mikro-orm/core';
-import { Entity, Property, ManyToOne } from '@mikro-orm/decorators/legacy';
+import {
+  Entity,
+  Property,
+  ManyToOne,
+  Index,
+} from '@mikro-orm/decorators/legacy';
 import { BaseEntity } from './base.entity';
 import { Bill } from './bill.entity';
 import { Category } from './category.entity';
 import { SubCategory } from './sub-category.entity';
 
 @Entity({ tableName: 'bill_sub_categories' })
+// Partial: most lines on old bills have no category yet.
+@Index({
+  name: 'bill_sub_categories_category_id_partial_index',
+  expression:
+    'create index "bill_sub_categories_category_id_partial_index" on "bill_sub_categories" ("category_id") where "category_id" is not null',
+})
+@Index({
+  name: 'bill_sub_categories_sub_category_id_partial_index',
+  expression:
+    'create index "bill_sub_categories_sub_category_id_partial_index" on "bill_sub_categories" ("sub_category_id") where "sub_category_id" is not null',
+})
 export class BillSubCategory extends BaseEntity {
-  @ManyToOne(() => Bill, { nullable: false })
+  @ManyToOne(() => Bill, { nullable: false, deleteRule: 'cascade' })
+  @Index()
   bill!: Rel<Bill>;
 
-  @ManyToOne(() => SubCategory, { nullable: true })
+  @ManyToOne(() => SubCategory, { nullable: true, deleteRule: 'restrict' })
   sub_category?: Rel<SubCategory> | null;
 
   // The line's category; for a line with a sub-category, the sub-category's.

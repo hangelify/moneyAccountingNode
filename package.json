@@ -20,6 +20,7 @@
     "lint:check": "eslint \"{src,apps,libs,test,scripts}/**/*.ts\" --max-warnings 0 --report-unused-disable-directives",
     "lint:prune": "eslint \"{src,apps,libs,test,scripts}/**/*.ts\" --prune-suppressions",
     "type-check": "tsc --noEmit",
+    "verify": "npm run type-check && npm run lint:check && npm run test",
     "test": "NODE_OPTIONS=--experimental-vm-modules jest",
     "test:watch": "NODE_OPTIONS=--experimental-vm-modules jest --watch",
     "test:cov": "NODE_OPTIONS=--experimental-vm-modules jest --coverage",
@@ -134,7 +135,7 @@
   "lint-staged": {
     "*.ts": [
       "prettier --check",
-      "eslint --fix"
+      "eslint --max-warnings 0"
     ]
   },
   "overrides": {

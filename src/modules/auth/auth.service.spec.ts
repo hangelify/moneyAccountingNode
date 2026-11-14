@@ -412,4 +412,4 @@ describe('AuthService REFRESH_REUSE_GRACE_SECONDS validation', () => {
     }).not.toThrow();
   });
 });
-/* eslint-enable @typescript-eslint/no-unsafe-return */
+/* eslint-enable @typescript-eslint/no-unsafe-return -- конец блока выше */

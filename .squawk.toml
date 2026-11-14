@@ -1,0 +1,4 @@
+# Squawk settings for `npm run migrations:lint` (scripts/lint-migrations.ts).
+# Production applies migrations while the previous version still serves
+# traffic, so every rule stays on, lock and statement timeouts included.
+pg_version = "16.0"

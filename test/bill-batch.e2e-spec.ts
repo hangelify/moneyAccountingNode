@@ -328,7 +328,7 @@ describe('Batch photo parsing with the queue enabled (e2e)', () => {
   });
 
   it('boots with the batch enabled and runs the worker', () => {
-    expect(process.env.BILL_BATCH_ENABLED).toBe('true');
+    expect(process.env['BILL_BATCH_ENABLED']).toBe('true');
     expect(app.get(BillPhotoProcessor)).toBeInstanceOf(BillPhotoProcessor);
   });
 

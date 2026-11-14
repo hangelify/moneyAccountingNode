@@ -88,10 +88,10 @@ export class DeepSeekProvider implements LlmProvider {
       temperature: req.temperature ?? 0,
     };
     if (req.maxOutputTokens !== undefined) {
-      body.max_tokens = req.maxOutputTokens;
+      body['max_tokens'] = req.maxOutputTokens;
     }
     if (req.jsonSchema) {
-      body.response_format = { type: 'json_object' };
+      body['response_format'] = { type: 'json_object' };
     }
 
     const { config } = this;

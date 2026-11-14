@@ -11,13 +11,13 @@ describe('parse-photo without any AI provider (e2e)', () => {
   let hid: string;
   const put = jest.fn();
   const saved = {
-    key: process.env.ANTHROPIC_API_KEY,
-    required: process.env.AI_REQUIRED,
+    key: process.env['ANTHROPIC_API_KEY'],
+    required: process.env['AI_REQUIRED'],
   };
 
   beforeAll(async () => {
-    delete process.env.ANTHROPIC_API_KEY;
-    process.env.AI_REQUIRED = 'false';
+    delete process.env['ANTHROPIC_API_KEY'];
+    process.env['AI_REQUIRED'] = 'false';
     app = await createTestApp({
       override: (builder) =>
         builder.overrideProvider(STORAGE_SERVICE).useValue({
@@ -34,10 +34,10 @@ describe('parse-photo without any AI provider (e2e)', () => {
 
   afterAll(async () => {
     await app?.close();
-    if (saved.key === undefined) delete process.env.ANTHROPIC_API_KEY;
-    else process.env.ANTHROPIC_API_KEY = saved.key;
-    if (saved.required === undefined) delete process.env.AI_REQUIRED;
-    else process.env.AI_REQUIRED = saved.required;
+    if (saved.key === undefined) delete process.env['ANTHROPIC_API_KEY'];
+    else process.env['ANTHROPIC_API_KEY'] = saved.key;
+    if (saved.required === undefined) delete process.env['AI_REQUIRED'];
+    else process.env['AI_REQUIRED'] = saved.required;
   });
 
   it('boots and serves manual accounting', async () => {
@@ -101,7 +101,7 @@ describe('parse-photo without any AI provider (e2e)', () => {
       },
     });
     expect(
-      Object.keys(doc.components.schemas.AiErrorResponseDto.properties),
+      Object.keys(doc.components.schemas['AiErrorResponseDto'].properties),
     ).toEqual(['statusCode', 'error', 'message', 'request_id']);
     for (const status of [
       '400',

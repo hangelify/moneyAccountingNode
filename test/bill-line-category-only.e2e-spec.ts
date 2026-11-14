@@ -45,12 +45,12 @@ describe('Bill line with a category and no sub-category (e2e)', () => {
           [billId],
         )
       ).map((r) => [
-        r.id as string,
+        r['id'] as string,
         {
-          sub_category_id: (r.sub_category_id as string | null) ?? null,
-          category_id: (r.category_id as string | null) ?? null,
-          category_confidence: r.category_confidence as string | null,
-          raw_name: r.raw_name as string,
+          sub_category_id: (r['sub_category_id'] as string | null) ?? null,
+          category_id: (r['category_id'] as string | null) ?? null,
+          category_confidence: r['category_confidence'] as string | null,
+          raw_name: r['raw_name'] as string,
         },
       ]),
     );

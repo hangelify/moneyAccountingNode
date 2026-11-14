@@ -7,12 +7,12 @@ import {
 } from './refresh-cookie';
 
 describe('refresh cookie', () => {
-  const original = process.env.JWT_REFRESH_EXPIRES_IN_MS;
+  const original = process.env['JWT_REFRESH_EXPIRES_IN_MS'];
   beforeAll(() => {
-    process.env.JWT_REFRESH_EXPIRES_IN_MS = '604800000';
+    process.env['JWT_REFRESH_EXPIRES_IN_MS'] = '604800000';
   });
   afterAll(() => {
-    process.env.JWT_REFRESH_EXPIRES_IN_MS = original;
+    process.env['JWT_REFRESH_EXPIRES_IN_MS'] = original;
   });
 
   const attributes = {

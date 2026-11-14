@@ -93,7 +93,7 @@ export class AnthropicProvider implements LlmProvider {
     };
 
     if (req.jsonSchema) {
-      body.output_config = {
+      body['output_config'] = {
         format: {
           type: 'json_schema',
           schema: toAnthropicOutputSchema(req.jsonSchema),

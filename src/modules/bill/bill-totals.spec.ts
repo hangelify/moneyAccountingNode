@@ -1,30 +1,30 @@
 import { isAmountMismatch, readBillItemTolerance } from './bill-totals';
 
 describe('readBillItemTolerance', () => {
-  const original = process.env.BILL_ITEM_TOLERANCE;
+  const original = process.env['BILL_ITEM_TOLERANCE'];
   afterEach(() => {
-    if (original === undefined) delete process.env.BILL_ITEM_TOLERANCE;
-    else process.env.BILL_ITEM_TOLERANCE = original;
+    if (original === undefined) delete process.env['BILL_ITEM_TOLERANCE'];
+    else process.env['BILL_ITEM_TOLERANCE'] = original;
   });
 
   it('defaults to one cent per item', () => {
-    delete process.env.BILL_ITEM_TOLERANCE;
+    delete process.env['BILL_ITEM_TOLERANCE'];
     expect(readBillItemTolerance()).toBe(0.01);
   });
 
   it('reads a non-negative amount with at most two decimals', () => {
-    process.env.BILL_ITEM_TOLERANCE = '0.05';
+    process.env['BILL_ITEM_TOLERANCE'] = '0.05';
     expect(readBillItemTolerance()).toBe(0.05);
-    process.env.BILL_ITEM_TOLERANCE = '0.07';
+    process.env['BILL_ITEM_TOLERANCE'] = '0.07';
     expect(readBillItemTolerance()).toBe(0.07);
-    process.env.BILL_ITEM_TOLERANCE = '0';
+    process.env['BILL_ITEM_TOLERANCE'] = '0';
     expect(readBillItemTolerance()).toBe(0);
   });
 
   it.each(['-0.01', '0.001', 'abc', 'Infinity'])(
     'refuses to start with BILL_ITEM_TOLERANCE=%s',
     (value) => {
-      process.env.BILL_ITEM_TOLERANCE = value;
+      process.env['BILL_ITEM_TOLERANCE'] = value;
       expect(() => readBillItemTolerance()).toThrow(/BILL_ITEM_TOLERANCE/);
     },
   );

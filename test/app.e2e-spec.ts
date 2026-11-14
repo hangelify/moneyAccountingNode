@@ -24,10 +24,10 @@ describe('AppController (e2e)', () => {
   it('allows CORS from FRONTEND_URL only', async () => {
     const res = await request(app.getHttpServer())
       .options('/auth/login')
-      .set('Origin', process.env.FRONTEND_URL!)
+      .set('Origin', process.env['FRONTEND_URL']!)
       .set('Access-Control-Request-Method', 'POST');
     expect(res.headers['access-control-allow-origin']).toBe(
-      process.env.FRONTEND_URL,
+      process.env['FRONTEND_URL'],
     );
 
     const other = await request(app.getHttpServer())

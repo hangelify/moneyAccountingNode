@@ -6,12 +6,12 @@ const req = (headers: Record<string, string>) => ({
 });
 
 describe('resolveClientMode', () => {
-  const original = process.env.FRONTEND_URL;
+  const original = process.env['FRONTEND_URL'];
   beforeEach(() => {
-    process.env.FRONTEND_URL = 'https://app.example.com/';
+    process.env['FRONTEND_URL'] = 'https://app.example.com/';
   });
   afterAll(() => {
-    process.env.FRONTEND_URL = original;
+    process.env['FRONTEND_URL'] = original;
   });
 
   it('returns mobile for X-Client-Type: mobile without Origin', () => {

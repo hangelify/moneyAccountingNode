@@ -113,9 +113,9 @@ describe('LoginLockoutService', () => {
   });
 
   it('reads the thresholds from env', async () => {
-    process.env.LOGIN_MAX_FAILURES = '2';
-    process.env.LOGIN_LOCKOUT_SECONDS = '10';
-    process.env.LOGIN_LOCKOUT_MAX_SECONDS = '15';
+    process.env['LOGIN_MAX_FAILURES'] = '2';
+    process.env['LOGIN_LOCKOUT_SECONDS'] = '10';
+    process.env['LOGIN_LOCKOUT_MAX_SECONDS'] = '15';
 
     await attempts(2);
     expect(await attempt()).toBe(10);
@@ -125,8 +125,8 @@ describe('LoginLockoutService', () => {
   });
 
   it('rejects a first lock longer than the cap at startup', () => {
-    process.env.LOGIN_LOCKOUT_SECONDS = '120';
-    process.env.LOGIN_LOCKOUT_MAX_SECONDS = '60';
+    process.env['LOGIN_LOCKOUT_SECONDS'] = '120';
+    process.env['LOGIN_LOCKOUT_MAX_SECONDS'] = '60';
 
     expect(() => {
       service.onModuleInit();

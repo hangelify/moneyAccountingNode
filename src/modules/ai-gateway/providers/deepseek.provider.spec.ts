@@ -33,14 +33,14 @@ describe('DeepSeekProvider', () => {
   });
 
   it('is disabled when DEEPSEEK_API_KEY is missing', () => {
-    delete process.env.DEEPSEEK_API_KEY;
+    delete process.env['DEEPSEEK_API_KEY'];
     const p = new DeepSeekProvider(testAiCallConfig());
     expect(p.isConfigured).toBe(false);
   });
 
   it('exposes only text and json capabilities (no vision)', () => {
-    process.env.DEEPSEEK_API_KEY = 'x';
-    process.env.DEEPSEEK_MODEL = 'deepseek-chat';
+    process.env['DEEPSEEK_API_KEY'] = 'x';
+    process.env['DEEPSEEK_MODEL'] = 'deepseek-chat';
     const p = new DeepSeekProvider(testAiCallConfig());
     expect(p.capabilities.has('text')).toBe(true);
     expect(p.capabilities.has('json')).toBe(true);
@@ -48,8 +48,8 @@ describe('DeepSeekProvider', () => {
   });
 
   it('constructs OpenAI SDK with DeepSeek baseURL', () => {
-    process.env.DEEPSEEK_API_KEY = 'ds-key';
-    process.env.DEEPSEEK_MODEL = 'deepseek-chat';
+    process.env['DEEPSEEK_API_KEY'] = 'ds-key';
+    process.env['DEEPSEEK_MODEL'] = 'deepseek-chat';
     new DeepSeekProvider(testAiCallConfig());
     expect(mockCtor).toHaveBeenCalledWith({
       apiKey: 'ds-key',
@@ -59,8 +59,8 @@ describe('DeepSeekProvider', () => {
   });
 
   it('appends schema to existing system message and sets json_object mode', async () => {
-    process.env.DEEPSEEK_API_KEY = 'x';
-    process.env.DEEPSEEK_MODEL = 'deepseek-chat';
+    process.env['DEEPSEEK_API_KEY'] = 'x';
+    process.env['DEEPSEEK_MODEL'] = 'deepseek-chat';
     mockCreate.mockResolvedValue({
       choices: [{ message: { content: '{"ok":true}' } }],
       usage: { prompt_tokens: 3, completion_tokens: 4 },
@@ -83,8 +83,8 @@ describe('DeepSeekProvider', () => {
   });
 
   it('synthesizes a system message when none is provided', async () => {
-    process.env.DEEPSEEK_API_KEY = 'x';
-    process.env.DEEPSEEK_MODEL = 'deepseek-chat';
+    process.env['DEEPSEEK_API_KEY'] = 'x';
+    process.env['DEEPSEEK_MODEL'] = 'deepseek-chat';
     mockCreate.mockResolvedValue({
       choices: [{ message: { content: '{"ok":true}' } }],
       usage: { prompt_tokens: 1, completion_tokens: 1 },
@@ -103,8 +103,8 @@ describe('DeepSeekProvider', () => {
   });
 
   it('throws InvalidResponseError when the body is not valid JSON', async () => {
-    process.env.DEEPSEEK_API_KEY = 'x';
-    process.env.DEEPSEEK_MODEL = 'deepseek-chat';
+    process.env['DEEPSEEK_API_KEY'] = 'x';
+    process.env['DEEPSEEK_MODEL'] = 'deepseek-chat';
     mockCreate.mockResolvedValue({
       choices: [{ message: { content: 'not json {' } }],
       usage: { prompt_tokens: 3, completion_tokens: 4 },
@@ -127,8 +127,8 @@ describe('DeepSeekProvider', () => {
 
   describe('response handling', () => {
     beforeEach(() => {
-      process.env.DEEPSEEK_API_KEY = 'x';
-      process.env.DEEPSEEK_MODEL = 'deepseek-chat';
+      process.env['DEEPSEEK_API_KEY'] = 'x';
+      process.env['DEEPSEEK_MODEL'] = 'deepseek-chat';
     });
 
     const jsonReq = {
@@ -199,8 +199,8 @@ describe('DeepSeekProvider', () => {
   });
 
   it('classifies 429 as transient and 400 as non-transient', () => {
-    process.env.DEEPSEEK_API_KEY = 'x';
-    process.env.DEEPSEEK_MODEL = 'deepseek-chat';
+    process.env['DEEPSEEK_API_KEY'] = 'x';
+    process.env['DEEPSEEK_MODEL'] = 'deepseek-chat';
     const p = new DeepSeekProvider(testAiCallConfig());
     expect(p.isTransient({ status: 429 })).toBe(true);
     expect(p.isTransient({ status: 400 })).toBe(false);

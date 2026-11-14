@@ -33,14 +33,14 @@ describe('AnthropicProvider', () => {
   });
 
   it('is disabled when ANTHROPIC_API_KEY is missing', () => {
-    delete process.env.ANTHROPIC_API_KEY;
+    delete process.env['ANTHROPIC_API_KEY'];
     const p = new AnthropicProvider(testAiCallConfig());
     expect(p.isConfigured).toBe(false);
   });
 
   it('routes system messages to the system param and images as base64 blocks', async () => {
-    process.env.ANTHROPIC_API_KEY = 'x';
-    process.env.ANTHROPIC_MODEL = 'claude-sonnet-4-6';
+    process.env['ANTHROPIC_API_KEY'] = 'x';
+    process.env['ANTHROPIC_MODEL'] = 'claude-sonnet-4-6';
     mockCreate.mockResolvedValue({
       content: [{ type: 'text', text: '{"ok":true}' }],
       usage: { input_tokens: 5, output_tokens: 7 },
@@ -78,8 +78,8 @@ describe('AnthropicProvider', () => {
 
   describe('response handling', () => {
     beforeEach(() => {
-      process.env.ANTHROPIC_API_KEY = 'x';
-      process.env.ANTHROPIC_MODEL = 'claude-sonnet-4-6';
+      process.env['ANTHROPIC_API_KEY'] = 'x';
+      process.env['ANTHROPIC_MODEL'] = 'claude-sonnet-4-6';
     });
 
     const jsonReq = {
@@ -92,26 +92,26 @@ describe('AnthropicProvider', () => {
         content: [{ type: 'text', text: '{}' }],
         stop_reason: 'end_turn',
       });
-      delete process.env.ANTHROPIC_MAX_OUTPUT_TOKENS;
+      delete process.env['ANTHROPIC_MAX_OUTPUT_TOKENS'];
       await new AnthropicProvider(testAiCallConfig()).complete(jsonReq);
-      process.env.ANTHROPIC_MAX_OUTPUT_TOKENS = '8000';
+      process.env['ANTHROPIC_MAX_OUTPUT_TOKENS'] = '8000';
       try {
         await new AnthropicProvider(testAiCallConfig()).complete(jsonReq);
       } finally {
-        delete process.env.ANTHROPIC_MAX_OUTPUT_TOKENS;
+        delete process.env['ANTHROPIC_MAX_OUTPUT_TOKENS'];
       }
       expect(mockCreate.mock.calls[0][0].max_tokens).toBe(16000);
       expect(mockCreate.mock.calls[1][0].max_tokens).toBe(8000);
     });
 
     it('fails to start on an invalid ANTHROPIC_MAX_OUTPUT_TOKENS', () => {
-      process.env.ANTHROPIC_MAX_OUTPUT_TOKENS = 'lots';
+      process.env['ANTHROPIC_MAX_OUTPUT_TOKENS'] = 'lots';
       try {
         expect(() => new AnthropicProvider(testAiCallConfig())).toThrow(
           /ANTHROPIC_MAX_OUTPUT_TOKENS/,
         );
       } finally {
-        delete process.env.ANTHROPIC_MAX_OUTPUT_TOKENS;
+        delete process.env['ANTHROPIC_MAX_OUTPUT_TOKENS'];
       }
     });
 
@@ -236,8 +236,8 @@ describe('AnthropicProvider', () => {
   });
 
   it('classifies 429 as transient and 400 as non-transient', () => {
-    process.env.ANTHROPIC_API_KEY = 'x';
-    process.env.ANTHROPIC_MODEL = 'claude-sonnet-4-6';
+    process.env['ANTHROPIC_API_KEY'] = 'x';
+    process.env['ANTHROPIC_MODEL'] = 'claude-sonnet-4-6';
     const p = new AnthropicProvider(testAiCallConfig());
     expect(p.isTransient({ status: 429 })).toBe(true);
     expect(p.isTransient({ status: 400 })).toBe(false);

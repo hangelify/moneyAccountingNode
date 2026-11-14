@@ -68,14 +68,14 @@ export class OpenAiProvider implements LlmProvider {
     // must leave it unset.
     const body: Record<string, unknown> = { model, messages };
     if (req.temperature !== undefined) {
-      body.temperature = req.temperature;
+      body['temperature'] = req.temperature;
     }
     if (req.maxOutputTokens !== undefined) {
-      body.max_completion_tokens = req.maxOutputTokens;
+      body['max_completion_tokens'] = req.maxOutputTokens;
     }
 
     if (req.jsonSchema) {
-      body.response_format = {
+      body['response_format'] = {
         type: 'json_schema',
         json_schema: {
           name: 'output',

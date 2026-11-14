@@ -249,14 +249,14 @@ describe('spending breakdown SQL (PostgreSQL)', () => {
     const [eur] = res.by_currency;
     expect(eur.categories).toEqual([
       {
-        id: id.food,
+        id: id['food'],
         name: 'Food',
         total: 8.6,
         share: 39.81,
         archived: false,
         sub_categories: [
           {
-            id: id.bread,
+            id: id['bread'],
             name: 'bread',
             total: 4.5,
             share_of_category: 52.33,
@@ -264,7 +264,7 @@ describe('spending breakdown SQL (PostgreSQL)', () => {
             archived: false,
           },
           {
-            id: id.candy,
+            id: id['candy'],
             name: 'candy',
             total: 3,
             share_of_category: 34.88,
@@ -272,7 +272,7 @@ describe('spending breakdown SQL (PostgreSQL)', () => {
             archived: true,
           },
           {
-            id: id.milk,
+            id: id['milk'],
             name: 'milk',
             total: 1.1,
             share_of_category: 12.79,
@@ -282,14 +282,14 @@ describe('spending breakdown SQL (PostgreSQL)', () => {
         ],
       },
       {
-        id: id.home,
+        id: id['home'],
         name: 'Home',
         total: 6,
         share: 27.78,
         archived: false,
         sub_categories: [
           {
-            id: id.soap,
+            id: id['soap'],
             name: 'soap',
             total: 6,
             share_of_category: 100,
@@ -299,14 +299,14 @@ describe('spending breakdown SQL (PostgreSQL)', () => {
         ],
       },
       {
-        id: id.old,
+        id: id['old'],
         name: 'Old',
         total: 5,
         share: 23.15,
         archived: true,
         sub_categories: [
           {
-            id: id.relic,
+            id: id['relic'],
             name: 'relic',
             total: 5,
             share_of_category: 100,
@@ -410,14 +410,14 @@ describe('spending breakdown SQL (PostgreSQL)', () => {
       const [eur] = res.by_currency;
       expect(eur.categories).toEqual([
         {
-          id: id.food,
+          id: id['food'],
           name: 'Food',
           total: 6,
           share: 35.29,
           archived: false,
           sub_categories: [
             {
-              id: id.bread,
+              id: id['bread'],
               name: 'bread',
               total: 2,
               share_of_category: 33.33,
@@ -435,7 +435,7 @@ describe('spending breakdown SQL (PostgreSQL)', () => {
           ],
         },
         {
-          id: id.old,
+          id: id['old'],
           name: 'Old',
           total: 4,
           share: 23.53,
@@ -472,13 +472,13 @@ describe('spending breakdown SQL (PostgreSQL)', () => {
 
       const expected = [
         {
-          category_id: id.food,
+          category_id: id['food'],
           category_name: 'Food',
           total_amount: 6,
           percentage: 60,
         },
         {
-          category_id: id.old,
+          category_id: id['old'],
           category_name: 'Old',
           total_amount: 4,
           percentage: 40,

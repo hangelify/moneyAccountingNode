@@ -36,7 +36,10 @@ describe('Bill line category_id on writes (e2e)', () => {
           `select id, category_id from bill_sub_categories where bill_id = ?`,
           [billId],
         )
-      ).map((r) => [r.id as string, (r.category_id as string | null) ?? null]),
+      ).map((r) => [
+        r['id'] as string,
+        (r['category_id'] as string | null) ?? null,
+      ]),
     );
 
   /** Lines of the bill whose category_id is not their sub-category's. */

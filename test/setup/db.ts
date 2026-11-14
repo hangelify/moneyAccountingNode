@@ -3,11 +3,11 @@ import { Client } from 'pg';
 /** Empties every table but the migration log, in the test database. */
 export async function truncateAll(): Promise<void> {
   const db = new Client({
-    host: process.env.DB_HOST,
-    port: Number(process.env.DB_PORT),
-    user: process.env.DB_USER,
-    password: process.env.DB_PASSWORD,
-    database: process.env.DB_NAME,
+    host: process.env['DB_HOST'],
+    port: Number(process.env['DB_PORT']),
+    user: process.env['DB_USER'],
+    password: process.env['DB_PASSWORD'],
+    database: process.env['DB_NAME'],
   });
   await db.connect();
   try {

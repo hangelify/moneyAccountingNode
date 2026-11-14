@@ -203,7 +203,7 @@ describe('manual expense batch (PostgreSQL)', () => {
       [body.client_batch_id],
     )) as Record<string, unknown>[];
     expect(lines).toHaveLength(10);
-    expect(lines.map((l) => l.client_batch_index)).toEqual([
+    expect(lines.map((l) => l['client_batch_index'])).toEqual([
       0, 1, 2, 3, 4, 5, 6, 7, 8, 9,
     ]);
     expect(lines[0]).toMatchObject({

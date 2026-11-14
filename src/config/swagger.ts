@@ -13,15 +13,15 @@ export interface SwaggerOptions {
 export function loadSwaggerOptions(
   env: NodeJS.ProcessEnv = process.env,
 ): SwaggerOptions {
-  const production = env.NODE_ENV === 'production';
-  const raw = env.SWAGGER_ENABLED?.trim();
+  const production = env['NODE_ENV'] === 'production';
+  const raw = env['SWAGGER_ENABLED']?.trim();
   let enabled: boolean;
   if (raw === undefined || raw === '') enabled = !production;
   else if (raw === 'true') enabled = true;
   else if (raw === 'false') enabled = false;
   else {
     throw new Error(
-      `Invalid SWAGGER_ENABLED='${env.SWAGGER_ENABLED}': expected 'true' or 'false'`,
+      `Invalid SWAGGER_ENABLED='${env['SWAGGER_ENABLED']}': expected 'true' or 'false'`,
     );
   }
   return { enabled, persistAuthorization: !production };

@@ -254,10 +254,10 @@ describe('AiGatewayBootstrapper (boot-time pricing check)', () => {
 });
 
 describe('AiGatewayModule.forRoot (call config)', () => {
-  const saved = process.env.AI_TRANSIENT_RETRY_ATTEMPTS;
+  const saved = process.env['AI_TRANSIENT_RETRY_ATTEMPTS'];
   afterEach(() => {
-    if (saved === undefined) delete process.env.AI_TRANSIENT_RETRY_ATTEMPTS;
-    else process.env.AI_TRANSIENT_RETRY_ATTEMPTS = saved;
+    if (saved === undefined) delete process.env['AI_TRANSIENT_RETRY_ATTEMPTS'];
+    else process.env['AI_TRANSIENT_RETRY_ATTEMPTS'] = saved;
   });
 
   function configFactory(): () => unknown {
@@ -271,25 +271,25 @@ describe('AiGatewayModule.forRoot (call config)', () => {
   }
 
   it('provides the parsed AI call config', () => {
-    process.env.AI_TRANSIENT_RETRY_ATTEMPTS = '1';
+    process.env['AI_TRANSIENT_RETRY_ATTEMPTS'] = '1';
     expect(configFactory()()).toMatchObject({ retryAttempts: 1 });
   });
 
   it('fails startup on an invalid AI env value', () => {
-    process.env.AI_TRANSIENT_RETRY_ATTEMPTS = 'NaN';
+    process.env['AI_TRANSIENT_RETRY_ATTEMPTS'] = 'NaN';
     expect(() => configFactory()()).toThrow('AI_TRANSIENT_RETRY_ATTEMPTS');
   });
 });
 
 describe('AiGatewayModule.forRoot (usage limits)', () => {
-  const saved = process.env.AI_MAX_CONCURRENCY;
+  const saved = process.env['AI_MAX_CONCURRENCY'];
   afterEach(() => {
-    if (saved === undefined) delete process.env.AI_MAX_CONCURRENCY;
-    else process.env.AI_MAX_CONCURRENCY = saved;
+    if (saved === undefined) delete process.env['AI_MAX_CONCURRENCY'];
+    else process.env['AI_MAX_CONCURRENCY'] = saved;
   });
 
   it('provides and exports the parsed usage limits', () => {
-    process.env.AI_MAX_CONCURRENCY = '7';
+    process.env['AI_MAX_CONCURRENCY'] = '7';
     const mod = AiGatewayModule.forRoot({ providers: [] });
     const provider = (mod.providers ?? []).find(
       (p) =>

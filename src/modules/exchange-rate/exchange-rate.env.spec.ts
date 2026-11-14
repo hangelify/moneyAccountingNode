@@ -19,8 +19,8 @@ describe('readExchangeRateConfig', () => {
   });
 
   it('reads the URL without a trailing slash and a custom timeout', () => {
-    process.env.EXCHANGE_RATE_API_URL = 'http://localhost:9999/api/v1/';
-    process.env.EXCHANGE_RATE_TIMEOUT_MS = '2500';
+    process.env['EXCHANGE_RATE_API_URL'] = 'http://localhost:9999/api/v1/';
+    process.env['EXCHANGE_RATE_TIMEOUT_MS'] = '2500';
     expect(readExchangeRateConfig()).toEqual({
       apiUrl: 'http://localhost:9999/api/v1',
       timeoutMs: 2500,
@@ -30,7 +30,7 @@ describe('readExchangeRateConfig', () => {
   it.each(['0', '-1', '1.5', 'abc'])(
     'refuses to start with EXCHANGE_RATE_TIMEOUT_MS=%s',
     (value) => {
-      process.env.EXCHANGE_RATE_TIMEOUT_MS = value;
+      process.env['EXCHANGE_RATE_TIMEOUT_MS'] = value;
       expect(() => readExchangeRateConfig()).toThrow(
         /EXCHANGE_RATE_TIMEOUT_MS/,
       );
@@ -38,7 +38,7 @@ describe('readExchangeRateConfig', () => {
   );
 
   it('refuses to start with a URL that is not http(s)', () => {
-    process.env.EXCHANGE_RATE_API_URL = 'ftp://example.com';
+    process.env['EXCHANGE_RATE_API_URL'] = 'ftp://example.com';
     expect(() => readExchangeRateConfig()).toThrow(/EXCHANGE_RATE_API_URL/);
   });
 });

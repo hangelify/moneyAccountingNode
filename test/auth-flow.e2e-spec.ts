@@ -159,11 +159,11 @@ describe('Auth session flow (e2e)', () => {
 
     describe('with a reuse grace window', () => {
       beforeEach(() => {
-        process.env.REFRESH_REUSE_GRACE_SECONDS = '30';
+        process.env['REFRESH_REUSE_GRACE_SECONDS'] = '30';
       });
 
       afterEach(() => {
-        delete process.env.REFRESH_REUSE_GRACE_SECONDS;
+        delete process.env['REFRESH_REUSE_GRACE_SECONDS'];
       });
 
       it('rejects a retry of a just-rotated token without revoking the session', async () => {
@@ -257,7 +257,7 @@ describe('Auth session flow (e2e)', () => {
       const tokens = await login();
       const res = await http()
         .post('/auth/logout')
-        .set('Origin', process.env.FRONTEND_URL!)
+        .set('Origin', process.env['FRONTEND_URL']!)
         .set('Authorization', `Bearer ${tokens.access_token}`)
         .expect(200);
 
@@ -378,7 +378,7 @@ describe('Auth session flow (e2e)', () => {
     it('answers 200 and clears the cookie in web mode without a cookie', async () => {
       const res = await http()
         .post('/auth/revoke')
-        .set('Origin', process.env.FRONTEND_URL!)
+        .set('Origin', process.env['FRONTEND_URL']!)
         .expect(200);
       expect(String(res.headers['set-cookie'])).toMatch(/^refresh_token=;/);
     });
@@ -397,7 +397,7 @@ describe('Auth session flow (e2e)', () => {
       const tokens = await login();
       const res = await http()
         .post('/auth/revoke')
-        .set('Origin', process.env.FRONTEND_URL!)
+        .set('Origin', process.env['FRONTEND_URL']!)
         .set('Cookie', `refresh_token=${tokens.refresh_token}`)
         .expect(200);
 
@@ -493,13 +493,13 @@ describe('Auth session flow (e2e)', () => {
           .expect(200);
         const sessions = res.body as Record<string, unknown>[];
 
-        const ids = sessions.map((s) => s.id);
+        const ids = sessions.map((s) => s['id']);
         expect(ids).toContain(sessionId(current.access_token));
         expect(ids).toContain(sessionId(owner.accessToken));
         expect(ids).not.toContain(sessionId(ended.access_token));
 
         const mine = sessions.find(
-          (s) => s.id === sessionId(current.access_token),
+          (s) => s['id'] === sessionId(current.access_token),
         )!;
         expect(mine).toMatchObject({ current: true, user_agent: 'e2e-device' });
         expect(Object.keys(mine).sort()).toEqual(
@@ -512,7 +512,7 @@ describe('Auth session flow (e2e)', () => {
             'user_agent',
           ].sort(),
         );
-        expect(sessions.filter((s) => s.current)).toHaveLength(1);
+        expect(sessions.filter((s) => s['current'])).toHaveLength(1);
       });
 
       it('does not show sessions of other users', async () => {
@@ -669,9 +669,9 @@ describe('Auth session flow (e2e)', () => {
         payload: Record<string, unknown>;
       }>(tokens.access_token, { complete: true });
       const claims = { ...payload };
-      delete claims.exp;
+      delete claims['exp'];
       return app.get(JwtService).sign(claims, {
-        secret: process.env.JWT_SECRET,
+        secret: process.env['JWT_SECRET'],
         expiresIn: 300,
         header: { alg: 'HS256', typ: header.typ },
         ...options,

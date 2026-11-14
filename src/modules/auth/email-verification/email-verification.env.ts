@@ -11,12 +11,12 @@ const DEFAULT_TTL_HOURS = 24;
 export function readEmailVerificationConfig(
   env: NodeJS.ProcessEnv = process.env,
 ): EmailVerificationConfig {
-  const frontendUrl = env.FRONTEND_URL?.trim();
+  const frontendUrl = env['FRONTEND_URL']?.trim();
   if (!frontendUrl) {
     throw new Error('Required environment variable FRONTEND_URL is not set');
   }
 
-  const raw = env.EMAIL_VERIFICATION_TTL_HOURS?.trim();
+  const raw = env['EMAIL_VERIFICATION_TTL_HOURS']?.trim();
   const ttlHours = raw ? Number(raw) : DEFAULT_TTL_HOURS;
   if (!Number.isInteger(ttlHours) || ttlHours < 1) {
     throw new Error(

@@ -10,7 +10,7 @@ import { Household } from '../../entities/household.entity';
 import { HouseholdMember } from '../../entities/household-member.entity';
 import { Currency } from '../../types/currency.enum';
 
-process.env.FRONTEND_URL = 'https://app.example.com';
+process.env['FRONTEND_URL'] = 'https://app.example.com';
 
 function makeService() {
   const householdRepo = {

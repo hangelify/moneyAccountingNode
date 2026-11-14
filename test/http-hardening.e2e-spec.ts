@@ -47,9 +47,9 @@ describe('HTTP hardening: Swagger exposure and security headers (e2e)', () => {
 
     const res = await request(app.getHttpServer())
       .get('/health')
-      .set('Origin', process.env.FRONTEND_URL!);
+      .set('Origin', process.env['FRONTEND_URL']!);
     expect(res.headers['access-control-allow-origin']).toBe(
-      process.env.FRONTEND_URL,
+      process.env['FRONTEND_URL'],
     );
     expect(res.headers['access-control-allow-credentials']).toBe('true');
     expect(res.headers['x-content-type-options']).toBe('nosniff');

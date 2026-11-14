@@ -163,7 +163,7 @@ describe('POST /households/:hid/bills/manual-batch (e2e)', () => {
       >;
     };
 
-    const bad = doc.paths['/households/{hid}/bills/manual-batch'].post
+    const bad = doc.paths['/households/{hid}/bills/manual-batch']['post']
       .responses['400'] as {
       content: {
         'application/json': { schema: { oneOf: { $ref: string }[] } };

@@ -130,7 +130,7 @@ describe('BillDuplicatesService (PostgreSQL)', () => {
     });
     expect(found).toEqual([
       {
-        id: ids.fiscal,
+        id: ids['fiscal'],
         bill_date: '2026-09-01',
         total_amount: 412.5,
         currency: Currency.MDL,
@@ -143,9 +143,9 @@ describe('BillDuplicatesService (PostgreSQL)', () => {
 
   it('ignores drafts, duplicates, deleted bills, other households and excludeBillId', async () => {
     const found = await service.findCandidates(householdId, probe);
-    expect(found.map((f) => f.id)).toEqual([ids.original]);
+    expect(found.map((f) => f.id)).toEqual([ids['original']]);
     const excluded = await service.findCandidates(householdId, probe, {
-      excludeBillId: ids.original,
+      excludeBillId: ids['original'],
     });
     expect(excluded).toEqual([]);
   });
@@ -156,7 +156,7 @@ describe('BillDuplicatesService (PostgreSQL)', () => {
       market_name: 'corner SHOP',
     });
     expect(found).toMatchObject({
-      id: ids.original,
+      id: ids['original'],
       market_name: 'Corner shop',
       created_by_name: 'Ana',
       total_amount: 100,
@@ -169,7 +169,7 @@ describe('BillDuplicatesService (PostgreSQL)', () => {
       ...probe,
       amount: 100.004,
     });
-    expect(found.map((f) => f.id)).toEqual([ids.original]);
+    expect(found.map((f) => f.id)).toEqual([ids['original']]);
   });
 
   it('respects the date tolerance in SQL', async () => {
@@ -178,7 +178,7 @@ describe('BillDuplicatesService (PostgreSQL)', () => {
     const found = await service.findCandidates(householdId, near, {
       dateToleranceDays: 1,
     });
-    expect(found.map((f) => f.id)).toEqual([ids.original]);
+    expect(found.map((f) => f.id)).toEqual([ids['original']]);
   });
 });
 
@@ -251,8 +251,8 @@ describe('possible duplicates on bill reads and writes (PostgreSQL)', () => {
     await em.flush();
     householdId = household.id;
     userId = ana.id;
-    ids.original = original.id;
-    ids.dupe = await draft({
+    ids['original'] = original.id;
+    ids['dupe'] = await draft({
       status: BillStatus.DUPLICATE,
       duplicate_of: original,
     });
@@ -268,7 +268,7 @@ describe('possible duplicates on bill reads and writes (PostgreSQL)', () => {
     expect(res.duplicate_of).toBeNull();
     expect(res.possible_duplicates).toEqual([
       expect.objectContaining({
-        id: ids.original,
+        id: ids['original'],
         total_amount: 77,
         market_name: 'Corner shop',
         created_by_name: 'Ana',
@@ -278,10 +278,10 @@ describe('possible duplicates on bill reads and writes (PostgreSQL)', () => {
   });
 
   it('getBill of a duplicate returns duplicate_of and no candidates', async () => {
-    const res = await crud().getBill(ids.dupe, householdId);
+    const res = await crud().getBill(ids['dupe'], householdId);
     expect(res.possible_duplicates).toEqual([]);
     expect(res.duplicate_of).toEqual({
-      id: ids.original,
+      id: ids['original'],
       bill_date: '2026-10-03',
       total_amount: 77,
       currency: Currency.MDL,
@@ -299,7 +299,9 @@ describe('possible duplicates on bill reads and writes (PostgreSQL)', () => {
     });
     expect(res.status).toBe(BillStatus.CONFIRMED);
     expect(res.duplicate_of).toBeNull();
-    expect(res.possible_duplicates?.map((d) => d.id)).toEqual([ids.original]);
+    expect(res.possible_duplicates?.map((d) => d.id)).toEqual([
+      ids['original'],
+    ]);
     const saved = await orm.em.fork().findOneOrFail(Bill, res.id);
     expect(saved.status).toBe(BillStatus.CONFIRMED);
   });
@@ -386,7 +388,7 @@ describe('possible duplicates on bill reads and writes (PostgreSQL)', () => {
     });
     expect(res.status).toBe(BillStatus.CONFIRMED);
     const found = res.possible_duplicates?.map((d) => d.id) ?? [];
-    expect(found).toContain(ids.original);
+    expect(found).toContain(ids['original']);
     expect(found).not.toContain(id);
   });
 });

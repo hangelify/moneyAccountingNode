@@ -20,9 +20,9 @@ const DEFAULT_ISSUER = 'accounting-api';
 const DEFAULT_AUDIENCE = 'accounting-api';
 
 export function jwtIssuer(): string {
-  return process.env.JWT_ISSUER || DEFAULT_ISSUER;
+  return process.env['JWT_ISSUER'] || DEFAULT_ISSUER;
 }
 
 export function jwtAudience(): string {
-  return process.env.JWT_AUDIENCE || DEFAULT_AUDIENCE;
+  return process.env['JWT_AUDIENCE'] || DEFAULT_AUDIENCE;
 }

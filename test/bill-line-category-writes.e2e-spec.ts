@@ -6,6 +6,7 @@ import { Category } from '../src/entities/category.entity';
 import { SubCategory } from '../src/entities/sub-category.entity';
 import { BillCrudService } from '../src/modules/bill/bill-crud.service';
 import type { BillDetailResponseDto } from '../src/modules/bill/dto/bill-detail-response.dto';
+import { defined } from '../src/common/testing/defined';
 
 // A bill line keeps its own category_id (HAN-91). Every write of a line sets
 // it to the category of the line's sub-category, or NULL without one, so the
@@ -105,9 +106,13 @@ describe('Bill line category_id on writes (e2e)', () => {
 
   beforeEach(async () => {
     user = await registerUser(app, 'line-category');
-    [{ id: userId }] = (await sql(`select id from users where email = ?`, [
-      user.email,
-    ])) as { id: string }[];
+    ({ id: userId } = defined(
+      (
+        (await sql(`select id from users where email = ?`, [user.email])) as {
+          id: string;
+        }[]
+      )[0],
+    ));
     dairy = await seedSub('Dairy HAN92');
     bakery = await seedSub('Bakery HAN92');
   });
@@ -163,7 +168,9 @@ describe('Bill line category_id on writes (e2e)', () => {
 
   it('confirming a draft with a changed and a removed sub-category keeps category_id in step', async () => {
     const { id: billId } = await draftFromParsed([dairy.subId, dairy.subId]);
-    const [first, second] = [...(await lineCategories(billId)).keys()];
+    const ids = [...(await lineCategories(billId)).keys()];
+    const first = defined(ids[0]);
+    const second = defined(ids[1]);
 
     await http('post', `/${billId}/confirm`)
       .send({
@@ -201,7 +208,7 @@ describe('Bill line category_id on writes (e2e)', () => {
       .send({
         items: [
           {
-            id: bill.items[0].id,
+            id: defined(bill.items[0]).id,
             sub_category_id: bakery.subId,
             product_count: 1,
             amount: 1,
@@ -211,10 +218,10 @@ describe('Bill line category_id on writes (e2e)', () => {
       })
       .expect(200);
     const items = (updated.body as BillDetailResponseDto).items;
-    const added = items.find((i) => i.id !== bill.items[0].id)!;
+    const added = items.find((i) => i.id !== defined(bill.items[0]).id)!;
 
     const categories = await lineCategories(bill.id);
-    expect(categories.get(bill.items[0].id)).toBe(bakery.categoryId);
+    expect(categories.get(defined(bill.items[0]).id)).toBe(bakery.categoryId);
     expect(categories.get(added.id)).toBe(dairy.categoryId);
     expect(await drifted(bill.id)).toBe(0);
   });

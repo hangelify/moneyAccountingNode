@@ -3,6 +3,7 @@ import request from 'supertest';
 import { createTestApp, registerUser, TestUser } from './utils/app';
 import { CategoryBaseResponseDto } from '../src/modules/category/dto/category-base-response.dto';
 import { DEFAULT_CATEGORY_TREE } from '../src/modules/category/defaults';
+import { defined } from '../src/common/testing/defined';
 
 // Names are unique case-insensitively among live rows: categories per
 // household, sub-categories per category, budgets per household, planning
@@ -107,7 +108,7 @@ describe('Name uniqueness (e2e)', () => {
           .set('Authorization', auth())
           .expect(204);
       }
-      const lower = DEFAULT_CATEGORY_TREE[0].name.toLowerCase();
+      const lower = defined(DEFAULT_CATEGORY_TREE[0]).name.toLowerCase();
       await postCategory(horizonId, lower).expect(201);
 
       await http()

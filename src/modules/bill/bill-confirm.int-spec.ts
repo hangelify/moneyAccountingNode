@@ -22,6 +22,7 @@ import { BillConversionService } from './household-conversion';
 import type { CreateBillItemDto } from './dto/create-bill.dto';
 import type { ConfirmBillItemDto } from './dto/confirm-bill.dto';
 import { Currency } from '../../types/currency.enum';
+import { defined } from '../../common/testing/defined';
 
 jest.setTimeout(30_000);
 
@@ -179,7 +180,7 @@ describe('confirm and create bill (PostgreSQL)', () => {
   async function makeDraftLine(subId?: string) {
     const id = await makeDraft(subId);
     const { items: lines } = await load(id);
-    return { id, lineId: lines[0].id };
+    return { id, lineId: defined(lines[0]).id };
   }
 
   async function load(id: string) {
@@ -218,7 +219,7 @@ describe('confirm and create bill (PostgreSQL)', () => {
         await expect(
           crud().confirmBill(id, householdId, userId, {
             ...required,
-            items: items(subIds[0], badId()),
+            items: items(defined(subIds[0]), badId()),
           }),
         ).rejects.toBeInstanceOf(BadRequestException);
 
@@ -230,7 +231,7 @@ describe('confirm and create bill (PostgreSQL)', () => {
           unit: 'l',
           product_count: 2,
         });
-        expect(Number(left[0].category_confidence)).toBeCloseTo(0.9);
+        expect(Number(left[0]?.category_confidence)).toBeCloseTo(0.9);
       },
     );
 
@@ -267,11 +268,15 @@ describe('confirm and create bill (PostgreSQL)', () => {
       const results = await Promise.allSettled([
         crud().confirmBill(id, householdId, userId, {
           ...required,
-          items: items(subIds[0], subIds[1]),
+          items: items(defined(subIds[0]), defined(subIds[1])),
         }),
         crud().confirmBill(id, householdId, userId, {
           ...required,
-          items: items(subIds[2], subIds[3], subIds[4]),
+          items: items(
+            defined(subIds[2]),
+            defined(subIds[3]),
+            defined(subIds[4]),
+          ),
         }),
       ]);
 
@@ -279,12 +284,14 @@ describe('confirm and create bill (PostgreSQL)', () => {
       const lost = results.filter((r) => r.status === 'rejected');
       expect(won).toHaveLength(1);
       expect(lost).toHaveLength(1);
-      expect(lost[0].reason).toBeInstanceOf(ConflictException);
+      expect(lost[0]?.reason).toBeInstanceOf(ConflictException);
 
       const { bill, items: saved } = await load(id);
       expect(bill.status).toBe(BillStatus.CONFIRMED);
       const savedIds = saved.map((i) => i.sub_category!.id).sort();
-      const wonIds = won[0].value.items.map((i) => i.sub_category!.id).sort();
+      const wonIds = defined(won[0])
+        .value.items.map((i) => i.sub_category!.id)
+        .sort();
       expect(savedIds).toEqual(wonIds);
     });
 
@@ -292,13 +299,13 @@ describe('confirm and create bill (PostgreSQL)', () => {
       const id = await makeDraft();
       await crud().confirmBill(id, householdId, userId, {
         ...required,
-        items: items(subIds[0]),
+        items: items(defined(subIds[0])),
       });
 
       await expect(
         crud().confirmBill(id, householdId, userId, {
           ...required,
-          items: items(subIds[1]),
+          items: items(defined(subIds[1])),
         }),
       ).rejects.toBeInstanceOf(ConflictException);
       const { items: saved } = await load(id);
@@ -322,7 +329,7 @@ describe('confirm and create bill (PostgreSQL)', () => {
         failed.id,
         householdId,
         userId,
-        { ...required, items: items(subIds[0]) },
+        { ...required, items: items(defined(subIds[0])) },
       );
 
       expect(confirmed).toMatchObject({
@@ -340,7 +347,7 @@ describe('confirm and create bill (PostgreSQL)', () => {
       const result = await crud().confirmBill(id, householdId, userId, {
         ...required,
         new_market: { name: `P08 market ${randomUUID()}` },
-        items: items(subIds[0]),
+        items: items(defined(subIds[0])),
       });
 
       const { bill } = await load(id);
@@ -395,8 +402,8 @@ describe('confirm and create bill (PostgreSQL)', () => {
         unit: 'l',
         category_reasoning: 'Looks like milk.',
       });
-      expect(Number(saved[0].category_confidence)).toBeCloseTo(0.9);
-      expect(Number(saved[0].price_per_unit)).toBe(5);
+      expect(Number(saved[0]?.category_confidence)).toBeCloseTo(0.9);
+      expect(Number(saved[0]?.price_per_unit)).toBe(5);
       expect(result.items[0]).toMatchObject({
         id: lineId,
         raw_name: 'LAPTE 1L',
@@ -459,7 +466,7 @@ describe('confirm and create bill (PostgreSQL)', () => {
       });
 
       const { items: saved } = await load(id);
-      expect(saved[0].raw_name).toBe('Milk 1L');
+      expect(saved[0]?.raw_name).toBe('Milk 1L');
     });
 
     it('confirms a line without a sub-category', async () => {
@@ -472,9 +479,9 @@ describe('confirm and create bill (PostgreSQL)', () => {
 
       const { bill, items: saved } = await load(id);
       expect(bill.status).toBe(BillStatus.CONFIRMED);
-      expect(saved[0].sub_category).toBeNull();
-      expect(saved[0].raw_name).toBe('LAPTE 1L');
-      expect(result.items[0].sub_category).toBeNull();
+      expect(defined(saved[0]).sub_category).toBeNull();
+      expect(saved[0]?.raw_name).toBe('LAPTE 1L');
+      expect(defined(result.items[0]).sub_category).toBeNull();
     });
 
     it('saves a new uncategorized line under its raw_name', async () => {
@@ -499,10 +506,10 @@ describe('confirm and create bill (PostgreSQL)', () => {
       });
 
       const { items: saved } = await load(id);
-      expect(saved[0].sub_category?.id).toBe(subIds[1]);
-      expect(saved[0].category_confidence).toBeNull();
-      expect(saved[0].category_reasoning).toBeNull();
-      expect(saved[0].unit).toBe('l');
+      expect(saved[0]?.sub_category?.id).toBe(subIds[1]);
+      expect(defined(saved[0]).category_confidence).toBeNull();
+      expect(defined(saved[0]).category_reasoning).toBeNull();
+      expect(saved[0]?.unit).toBe('l');
     });
 
     it.each([
@@ -517,7 +524,7 @@ describe('confirm and create bill (PostgreSQL)', () => {
       });
 
       const { items: saved } = await load(id);
-      expect(saved[0].price_per_unit).toBeNull();
+      expect(defined(saved[0]).price_per_unit).toBeNull();
     });
 
     it('clears price_per_unit when the amount changes', async () => {
@@ -529,7 +536,7 @@ describe('confirm and create bill (PostgreSQL)', () => {
       });
 
       const { items: saved } = await load(id);
-      expect(saved[0].price_per_unit).toBeNull();
+      expect(defined(saved[0]).price_per_unit).toBeNull();
     });
 
     it('deletes draft lines left out of the confirm', async () => {
@@ -537,7 +544,7 @@ describe('confirm and create bill (PostgreSQL)', () => {
 
       await crud().confirmBill(id, householdId, userId, {
         ...required,
-        items: items(subIds[1]),
+        items: items(defined(subIds[1])),
       });
 
       const { items: saved } = await load(id);
@@ -581,7 +588,7 @@ describe('confirm and create bill (PostgreSQL)', () => {
 
       await crud().confirmBill(id, householdId, confirmerId, {
         ...required,
-        items: items(subIds[0]),
+        items: items(defined(subIds[0])),
       });
 
       const { bill } = await load(id);
@@ -604,7 +611,7 @@ describe('confirm and create bill (PostgreSQL)', () => {
     it('leaves confirmed_by empty on a bill created by hand', async () => {
       const result = await crud().createBill(householdId, userId, {
         ...required,
-        items: items(subIds[0]),
+        items: items(defined(subIds[0])),
       });
 
       const { bill } = await load(result.id);
@@ -696,7 +703,7 @@ describe('confirm and create bill (PostgreSQL)', () => {
       const result = await crud().createBill(householdId, userId, {
         bill_date: '2026-05-19',
         total_amount: 2,
-        items: items(subIds[0], subIds[0]),
+        items: items(defined(subIds[0]), defined(subIds[0])),
       });
 
       const { items: saved } = await load(result.id);
@@ -710,7 +717,7 @@ describe('confirm and create bill (PostgreSQL)', () => {
         fiscal_register_id: 'J403001234',
         fiscal_receipt_number: '0042',
         purchase_time: '14:05',
-        items: items(subIds[0]),
+        items: items(defined(subIds[0])),
       });
       expect(created).toMatchObject({
         fiscal_register_id: 'J403001234',
@@ -734,7 +741,7 @@ describe('confirm and create bill (PostgreSQL)', () => {
       const created = await crud().createBill(householdId, userId, {
         bill_date: '2026-05-19',
         total_amount: 1,
-        items: items(subIds[0]),
+        items: items(defined(subIds[0])),
       });
       expect(created).toMatchObject({
         fiscal_register_id: null,

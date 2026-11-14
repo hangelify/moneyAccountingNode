@@ -59,7 +59,7 @@ describe('Household currency (e2e)', () => {
       .set('Authorization', auth(owner))
       .expect(200);
     const [household] = res.body as HouseholdResponseDto[];
-    expect(household.currency).toBe('EUR');
+    expect(household?.currency).toBe('EUR');
   });
 
   it('lets the owner change the currency', async () => {
@@ -179,7 +179,7 @@ describe('Household currency (e2e)', () => {
       0,
     );
     expect(total).toBeCloseTo(10, 2);
-    expect(typeof body.bills[0].household_amount).toBe('number');
+    expect(typeof body.bills[0]?.household_amount).toBe('number');
 
     const breakdown = await http()
       .get(

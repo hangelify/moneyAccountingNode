@@ -18,6 +18,7 @@ import {
 import { MAIL_SENDER } from '../../src/modules/mail/mail-sender';
 import { InMemoryMailSender } from './mail';
 import type { TokenResponseDto } from '../../src/modules/auth/dto/token-response.dto';
+import { defined } from '../../src/common/testing/defined';
 
 export interface TestAppOptions {
   /** TRUST_PROXY value, as main.ts would read it. */
@@ -121,10 +122,14 @@ export async function registerUser(
     );
   }
 
-  const [household] = (await connection.execute(
-    'select m.household_id from household_members m join users u on u.id = m.user_id where u.email = ?',
-    [email],
-  )) as { household_id: string }[];
+  const household = defined(
+    (
+      (await connection.execute(
+        'select m.household_id from household_members m join users u on u.id = m.user_id where u.email = ?',
+        [email],
+      )) as { household_id: string }[]
+    )[0],
+  );
 
   return {
     email,

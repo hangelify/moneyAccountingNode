@@ -322,8 +322,8 @@ export class BillDashboardService {
     const result: DashboardPeriodTotalDto[] = [];
     const pad = (n: number) => String(n).padStart(2, '0');
 
-    const [sy, sm] = start.split('-').map(Number);
-    const [ey, endMo] = end.split('-').map(Number);
+    const [sy, sm] = yearMonth(start);
+    const [ey, endMo] = yearMonth(end);
 
     if (type === 'month') {
       let y = sy,
@@ -371,13 +371,24 @@ export class BillDashboardService {
 
   private computePercentages(rows: CategoryRow[]): DashboardCategoryStatDto[] {
     if (rows.length === 0) return [];
-    const totals = rows.map((r) => Number(r.total_amount));
-    const sum = totals.reduce((a, v) => a + v, 0);
-    return rows.map((r, i) => ({
-      category_id: r.category_id,
-      category_name: r.category_name,
-      total_amount: totals[i],
-      percentage: sum > 0 ? Math.round((totals[i] / sum) * 10000) / 100 : 0,
-    }));
+    const sum = rows.reduce((a, r) => a + Number(r.total_amount), 0);
+    return rows.map((r) => {
+      const total = Number(r.total_amount);
+      return {
+        category_id: r.category_id,
+        category_name: r.category_name,
+        total_amount: total,
+        percentage: sum > 0 ? Math.round((total / sum) * 10000) / 100 : 0,
+      };
+    });
   }
+}
+
+/** Year and month of a 'YYYY-MM-DD' date string. */
+function yearMonth(date: string): [number, number] {
+  const [year, month] = date.split('-').map(Number);
+  if (year === undefined || month === undefined) {
+    throw new Error(`Not a YYYY-MM-DD date: ${date}`);
+  }
+  return [year, month];
 }

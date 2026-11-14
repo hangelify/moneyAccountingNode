@@ -30,6 +30,7 @@ import { BillPhotoProcessor } from '../src/modules/bill/batch/bill-photo.process
 import { BillEventsPublisher } from '../src/modules/bill/batch/bill-events.publisher';
 import type { BillBatchResponseDto } from '../src/modules/bill/batch/dto/bill-batch-response.dto';
 import type { BillDetailResponseDto } from '../src/modules/bill/dto/bill-detail-response.dto';
+import { defined } from '../src/common/testing/defined';
 
 const AI_REQUEST_ID = '00000000-0000-4000-8000-0000000000b1';
 const NOT_A_RECEIPT_MESSAGE =
@@ -276,7 +277,7 @@ describe('Batch photo parsing with the queue enabled (e2e)', () => {
         'select count(*) as n from bill_batches where created_by_user_id = ?',
         [userId],
       )) as { n: string }[];
-    return Number(rows[0].n);
+    return Number(defined(rows[0]).n);
   }
 
   async function queuedJobs(): Promise<number> {
@@ -298,7 +299,7 @@ describe('Batch photo parsing with the queue enabled (e2e)', () => {
       .execute('select id from users where email = ?', [user.email])) as {
       id: string;
     }[];
-    return rows[0].id;
+    return defined(rows[0]).id;
   }
 
   beforeAll(async () => {
@@ -418,7 +419,7 @@ describe('Batch photo parsing with the queue enabled (e2e)', () => {
       bill_id: failedBillId,
       parse_error_message: NOT_A_RECEIPT_MESSAGE,
     });
-    expect([state.items[0].bill_id, state.items[2].bill_id].sort()).toEqual(
+    expect([state.items[0]?.bill_id, state.items[2]?.bill_id].sort()).toEqual(
       doneIds.sort(),
     );
 
@@ -466,7 +467,7 @@ describe('Batch photo parsing with the queue enabled (e2e)', () => {
       connection: redisConnectionOptions(),
     });
     try {
-      const job = await queue.getJob(batch.items[1].id);
+      const job = await queue.getJob(defined(batch.items[1]).id);
       expect(await job?.getState()).toBe('delayed');
       await job!.promote();
     } finally {
@@ -481,8 +482,8 @@ describe('Batch photo parsing with the queue enabled (e2e)', () => {
       await api(bob).get(`bill-batches/${batch.batch_id}`).expect(200)
     ).body as BillBatchResponseDto;
     expect(state.items.map((i) => i.status)).toEqual(['done', 'done']);
-    expect(state.items[0].bill_id).toEqual(expect.any(String));
-    expect(state.items[1].bill_id).toBe(state.items[0].bill_id);
+    expect(state.items[0]?.bill_id).toEqual(expect.any(String));
+    expect(state.items[1]?.bill_id).toBe(defined(state.items[0]).bill_id);
   });
 
   it('lets a failed bill be entered manually: PUT its lines, then confirm', async () => {
@@ -505,7 +506,9 @@ describe('Batch photo parsing with the queue enabled (e2e)', () => {
         .send({
           bill_date: '2026-11-01',
           total_amount: 7.5,
-          items: [{ id: updated.items[0].id, product_count: 1, amount: 7.5 }],
+          items: [
+            { id: defined(updated.items[0]).id, product_count: 1, amount: 7.5 },
+          ],
         })
         .expect(200)
     ).body as BillDetailResponseDto;

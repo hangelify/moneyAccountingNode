@@ -41,6 +41,7 @@ import {
 } from './internal/ai-usage-limits';
 import { User } from '../../entities/user.entity';
 import { Currency } from '../../types/currency.enum';
+import { defined } from '../../common/testing/defined';
 
 jest.setTimeout(30_000);
 
@@ -279,15 +280,18 @@ describe('AiGatewayService', () => {
     const out = await svc.run(new PingTask(), { n: 1 });
 
     const parents = await findOwnedParents();
-    expect(out).toEqual({ data: { ok: true }, requestId: parents[0].id });
+    expect(out).toEqual({
+      data: { ok: true },
+      requestId: defined(parents[0]).id,
+    });
     expect(parents).toHaveLength(1);
-    expect(parents[0].status).toBe(AiRequestStatus.SUCCESS);
-    expect(parents[0].task_name).toBe('test.ping');
+    expect(parents[0]?.status).toBe(AiRequestStatus.SUCCESS);
+    expect(parents[0]?.task_name).toBe('test.ping');
     const attempts = await findOwnedAttempts();
     expect(attempts).toHaveLength(1);
-    expect(attempts[0].status).toBe(AiAttemptStatus.SUCCESS);
-    expect(attempts[0].provider_name).toBe('openai');
-    expect(parents[0].chosen_attempt_id).toBe(attempts[0].id);
+    expect(attempts[0]?.status).toBe(AiAttemptStatus.SUCCESS);
+    expect(attempts[0]?.provider_name).toBe('openai');
+    expect(parents[0]?.chosen_attempt_id).toBe(defined(attempts[0]).id);
   });
 
   it('stores the successful answer once, as the parent final_output', async () => {
@@ -302,8 +306,8 @@ describe('AiGatewayService', () => {
     await svc.run(new PingTask(), { n: 1 });
 
     const [parent] = await findOwnedParents();
-    expect(parent.final_output).toEqual({ ok: true });
-    const [attempt] = await findOwnedAttempts();
+    expect(parent?.final_output).toEqual({ ok: true });
+    const attempt = defined((await findOwnedAttempts())[0]);
     expect(attempt.raw_response_text).toBeNull();
     expect(attempt.parsed_json).toBeNull();
   });
@@ -365,9 +369,9 @@ describe('AiGatewayService', () => {
     );
 
     const [attempt] = await findOwnedAttempts();
-    expect(attempt.error_code).toBe(AiAttemptErrorCode.TRUNCATED);
-    expect(attempt.raw_response_text).toBe('{"ok":');
-    expect(attempt.output_tokens).toBe(321);
+    expect(attempt?.error_code).toBe(AiAttemptErrorCode.TRUNCATED);
+    expect(attempt?.raw_response_text).toBe('{"ok":');
+    expect(attempt?.output_tokens).toBe(321);
   });
 
   it('fails over when the first provider returns schema-invalid JSON', async () => {
@@ -389,16 +393,16 @@ describe('AiGatewayService', () => {
 
     const parents = await findOwnedParents();
     expect(parents).toHaveLength(1);
-    expect(parents[0].status).toBe(AiRequestStatus.SUCCESS);
+    expect(parents[0]?.status).toBe(AiRequestStatus.SUCCESS);
 
     const attempts = await findOwnedAttempts({ attempt_number: 'asc' });
     expect(attempts).toHaveLength(2);
-    expect(attempts[0].status).toBe(AiAttemptStatus.FAILED);
-    expect(attempts[0].error_code).toBe(AiAttemptErrorCode.SCHEMA_INVALID);
-    expect(attempts[0].raw_response_text).toBe('raw-invalid-text');
-    expect(attempts[1].status).toBe(AiAttemptStatus.SUCCESS);
-    expect(attempts[1].provider_name).toBe('deepseek');
-    expect(parents[0].chosen_attempt_id).toBe(attempts[1].id);
+    expect(attempts[0]?.status).toBe(AiAttemptStatus.FAILED);
+    expect(attempts[0]?.error_code).toBe(AiAttemptErrorCode.SCHEMA_INVALID);
+    expect(attempts[0]?.raw_response_text).toBe('raw-invalid-text');
+    expect(attempts[1]?.status).toBe(AiAttemptStatus.SUCCESS);
+    expect(attempts[1]?.provider_name).toBe('deepseek');
+    expect(parents[0]?.chosen_attempt_id).toBe(defined(attempts[1]).id);
   });
 
   it('fails over when the first provider throws a non-transient error', async () => {
@@ -420,13 +424,13 @@ describe('AiGatewayService', () => {
 
     const parents = await findOwnedParents();
     expect(parents).toHaveLength(1);
-    expect(parents[0].status).toBe(AiRequestStatus.SUCCESS);
+    expect(parents[0]?.status).toBe(AiRequestStatus.SUCCESS);
 
     const attempts = await findOwnedAttempts({ attempt_number: 'asc' });
     expect(attempts).toHaveLength(2);
-    expect(attempts[0].status).toBe(AiAttemptStatus.FAILED);
-    expect(attempts[0].error_code).toBe(AiAttemptErrorCode.SERVER_ERROR);
-    expect(attempts[1].status).toBe(AiAttemptStatus.SUCCESS);
+    expect(attempts[0]?.status).toBe(AiAttemptStatus.FAILED);
+    expect(attempts[0]?.error_code).toBe(AiAttemptErrorCode.SERVER_ERROR);
+    expect(attempts[1]?.status).toBe(AiAttemptStatus.SUCCESS);
   });
 
   it('throws AiGatewayExhaustedError when all providers fail', async () => {
@@ -457,8 +461,8 @@ describe('AiGatewayService', () => {
 
     const parents = await findOwnedParents();
     expect(parents).toHaveLength(1);
-    expect(parents[0].id).toBe(exhausted.parentId);
-    expect(parents[0].status).toBe(AiRequestStatus.FAILED);
+    expect(parents[0]?.id).toBe(exhausted.parentId);
+    expect(parents[0]?.status).toBe(AiRequestStatus.FAILED);
 
     const attempts = await findOwnedAttempts();
     expect(attempts).toHaveLength(2);
@@ -540,14 +544,14 @@ describe('AiGatewayService', () => {
         DeadlineExceededError,
       );
       expect(seen).toHaveLength(1);
-      expect(seen[0].aborted).toBe(true);
+      expect(seen[0]?.aborted).toBe(true);
       expect(p2Step).not.toHaveBeenCalled();
 
       const attempts = await findOwnedAttempts();
       expect(attempts).toHaveLength(1);
-      expect(attempts[0].error_code).toBe(AiAttemptErrorCode.TIMEOUT);
+      expect(attempts[0]?.error_code).toBe(AiAttemptErrorCode.TIMEOUT);
       const parents = await findOwnedParents();
-      expect(parents[0].status).toBe(AiRequestStatus.FAILED);
+      expect(parents[0]?.status).toBe(AiRequestStatus.FAILED);
     });
 
     it('bounds a provider that ignores the abort signal', async () => {
@@ -667,7 +671,7 @@ describe('AiGatewayService', () => {
 
     const parents = await findOwnedParents();
     expect(parents).toHaveLength(1);
-    expect(parents[0].image_s3_keys).toEqual(['ai/images/fake.png']);
+    expect(parents[0]?.image_s3_keys).toEqual(['ai/images/fake.png']);
   });
 
   it("records the household and stores its images in the household's folder", async () => {
@@ -701,7 +705,7 @@ describe('AiGatewayService', () => {
 
       expect(putSpy).toHaveBeenCalledWith(buf, 'image/png', household.id);
       const [parent] = await findOwnedParents();
-      expect(parent.household?.id).toBe(household.id);
+      expect(parent?.household?.id).toBe(household.id);
     } finally {
       await cleanupOwnedRows();
       const conn = em.fork().getConnection();
@@ -725,8 +729,8 @@ describe('AiGatewayService', () => {
 
     const attempts = await findOwnedAttempts();
     expect(attempts).toHaveLength(1);
-    expect(attempts[0].model).toBe('claude-opus-4-7');
-    expect(attempts[0].provider_name).toBe('anthropic');
+    expect(attempts[0]?.model).toBe('claude-opus-4-7');
+    expect(attempts[0]?.provider_name).toBe('anthropic');
   });
 
   it('throws Zod input validation error before touching the DB or any provider', async () => {
@@ -770,9 +774,11 @@ describe('AiGatewayService', () => {
 
     const parents = await findOwnedParents();
     expect(parents).toHaveLength(1);
-    expect((err as NoCapableProviderError).requestId).toBe(parents[0].id);
-    expect(parents[0].status).toBe(AiRequestStatus.FAILED);
-    expect(parents[0].error_message).toMatch(/no capable provider/i);
+    expect((err as NoCapableProviderError).requestId).toBe(
+      defined(parents[0]).id,
+    );
+    expect(parents[0]?.status).toBe(AiRequestStatus.FAILED);
+    expect(parents[0]?.error_message).toMatch(/no capable provider/i);
     // The image is not stored when no provider could ever read it.
     expect(putSpy).not.toHaveBeenCalled();
 
@@ -839,7 +845,7 @@ describe('AiGatewayService', () => {
       expect(out.data).toEqual({ ok: true });
       expect(await findOwnedAttempts()).toHaveLength(0);
       const [parent] = await findOwnedParents();
-      expect(parent.status).toBe(AiRequestStatus.SUCCESS);
+      expect(parent?.status).toBe(AiRequestStatus.SUCCESS);
     });
 
     it('returns the data when closing the parent row fails', async () => {
@@ -856,7 +862,7 @@ describe('AiGatewayService', () => {
 
       expect(out.data).toEqual({ ok: true });
       const parents = await findOwnedParents();
-      expect(out.requestId).toBe(parents[0].id);
+      expect(out.requestId).toBe(defined(parents[0]).id);
       expect(logError).toHaveBeenCalledWith(
         expect.stringContaining('db down'),
         expect.anything(),
@@ -907,7 +913,7 @@ describe('AiGatewayService', () => {
         new Set<Capability>(['text', 'json']),
         [
           async () => {
-            const [attempt] = await findOwnedAttempts();
+            const attempt = defined((await findOwnedAttempts())[0]);
             statusDuringCall = attempt.status;
             return okResponse({ ok: true })();
           },
@@ -920,7 +926,7 @@ describe('AiGatewayService', () => {
 
       expect(statusDuringCall).toBe(AiAttemptStatus.PENDING);
       const [attempt] = await findOwnedAttempts();
-      expect(attempt.status).toBe(AiAttemptStatus.SUCCESS);
+      expect(attempt?.status).toBe(AiAttemptStatus.SUCCESS);
     });
 
     it('records tokens and the raw body of an unparseable provider response', async () => {
@@ -944,10 +950,10 @@ describe('AiGatewayService', () => {
       );
 
       const [attempt] = await findOwnedAttempts();
-      expect(attempt.error_code).toBe(AiAttemptErrorCode.INVALID_RESPONSE);
-      expect(attempt.raw_response_text).toBe('not json {');
-      expect(attempt.input_tokens).toBe(11);
-      expect(attempt.output_tokens).toBe(13);
+      expect(attempt?.error_code).toBe(AiAttemptErrorCode.INVALID_RESPONSE);
+      expect(attempt?.raw_response_text).toBe('not json {');
+      expect(attempt?.input_tokens).toBe(11);
+      expect(attempt?.output_tokens).toBe(13);
     });
 
     it('records a failed image upload in the audit', async () => {
@@ -970,9 +976,11 @@ describe('AiGatewayService', () => {
       expect(step).not.toHaveBeenCalled();
       const parents = await findOwnedParents();
       expect(parents).toHaveLength(1);
-      expect((err as AiImageStorageError).requestId).toBe(parents[0].id);
-      expect(parents[0].status).toBe(AiRequestStatus.FAILED);
-      expect(parents[0].error_message).toMatch(/s3 down/);
+      expect((err as AiImageStorageError).requestId).toBe(
+        defined(parents[0]).id,
+      );
+      expect(parents[0]?.status).toBe(AiRequestStatus.FAILED);
+      expect(parents[0]?.error_message).toMatch(/s3 down/);
     });
   });
 

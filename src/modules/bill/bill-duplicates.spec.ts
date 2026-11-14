@@ -45,7 +45,7 @@ describe('rankCandidates', () => {
     });
     const ranked = rankCandidates(fiscalProbe, [weak, strong, fiscal], opts);
     expect(ranked.map((r) => r.match)).toEqual(['fiscal', 'strong', 'weak']);
-    expect(ranked[0].row.id).toBe(fiscal.id);
+    expect(ranked[0]?.row.id).toBe(fiscal.id);
   });
 
   it('never matches different receipt numbers on the same register', () => {

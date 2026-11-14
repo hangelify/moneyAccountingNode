@@ -10,5 +10,5 @@ export function maskEmail(email: string): string {
   if (at <= 0) {
     return '***';
   }
-  return `${normalized[0]}***${normalized.slice(at)}`;
+  return `${normalized.charAt(0)}***${normalized.slice(at)}`;
 }

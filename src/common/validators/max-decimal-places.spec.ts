@@ -20,7 +20,7 @@ describe('MaxDecimalPlaces', () => {
 
   it('rejects a number with too many decimals', () => {
     const [error] = errorsFor(12.345);
-    expect(error.constraints).toEqual({
+    expect(error?.constraints).toEqual({
       maxDecimalPlaces: 'value must have at most 2 decimal places',
     });
   });

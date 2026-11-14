@@ -69,10 +69,11 @@ export class DeepSeekProvider implements LlmProvider {
         req.jsonSchema,
       )}`;
       const systemIndex = messages.findIndex((m) => m.role === 'system');
-      if (systemIndex >= 0) {
+      const system = messages[systemIndex];
+      if (system) {
         messages[systemIndex] = {
           role: 'system',
-          content: messages[systemIndex].content + suffix,
+          content: system.content + suffix,
         };
       } else {
         messages.unshift({

@@ -10,6 +10,7 @@ import { BillStatus } from '../../types/bill-status.enum';
 import { BillParseErrorCode } from '../../types/bill-parse-error.enum';
 import { DraftCleanupService } from './draft-cleanup.service';
 import { Currency } from '../../types/currency.enum';
+import { defined } from '../../common/testing/defined';
 
 jest.setTimeout(30_000);
 
@@ -89,12 +90,16 @@ describe('DraftCleanupService (PostgreSQL)', () => {
 
   /** deleted_at as epoch milliseconds, or null. */
   async function deletedAt(id: string): Promise<number | null> {
-    const [row] = (await orm.em
-      .getConnection()
-      .execute(
-        'SELECT extract(epoch from deleted_at) * 1000 AS ms FROM bills WHERE id = ?',
-        [id],
-      )) as { ms: string | null }[];
+    const row = defined(
+      (
+        (await orm.em
+          .getConnection()
+          .execute(
+            'SELECT extract(epoch from deleted_at) * 1000 AS ms FROM bills WHERE id = ?',
+            [id],
+          )) as { ms: string | null }[]
+      )[0],
+    );
     return row.ms === null ? null : Number(row.ms);
   }
 

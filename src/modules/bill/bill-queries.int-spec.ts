@@ -26,6 +26,7 @@ import type {
   BillDashboardQueryDto,
   DashboardCurrencySeriesDto,
 } from './dto/bill-dashboard.dto';
+import { defined } from '../../common/testing/defined';
 
 // The raw SQL of the bill list and the dashboard, run against the real
 // schema: filters, household scoping, drafts and soft deletes, aggregation.
@@ -189,7 +190,7 @@ describe('bill list and dashboard SQL (PostgreSQL)', () => {
   });
 
   afterAll(async () => {
-    await orm?.close(true);
+    await orm.close(true);
   });
 
   describe('listBills', () => {
@@ -207,14 +208,14 @@ describe('bill list and dashboard SQL (PostgreSQL)', () => {
       expect(meta).toEqual({ total: 3, page: 1, limit: 20, total_pages: 1 });
 
       const march5 = data[2];
-      expect(march5.total_amount).toBe(10.5);
-      expect(march5.currency).toBe(Currency.EUR);
-      expect(march5.market).toEqual({
+      expect(march5?.total_amount).toBe(10.5);
+      expect(march5?.currency).toBe(Currency.EUR);
+      expect(march5?.market).toEqual({
         id: expect.any(String) as string,
         name: 'Lidl',
         city: 'Berlin',
       });
-      expect(data[1].market).toBeUndefined();
+      expect(defined(data[1]).market).toBeUndefined();
     });
 
     it('filters by an inclusive date range', async () => {
@@ -263,7 +264,8 @@ describe('bill list and dashboard SQL (PostgreSQL)', () => {
         Currency.EUR,
         Currency.USD,
       ]);
-      const [eur, usd] = res.by_currency;
+      const eur = defined(res.by_currency[0]);
+      const usd = defined(res.by_currency[1]);
       expect(eur.period_totals).toHaveLength(31);
       expect(usd.period_totals).toHaveLength(31);
       expect(nonZero(eur)).toEqual([{ period: '2026-03-05', total: 10.5 }]);
@@ -343,7 +345,8 @@ describe('bill list and dashboard SQL (PostgreSQL)', () => {
 
     it('totals a year by month and currency', async () => {
       const res = await get({ type: 'year', year: 2026 });
-      const [eur, usd] = res.by_currency;
+      const eur = defined(res.by_currency[0]);
+      const usd = defined(res.by_currency[1]);
       expect(eur.period_totals).toHaveLength(12);
       expect(nonZero(eur)).toEqual([
         { period: '2026-03', total: 10.5 },
@@ -368,7 +371,9 @@ describe('bill list and dashboard SQL (PostgreSQL)', () => {
         Currency.MDL,
         null,
       ]);
-      const [eur, mdl, none] = res.by_currency;
+      const eur = defined(res.by_currency[0]);
+      const mdl = defined(res.by_currency[1]);
+      const none = defined(res.by_currency[2]);
 
       expect(nonZero(eur)).toEqual([{ period: '2026-05-10', total: 20 }]);
       expect(nonZero(mdl)).toEqual([{ period: '2026-05-10', total: 200 }]);

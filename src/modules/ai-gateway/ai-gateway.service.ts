@@ -210,8 +210,7 @@ export class AiGatewayService {
     let lastError: unknown;
     let outOfTime = false;
     const failures: FailureKind[] = [];
-    for (let i = 0; i < candidates.length; i++) {
-      const provider = candidates[i];
+    for (const [i, provider] of candidates.entries()) {
       // The first provider always gets a go; later ones only with enough budget.
       if (i > 0 && deadline.remainingMs() < this.config.minAttemptBudgetMs) {
         outOfTime = true;

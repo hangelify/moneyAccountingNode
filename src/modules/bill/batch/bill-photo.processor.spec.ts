@@ -11,6 +11,7 @@ import { BillParseErrorCode } from '../../../types/bill-parse-error.enum';
 import type { BillBatchEnv } from './bill-batch.env';
 import type { BillPhotoJob, BillPhotoJobItem } from './bill-batch.service';
 import { BillPhotoProcessor } from './bill-photo.processor';
+import { defined } from '../../../common/testing/defined';
 
 describe('BillPhotoProcessor', () => {
   const env: BillBatchEnv = {
@@ -361,7 +362,7 @@ describe('BillPhotoProcessor', () => {
   });
 
   it('skips a job whose item no longer exists', async () => {
-    batches['findItemForJob'].mockResolvedValue(null);
+    defined(batches['findItemForJob']).mockResolvedValue(null);
 
     await processor.process(asJob(fakeJob()), 'tok');
 
@@ -382,7 +383,7 @@ describe('BillPhotoProcessor', () => {
     });
     expect(published()).toEqual(['item.failed']);
     expect(
-      (events.publish.mock.calls as [string, { data: object }][])[0][1].data,
+      (events.publish.mock.calls as [string, { data: object }][])[0]?.[1].data,
     ).toMatchObject({ created_by_user_id: null });
   });
 
@@ -394,7 +395,7 @@ describe('BillPhotoProcessor', () => {
       requestId: 'req-1',
       parsed: {},
     });
-    batches['markItemDone'].mockResolvedValue({
+    defined(batches['markItemDone']).mockResolvedValue({
       changed: true,
       completion: { total: 3, done: 2, failed: 1 },
     });
@@ -420,7 +421,7 @@ describe('BillPhotoProcessor', () => {
 
   it('publishes batch.completed after a failed last item', async () => {
     ingest.ingest.mockResolvedValue({ kind: 'not_a_receipt', requestId: 'r' });
-    batches['markItemFailed'].mockResolvedValue({
+    defined(batches['markItemFailed']).mockResolvedValue({
       changed: true,
       billId: 'failed-bill',
       completion: { total: 1, done: 0, failed: 1 },
@@ -444,7 +445,7 @@ describe('BillPhotoProcessor', () => {
       parsed: {},
     });
     // A finished item never reports completion; see BillBatchService.
-    batches['markItemDone'].mockResolvedValue({
+    defined(batches['markItemDone']).mockResolvedValue({
       changed: false,
       completion: null,
     });

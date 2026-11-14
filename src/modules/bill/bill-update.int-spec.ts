@@ -19,6 +19,7 @@ import { StubProvider } from '../exchange-rate/testing/stub-exchange-rate.provid
 import { BillDuplicatesService } from './bill-duplicates.service';
 import { BillConversionService } from './household-conversion';
 import { Currency } from '../../types/currency.enum';
+import { defined } from '../../common/testing/defined';
 
 jest.setTimeout(30_000);
 
@@ -188,7 +189,7 @@ describe('update bill (PostgreSQL)', () => {
 
     const { items } = await load(id);
     expect(items).toHaveLength(1);
-    expect(items[0].raw_name).toBe('sub-1');
+    expect(items[0]?.raw_name).toBe('sub-1');
   });
 
   it('keeps the items when items is omitted', async () => {
@@ -234,8 +235,8 @@ describe('update bill (PostgreSQL)', () => {
     });
     const { items } = await load(id);
     // The model's confidence was about the old sub-category.
-    expect(items[0].category_confidence).toBeNull();
-    expect(items[0].price_per_unit).toBeNull();
+    expect(defined(items[0]).category_confidence).toBeNull();
+    expect(defined(items[0]).price_per_unit).toBeNull();
   });
 
   it('finds or creates the market named by new_market', async () => {

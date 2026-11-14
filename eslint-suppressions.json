@@ -324,11 +324,6 @@
       "count": 1
     }
   },
-  "src/modules/ai-gateway/pricing.ts": {
-    "@typescript-eslint/no-unnecessary-condition": {
-      "count": 1
-    }
-  },
   "src/modules/ai-gateway/providers/__fixtures__/call-bounds.shared.ts": {
     "@typescript-eslint/explicit-function-return-type": {
       "count": 2
@@ -339,7 +334,7 @@
   },
   "src/modules/ai-gateway/providers/__fixtures__/fake.provider.ts": {
     "@typescript-eslint/no-unnecessary-condition": {
-      "count": 2
+      "count": 1
     },
     "@typescript-eslint/restrict-template-expressions": {
       "count": 1
@@ -765,9 +760,6 @@
     "@typescript-eslint/no-misused-spread": {
       "count": 1
     },
-    "@typescript-eslint/no-unnecessary-condition": {
-      "count": 3
-    },
     "@typescript-eslint/no-unnecessary-type-conversion": {
       "count": 1
     },
@@ -824,9 +816,6 @@
   "src/modules/bill/bill-queries.int-spec.ts": {
     "@typescript-eslint/explicit-function-return-type": {
       "count": 5
-    },
-    "@typescript-eslint/no-unnecessary-condition": {
-      "count": 1
     }
   },
   "src/modules/bill/bill-source.int-spec.ts": {
@@ -1003,7 +992,7 @@
       "count": 1
     },
     "@typescript-eslint/no-unnecessary-condition": {
-      "count": 2
+      "count": 1
     },
     "@typescript-eslint/use-unknown-in-catch-callback-variable": {
       "count": 1
@@ -1054,16 +1043,10 @@
     },
     "@typescript-eslint/no-misused-spread": {
       "count": 1
-    },
-    "@typescript-eslint/no-unnecessary-condition": {
-      "count": 1
     }
   },
   "src/modules/bill/spending-breakdown.service.ts": {
     "@typescript-eslint/no-misused-spread": {
-      "count": 1
-    },
-    "@typescript-eslint/no-unnecessary-condition": {
       "count": 1
     },
     "max-lines-per-function": {
@@ -1214,9 +1197,6 @@
     }
   },
   "src/modules/exchange-rate/exchange-rate.service.ts": {
-    "@typescript-eslint/no-unnecessary-condition": {
-      "count": 1
-    },
     "@typescript-eslint/restrict-template-expressions": {
       "count": 2
     },
@@ -1420,9 +1400,6 @@
     "@typescript-eslint/no-non-null-assertion": {
       "count": 8
     },
-    "@typescript-eslint/no-unnecessary-type-conversion": {
-      "count": 3
-    },
     "@typescript-eslint/restrict-template-expressions": {
       "count": 3
     }
@@ -1461,10 +1438,10 @@
   },
   "test/auth-web-mode.e2e-spec.ts": {
     "@typescript-eslint/explicit-function-return-type": {
-      "count": 4
+      "count": 3
     },
     "@typescript-eslint/no-non-null-assertion": {
-      "count": 2
+      "count": 1
     },
     "@typescript-eslint/prefer-nullish-coalescing": {
       "count": 1
@@ -1519,7 +1496,7 @@
       "count": 4
     },
     "@typescript-eslint/no-non-null-assertion": {
-      "count": 2
+      "count": 1
     },
     "@typescript-eslint/restrict-template-expressions": {
       "count": 5
@@ -1651,7 +1628,7 @@
       "count": 1
     },
     "@typescript-eslint/no-unnecessary-condition": {
-      "count": 2
+      "count": 1
     }
   },
   "test/trust-proxy.e2e-spec.ts": {

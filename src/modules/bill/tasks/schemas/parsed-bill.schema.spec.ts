@@ -2,6 +2,7 @@ import { toProviderJsonSchema } from '../../../ai-gateway/internal/provider-json
 import { ParsedBillSchema } from './parsed-bill.schema';
 import { ParsedAndCategorizedBillSchema } from './parsed-and-categorized-bill.schema';
 import { Currency } from '../../../../types/currency.enum';
+import { defined } from '../../../../common/testing/defined';
 
 const item = {
   name: 'BREAD',
@@ -129,7 +130,7 @@ describe('ParsedBillSchema', () => {
       ...bill,
       items: [{ ...item, name: 'x'.repeat(300) }],
     });
-    expect(r.items[0].name).toBe('x'.repeat(255));
+    expect(r.items[0]?.name).toBe('x'.repeat(255));
   });
 
   it.each([
@@ -143,7 +144,7 @@ describe('ParsedBillSchema', () => {
       ...bill,
       items: [{ ...item, [field]: value }],
     });
-    expect(r.items[0][field as keyof typeof item]).toBeNull();
+    expect(defined(r.items[0])[field as keyof typeof item]).toBeNull();
   });
 
   it('falls back to null for an out-of-range total_amount', () => {
@@ -157,7 +158,7 @@ describe('ParsedBillSchema', () => {
       ...bill,
       items: [{ ...item, final_price: -1.5 }],
     });
-    expect(r.items[0].final_price).toBe(-1.5);
+    expect(r.items[0]?.final_price).toBe(-1.5);
   });
 
   it('rejects a final_price beyond the amount column', () => {

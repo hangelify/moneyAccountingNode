@@ -22,7 +22,7 @@ describe('NotAfterTomorrow', () => {
   it('rejects the day after tomorrow', () => {
     jest.useFakeTimers().setSystemTime(new Date('2026-11-09T12:00:00Z'));
     const [error] = errorsFor('2026-11-11');
-    expect(error.constraints).toEqual({
+    expect(error?.constraints).toEqual({
       notAfterTomorrow: 'value must not be later than tomorrow',
     });
   });

@@ -54,7 +54,7 @@ describe('duplicate bills schema (PostgreSQL)', () => {
     await em.flush();
     householdId = household.id;
     userId = user.id;
-    [billA, billB] = [a.id, b.id].sort();
+    [billA, billB] = [a.id, b.id].sort() as [string, string];
   });
 
   afterAll(async () => {

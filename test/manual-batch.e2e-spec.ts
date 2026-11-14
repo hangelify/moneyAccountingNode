@@ -9,6 +9,7 @@ import { EXCHANGE_RATE_PROVIDER } from '../src/modules/exchange-rate/exchange-ra
 import { StubProvider } from '../src/modules/exchange-rate/testing/stub-exchange-rate.provider';
 import type { ManualBatchResponseDto } from '../src/modules/bill/dto/manual-batch-response.dto';
 import type { RecentCategoryDto } from '../src/modules/category/dto/recent-categories.dto';
+import { defined } from '../src/common/testing/defined';
 
 // The quick-entry form over HTTP: guards, the global validation pipe, the
 // exception filter and the 201/200 split of POST manual-batch (HAN-48).
@@ -163,8 +164,9 @@ describe('POST /households/:hid/bills/manual-batch (e2e)', () => {
       >;
     };
 
-    const bad = doc.paths['/households/{hid}/bills/manual-batch']['post']
-      .responses['400'] as {
+    const bad = defined(
+      defined(doc.paths['/households/{hid}/bills/manual-batch'])['post'],
+    ).responses['400'] as {
       content: {
         'application/json': { schema: { oneOf: { $ref: string }[] } };
       };

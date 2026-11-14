@@ -9,6 +9,7 @@ import type {
   BillDetailResponseDto,
   DraftListResponseDto,
 } from '../src/modules/bill/dto/bill-detail-response.dto';
+import { defined } from '../src/common/testing/defined';
 
 // Every bill line in a response carries its own category (HAN-94), read from
 // the line's category_id: with a sub-category, without one, or none at all.
@@ -65,7 +66,10 @@ describe('Bill line category in responses (e2e)', () => {
       })
       .expect(201);
     const bill = res.body as BillDetailResponseDto;
-    const [full, categoryOnly, none] = bill.items.map((i) => i.id);
+    const ids = bill.items.map((i) => i.id);
+    const full = defined(ids[0]);
+    const categoryOnly = defined(ids[1]);
+    const none = defined(ids[2]);
     await sql(
       `update bill_sub_categories set sub_category_id = null where id = ?`,
       [categoryOnly],
@@ -90,9 +94,13 @@ describe('Bill line category in responses (e2e)', () => {
 
   beforeEach(async () => {
     user = await registerUser(app, 'line-category-resp');
-    [{ id: userId }] = (await sql(`select id from users where email = ?`, [
-      user.email,
-    ])) as { id: string }[];
+    ({ id: userId } = defined(
+      (
+        (await sql(`select id from users where email = ?`, [user.email])) as {
+          id: string;
+        }[]
+      )[0],
+    ));
     dairy = await seedSub('Dairy HAN94');
   });
 
@@ -105,7 +113,7 @@ describe('Bill line category in responses (e2e)', () => {
       })
       .expect(201);
 
-    expect((res.body as BillDetailResponseDto).items[0].category).toEqual({
+    expect((res.body as BillDetailResponseDto).items[0]?.category).toEqual({
       id: dairy.categoryId,
       name: 'Dairy HAN94',
     });

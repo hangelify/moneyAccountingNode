@@ -14,6 +14,7 @@ import { RefreshToken } from '../src/entities/refresh-token.entity';
 import { Log, LogSource } from '../src/entities/log.entity';
 import type { TokenResponseDto } from '../src/modules/auth/dto/token-response.dto';
 import type { JwtPayload } from '../src/modules/auth/types/jwt-payload.interface';
+import { defined } from '../src/common/testing/defined';
 
 // Session lifecycle: refresh rotation, reuse detection, logout, expiry and
 // token-type confusion, through the HTTP API.
@@ -278,8 +279,8 @@ describe('Auth session flow (e2e)', () => {
         .expect(200);
 
       const [log] = await authLogs(agent);
-      expect(log.message).toContain('User logged out');
-      expect(log.metadata).toMatchObject({
+      expect(log?.message).toContain('User logged out');
+      expect(log?.metadata).toMatchObject({
         session_id: sessionId(tokens.access_token),
       });
     });
@@ -320,8 +321,8 @@ describe('Auth session flow (e2e)', () => {
         .expect(200);
 
       const [log] = await authLogs(agent);
-      expect(log.message).toContain('Session revoked by refresh token');
-      expect(log.metadata).toMatchObject({
+      expect(log?.message).toContain('Session revoked by refresh token');
+      expect(log?.metadata).toMatchObject({
         session_id: sessionId(tokens.access_token),
         success: true,
       });
@@ -336,7 +337,7 @@ describe('Auth session flow (e2e)', () => {
 
       await me(other.access_token).expect(200);
       const [log] = await authLogs(agent);
-      expect(log.message).toContain('Token revocation - token not recognized');
+      expect(log?.message).toContain('Token revocation - token not recognized');
     });
 
     it('answers 200 to an access token and revokes nothing', async () => {
@@ -451,7 +452,7 @@ describe('Auth session flow (e2e)', () => {
           .set('Authorization', `Bearer ${owner.accessToken}`)
           .expect(200);
 
-        const [log] = await authLogs(agent);
+        const log = defined((await authLogs(agent))[0]);
         expect(log.message).toContain('User logged out of all sessions');
         expect(log.metadata).toMatchObject({
           user_id: app.get(JwtService).decode<JwtPayload>(owner.accessToken)
@@ -595,8 +596,8 @@ describe('Auth session flow (e2e)', () => {
           .expect(204);
 
         const [log] = await authLogs(agent);
-        expect(log.message).toContain('Session revoked by user');
-        expect(log.metadata).toMatchObject({
+        expect(log?.message).toContain('Session revoked by user');
+        expect(log?.metadata).toMatchObject({
           session_id: sessionId(other.access_token),
         });
       });

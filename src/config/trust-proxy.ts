@@ -16,15 +16,15 @@ function invalid(raw: string, reason: string): Error {
 function isValidProxyEntry(entry: string): boolean {
   if (NAMED_RANGES.has(entry)) return true;
 
-  const parts = entry.split('/');
-  if (parts.length > 2) return false;
+  const [address = '', prefixText, ...rest] = entry.split('/');
+  if (rest.length > 0) return false;
 
-  const version = isIP(parts[0]);
+  const version = isIP(address);
   if (version === 0) return false;
-  if (parts.length === 1) return true;
+  if (prefixText === undefined) return true;
 
-  if (!/^\d+$/.test(parts[1])) return false;
-  const prefix = Number(parts[1]);
+  if (!/^\d+$/.test(prefixText)) return false;
+  const prefix = Number(prefixText);
   return prefix <= (version === 4 ? 32 : 128);
 }
 

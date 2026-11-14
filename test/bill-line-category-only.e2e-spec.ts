@@ -6,6 +6,7 @@ import { Category } from '../src/entities/category.entity';
 import { SubCategory } from '../src/entities/sub-category.entity';
 import { BillCrudService } from '../src/modules/bill/bill-crud.service';
 import type { BillDetailResponseDto } from '../src/modules/bill/dto/bill-detail-response.dto';
+import { defined } from '../src/common/testing/defined';
 
 // A bill line can name a category without a sub-category on create, confirm
 // and update; with both, the sub-category must be of that category (HAN-95).
@@ -110,9 +111,13 @@ describe('Bill line with a category and no sub-category (e2e)', () => {
     // Registered once: sign-up is rate limited.
     user = await registerUser(app, 'line-category-only');
     other = await registerUser(app, 'line-category-only-other');
-    [{ id: userId }] = (await sql(`select id from users where email = ?`, [
-      user.email,
-    ])) as { id: string }[];
+    ({ id: userId } = defined(
+      (
+        (await sql(`select id from users where email = ?`, [user.email])) as {
+          id: string;
+        }[]
+      )[0],
+    ));
   });
 
   afterAll(async () => {
@@ -213,7 +218,9 @@ describe('Bill line with a category and no sub-category (e2e)', () => {
 
   it('confirming a draft moves a line from its sub-category to a category alone', async () => {
     const { id: billId } = await draftFromParsed([dairy.subId, dairy.subId]);
-    const [first, second] = [...(await lines(billId)).keys()];
+    const ids = [...(await lines(billId)).keys()];
+    const first = defined(ids[0]);
+    const second = defined(ids[1]);
 
     const res = await http('post', `/${billId}/confirm`)
       .send({
@@ -257,7 +264,7 @@ describe('Bill line with a category and no sub-category (e2e)', () => {
       sub_category_id: dairy.subId,
       category_id: dairy.categoryId,
     });
-    expect(saved.get(second)!.category_confidence).not.toBeNull();
+    expect(defined(saved.get(second)).category_confidence).not.toBeNull();
     expect(items.find((i) => i.id === first)).toMatchObject({
       sub_category: null,
       category: { id: bakery.categoryId, name: bakery.name },
@@ -297,7 +304,7 @@ describe('Bill line with a category and no sub-category (e2e)', () => {
       .send({
         items: [
           {
-            id: bill.items[0].id,
+            id: defined(bill.items[0]).id,
             category_id: dairy.categoryId,
             product_count: 1,
             amount: 1,
@@ -311,10 +318,12 @@ describe('Bill line with a category and no sub-category (e2e)', () => {
       sub_category: null,
       category: { id: dairy.categoryId },
     });
-    expect((await lines(bill.id)).get(bill.items[0].id)).toMatchObject({
-      sub_category_id: null,
-      category_id: dairy.categoryId,
-    });
+    expect((await lines(bill.id)).get(defined(bill.items[0]).id)).toMatchObject(
+      {
+        sub_category_id: null,
+        category_id: dairy.categoryId,
+      },
+    );
   });
 
   it('PUT /bills/:id rejects a category of another household', async () => {
@@ -328,7 +337,7 @@ describe('Bill line with a category and no sub-category (e2e)', () => {
       .send({
         items: [
           {
-            id: bill.items[0].id,
+            id: defined(bill.items[0]).id,
             category_id: foreign.categoryId,
             product_count: 1,
             amount: 1,

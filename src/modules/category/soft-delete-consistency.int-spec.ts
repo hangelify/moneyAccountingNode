@@ -14,6 +14,7 @@ import { SubCategoryService } from '../sub-category/sub-category.service';
 import { BillPhotoService } from '../bill/bill-photo.service';
 import type { BillAiOrchestrator } from '../bill/bill-ai.orchestrator';
 import { Currency } from '../../types/currency.enum';
+import { defined } from '../../common/testing/defined';
 
 jest.setTimeout(30_000);
 
@@ -142,7 +143,9 @@ describe('soft delete of categories and their sub-categories (PostgreSQL)', () =
       householdId,
     );
 
-    const sub = await orm.em.fork().findOneOrFail(SubCategory, subIds[0]);
+    const sub = await orm.em
+      .fork()
+      .findOneOrFail(SubCategory, defined(subIds[0]));
     expect(sub.deleted_at).toEqual(earlier);
   });
 
@@ -152,7 +155,7 @@ describe('soft delete of categories and their sub-categories (PostgreSQL)', () =
     beforeEach(async () => {
       const { categoryId, subIds } = await makeTree(`orphan-${randomUUID()}`);
       await markCategoryDeleted(categoryId);
-      subId = subIds[0];
+      subId = defined(subIds[0]);
     });
 
     it('GET returns 404', async () => {
@@ -207,7 +210,9 @@ describe('soft delete of categories and their sub-categories (PostgreSQL)', () =
       const calls = (orchestrator.parseAndCategorize as jest.Mock).mock
         .calls as unknown[][];
       expect(calls).toHaveLength(1);
-      const offered = (calls[0][3] as { id: string }[]).map((s) => s.id);
+      const offered = (defined(calls[0])[3] as { id: string }[]).map(
+        (s) => s.id,
+      );
       expect(offered).toEqual(expect.arrayContaining(live.subIds));
       expect(offered).not.toContain(subId);
     });

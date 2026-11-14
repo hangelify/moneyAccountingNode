@@ -1,5 +1,6 @@
 import { MikroORM } from '@mikro-orm/core';
 import { createMikroOrmConfig } from '../src/mikro-orm.config';
+import { defined } from '../src/common/testing/defined';
 
 // Indexes behind the household-scoped reads (parse-photo, drafts, markets,
 // dashboard), the foreign keys to users, and the write-only indexes dropped
@@ -226,13 +227,21 @@ describe('database indexes (PostgreSQL)', () => {
       .transactional(async (trx) => {
         const run = (sql: string, params: unknown[] = []) =>
           conn.execute(sql, params, 'all', trx) as Promise<unknown>;
-        const [user] = (await run(
-          `insert into users (first_name, email, password) values ('T', 'schema-test@x.com', 'x') returning id`,
-        )) as { id: string }[];
-        const [household] = (await run(
-          `insert into households (name, currency, created_by) values ('H', 'EUR', ?) returning id`,
-          [user.id],
-        )) as { id: string }[];
+        const user = defined(
+          (
+            (await run(
+              `insert into users (first_name, email, password) values ('T', 'schema-test@x.com', 'x') returning id`,
+            )) as { id: string }[]
+          )[0],
+        );
+        const household = defined(
+          (
+            (await run(
+              `insert into households (name, currency, created_by) values ('H', 'EUR', ?) returning id`,
+              [user.id],
+            )) as { id: string }[]
+          )[0],
+        );
         await fn(run, household.id);
         throw rollback;
       })
@@ -265,10 +274,14 @@ describe('database indexes (PostgreSQL)', () => {
 
   it('bill_batch_items is unique per batch and position', async () => {
     await inRolledBackTx(async (run, householdId) => {
-      const [batch] = (await run(
-        `insert into bill_batches (household_id, total) values (?, 2) returning id`,
-        [householdId],
-      )) as { id: string }[];
+      const batch = defined(
+        (
+          (await run(
+            `insert into bill_batches (household_id, total) values (?, 2) returning id`,
+            [householdId],
+          )) as { id: string }[]
+        )[0],
+      );
       const insert = (position: number) =>
         run(
           `insert into bill_batch_items (batch_id, position, image_key, image_sha256, status)

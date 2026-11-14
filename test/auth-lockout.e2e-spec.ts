@@ -100,8 +100,8 @@ describe('Per-account login lockout and auth audit (e2e)', () => {
 
     const logs = await authLogs({ user_agent: agent });
     expect(logs).toHaveLength(1);
-    expect(logs[0].ip_address).toBe('192.0.2.44');
-    expect(logs[0].metadata).toMatchObject({ success: false });
+    expect(logs[0]?.ip_address).toBe('192.0.2.44');
+    expect(logs[0]?.metadata).toMatchObject({ success: false });
   });
 
   it('records a failed attempt for an unknown email with the client IP', async () => {
@@ -116,7 +116,7 @@ describe('Per-account login lockout and auth audit (e2e)', () => {
 
     const logs = await authLogs({ user_agent: agent });
     expect(logs).toHaveLength(1);
-    expect(logs[0].ip_address).toBe('192.0.2.45');
+    expect(logs[0]?.ip_address).toBe('192.0.2.45');
   });
 
   it('never writes the raw email to the logs table or stdout', async () => {

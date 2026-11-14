@@ -2,6 +2,7 @@ import { AiCallConfig, loadAiCallConfig } from '../../internal/ai-call-config';
 import { DeadlineExceededError, TimeoutError } from '../../internal/retry';
 import { LlmProvider } from '../../types/llm-provider';
 import { LlmRequest } from '../../types/llm-request';
+import { defined } from '../../../../common/testing/defined';
 
 export function testAiCallConfig(
   overrides: Partial<AiCallConfig> = {},
@@ -24,7 +25,9 @@ function hangingSdkCall(_body: unknown, opts: { signal: AbortSignal }) {
 }
 
 function sdkCallOptions(create: jest.Mock): { signal: AbortSignal } {
-  return (create.mock.calls as unknown[][])[0][1] as { signal: AbortSignal };
+  return defined((create.mock.calls as unknown[][])[0])[1] as {
+    signal: AbortSignal;
+  };
 }
 
 /**

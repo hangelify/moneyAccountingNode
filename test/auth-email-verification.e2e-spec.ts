@@ -68,7 +68,7 @@ describe('Email verification (e2e)', () => {
 
     const mails = sentMail(app, jane.email);
     expect(mails).toHaveLength(1);
-    expect(mails[0].text).toContain(
+    expect(mails[0]?.text).toContain(
       'http://frontend.e2e.test/verify-email?token=',
     );
     expect(await isVerified(jane)).toBe(false);

@@ -20,6 +20,7 @@ import { CreateBillDto } from './dto/create-bill.dto';
 import { ConfirmBillDto } from './dto/confirm-bill.dto';
 import { ParsedBillResponseDto } from './dto/parsed-bill-response.dto';
 import { Currency } from '../../types/currency.enum';
+import { defined } from '../../common/testing/defined';
 
 function makeRow(
   overrides: Partial<{
@@ -203,13 +204,13 @@ describe('BillCrudService', () => {
       const result = await service.listBills(householdId, {});
 
       expect(result.data).toHaveLength(1);
-      expect(result.data[0].id).toBe('bill-1');
-      expect(result.data[0].total_amount).toBe(52.3);
-      expect(result.data[0].market?.name).toBe('Lidl');
-      const countSql: string = mockExecute.mock.calls[0][0];
+      expect(result.data[0]?.id).toBe('bill-1');
+      expect(result.data[0]?.total_amount).toBe(52.3);
+      expect(result.data[0]?.market?.name).toBe('Lidl');
+      const countSql: string = defined(mockExecute.mock.calls[0])[0];
       expect(countSql).toContain('b.household_id = ?');
       expect(countSql).toContain("b.status     = 'confirmed'");
-      const dataSql: string = mockExecute.mock.calls[1][0];
+      const dataSql: string = defined(mockExecute.mock.calls[1])[0];
       expect(dataSql).toContain('ORDER  BY b.bill_date DESC');
     });
 
@@ -223,8 +224,8 @@ describe('BillCrudService', () => {
 
       const result = await service.listBills(householdId, {});
 
-      expect(result.data[0].id).toBe('bill-new');
-      expect(result.data[1].id).toBe('bill-old');
+      expect(result.data[0]?.id).toBe('bill-new');
+      expect(result.data[1]?.id).toBe('bill-old');
     });
 
     it('appends date_from condition when provided', async () => {
@@ -237,7 +238,7 @@ describe('BillCrudService', () => {
         date_from: '2026-03-01',
       });
 
-      const [sql, params] = mockExecute.mock.calls[0];
+      const [sql, params] = defined(mockExecute.mock.calls[0]);
       expect(sql).toContain('b.bill_date >= ?');
       expect(params).toContain('2026-03-01');
     });
@@ -252,7 +253,7 @@ describe('BillCrudService', () => {
         date_to: '2026-03-31',
       });
 
-      const [sql, params] = mockExecute.mock.calls[0];
+      const [sql, params] = defined(mockExecute.mock.calls[0]);
       expect(sql).toContain('b.bill_date <= ?');
       expect(params).toContain('2026-03-31');
     });
@@ -268,7 +269,7 @@ describe('BillCrudService', () => {
         date_to: '2026-03-31',
       });
 
-      const [sql, params] = mockExecute.mock.calls[0];
+      const [sql, params] = defined(mockExecute.mock.calls[0]);
       expect(sql).toContain('b.bill_date >= ?');
       expect(sql).toContain('b.bill_date <= ?');
       expect(params).toContain('2026-03-01');
@@ -285,7 +286,7 @@ describe('BillCrudService', () => {
         market_names: ['Lidl'],
       });
 
-      const [sql, params] = mockExecute.mock.calls[0];
+      const [sql, params] = defined(mockExecute.mock.calls[0]);
       expect(sql).toContain('m.name = ANY(?)');
       expect(params).toContainEqual(['Lidl']);
     });
@@ -300,7 +301,7 @@ describe('BillCrudService', () => {
         market_names: ['Lidl', 'Kaufland'],
       });
 
-      const [sql, params] = mockExecute.mock.calls[0];
+      const [sql, params] = defined(mockExecute.mock.calls[0]);
       expect(sql).toContain('m.name = ANY(?)');
       expect(params).toContainEqual(['Lidl', 'Kaufland']);
     });
@@ -315,7 +316,7 @@ describe('BillCrudService', () => {
         currency: Currency.EUR,
       });
 
-      const [sql, params] = mockExecute.mock.calls[0];
+      const [sql, params] = defined(mockExecute.mock.calls[0]);
       expect(sql).toContain('b.currency = ?');
       expect(params).toContain('EUR');
     });
@@ -330,7 +331,7 @@ describe('BillCrudService', () => {
         amount_range: ['gt_100'],
       });
 
-      const [sql, params] = mockExecute.mock.calls[0];
+      const [sql, params] = defined(mockExecute.mock.calls[0]);
       expect(sql).toContain('b.amount > ?');
       expect(params).toContain(100);
     });
@@ -345,7 +346,7 @@ describe('BillCrudService', () => {
         amount_range: ['lt_500'],
       });
 
-      const [sql, params] = mockExecute.mock.calls[0];
+      const [sql, params] = defined(mockExecute.mock.calls[0]);
       expect(sql).toContain('b.amount < ?');
       expect(params).toContain(500);
     });
@@ -360,7 +361,7 @@ describe('BillCrudService', () => {
         amount_range: ['gt_100', 'lt_500'],
       });
 
-      const [sql, params] = mockExecute.mock.calls[0];
+      const [sql, params] = defined(mockExecute.mock.calls[0]);
       expect(sql).toContain('b.amount > ?');
       expect(sql).toContain('b.amount < ?');
       expect(params).toContain(100);
@@ -378,7 +379,7 @@ describe('BillCrudService', () => {
         amount_range: ['gt_100'],
       });
 
-      const [sql, params] = mockExecute.mock.calls[0];
+      const [sql, params] = defined(mockExecute.mock.calls[0]);
       expect(sql).toContain('b.currency = ?');
       expect(sql).toContain('b.amount > ?');
       expect(params).toContain('EUR');
@@ -395,7 +396,7 @@ describe('BillCrudService', () => {
 
       const result = await service.listBills(householdId, {});
 
-      expect(result.data[0].market).toBeUndefined();
+      expect(defined(result.data[0]).market).toBeUndefined();
     });
 
     it('throws BadRequestException when date_from is after date_to', async () => {
@@ -433,8 +434,8 @@ describe('BillCrudService', () => {
 
       await service.listBills(householdId, {});
 
-      const dataSql: string = mockExecute.mock.calls[1][0];
-      const dataParams = mockExecute.mock.calls[1][1];
+      const dataSql: string = defined(mockExecute.mock.calls[1])[0];
+      const dataParams = defined(mockExecute.mock.calls[1])[1];
       expect(dataSql).toContain('LIMIT  ?');
       expect(dataSql).toContain('OFFSET ?');
       expect(dataParams).toContain(20); // limit
@@ -452,7 +453,7 @@ describe('BillCrudService', () => {
         limit: 10,
       });
 
-      const dataParams = mockExecute.mock.calls[1][1];
+      const dataParams = defined(mockExecute.mock.calls[1])[1];
       expect(dataParams).toContain(10); // limit
       expect(dataParams).toContain(20); // offset = (3-1)*10
     });
@@ -495,8 +496,8 @@ describe('BillCrudService', () => {
         currency: Currency.EUR,
       });
 
-      const countSql: string = mockExecute.mock.calls[0][0];
-      const countParams = mockExecute.mock.calls[0][1];
+      const countSql: string = defined(mockExecute.mock.calls[0])[0];
+      const countParams = defined(mockExecute.mock.calls[0])[1];
       expect(countSql).toContain('COUNT(*)');
       expect(countParams).toContain('EUR');
     });
@@ -750,7 +751,7 @@ describe('BillCrudService', () => {
       const calls = (em.persist as jest.Mock).mock.calls as [unknown][];
       // bill + 1 BillSubCategory for the uncategorized item
       expect(calls).toHaveLength(2);
-      const bsc = calls[1][0] as BillSubCategory;
+      const bsc = defined(calls[1])[0] as BillSubCategory;
       expect(bsc.raw_name).toBe('Paine Pumpern');
       expect(bsc.unit).toBe('piece');
       expect(bsc.sub_category).toBeNull();
@@ -797,7 +798,7 @@ describe('BillCrudService', () => {
 
       const calls = (em.persist as jest.Mock).mock.calls as [unknown][];
       expect(calls).toHaveLength(2);
-      const bsc = calls[1][0] as BillSubCategory;
+      const bsc = defined(calls[1])[0] as BillSubCategory;
       expect(bsc.raw_name).toBe('Carnaciori Ki');
       expect(bsc.unit).toBe('kg');
       expect(bsc.price_per_unit).toBeCloseTo(164.3);
@@ -872,7 +873,7 @@ describe('BillCrudService', () => {
       });
 
       const calls = (em.persist as jest.Mock).mock.calls as [unknown][];
-      const bsc = calls[1][0] as BillSubCategory;
+      const bsc = defined(calls[1])[0] as BillSubCategory;
       expect(bsc.sub_category).toBeNull();
       expect(bsc.category).toBeNull();
     });
@@ -969,8 +970,8 @@ describe('BillCrudService', () => {
       const calls = (em.persist as jest.Mock).mock.calls as [unknown][];
       // bill + 1 categorized BSC + 1 uncategorized BSC = 3 persist calls
       expect(calls).toHaveLength(3);
-      const bsc1 = calls[1][0] as BillSubCategory;
-      const bsc2 = calls[2][0] as BillSubCategory;
+      const bsc1 = defined(calls[1])[0] as BillSubCategory;
+      const bsc2 = defined(calls[2])[0] as BillSubCategory;
       expect(bsc1.raw_name).toBe('Lapte 1L');
       expect(bsc1.sub_category?.id).toBe('milk-id');
       expect(bsc1.category).toBe(dairy);
@@ -1010,7 +1011,7 @@ describe('BillCrudService', () => {
         await service.createDraftFromParsed(householdId, userId, parsed);
         const calls = (em.persist as jest.Mock).mock.calls as [unknown][];
         return {
-          bill: calls[0][0] as Bill,
+          bill: defined(calls[0])[0] as Bill,
           bsc: calls[1]?.[0] as BillSubCategory | undefined,
         };
       }

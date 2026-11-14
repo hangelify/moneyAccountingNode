@@ -9,6 +9,7 @@ import {
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { S3StorageService } from './storage.service';
 import type { StorageEnv } from './storage.env';
+import { defined } from '../../common/testing/defined';
 
 jest.mock('@aws-sdk/client-s3');
 jest.mock('@aws-sdk/s3-request-presigner');
@@ -250,8 +251,8 @@ describe('S3StorageService', () => {
         'http://minio.test:9000',
         'https://budget.example',
       ]);
-      const signer = MockedS3Client.mock.results[1].value as unknown;
-      expect(mockedGetSignedUrl.mock.calls[0][0]).toBe(signer);
+      const signer = defined(MockedS3Client.mock.results[1]).value as unknown;
+      expect(mockedGetSignedUrl.mock.calls[0]?.[0]).toBe(signer);
     });
 
     it('keeps reads and writes on the internal endpoint', async () => {
@@ -276,8 +277,8 @@ describe('S3StorageService', () => {
       await svc.getSignedUrl('k');
 
       expect(MockedS3Client).toHaveBeenCalledTimes(1);
-      expect(mockedGetSignedUrl.mock.calls[0][0]).toBe(
-        MockedS3Client.mock.results[0].value,
+      expect(mockedGetSignedUrl.mock.calls[0]?.[0]).toBe(
+        defined(MockedS3Client.mock.results[0]).value,
       );
     });
   });

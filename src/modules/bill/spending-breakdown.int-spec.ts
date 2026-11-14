@@ -23,6 +23,7 @@ import {
   type SpendingRow,
 } from './spending-breakdown';
 import { householdConversionJoin, loadRateDays } from './household-conversion';
+import { defined } from '../../common/testing/defined';
 
 // The queries as they were before lines carried their own category (HAN-93):
 // the category came through the sub-category. Kept to prove the switch to
@@ -225,7 +226,7 @@ describe('spending breakdown SQL (PostgreSQL)', () => {
   });
 
   afterAll(async () => {
-    await orm?.close(true);
+    await orm.close(true);
   });
 
   it('builds the March tree per currency', async () => {
@@ -247,7 +248,7 @@ describe('spending breakdown SQL (PostgreSQL)', () => {
     ]);
 
     const [eur] = res.by_currency;
-    expect(eur.categories).toEqual([
+    expect(eur?.categories).toEqual([
       {
         id: id['food'],
         name: 'Food',
@@ -336,7 +337,7 @@ describe('spending breakdown SQL (PostgreSQL)', () => {
       start: '2026-03-01',
       end: '2026-04-01',
     });
-    expect(res.by_currency[0].total).toBe(21.6);
+    expect(res.by_currency[0]?.total).toBe(21.6);
   });
 
   it('includes the start day and excludes the end day', async () => {
@@ -346,7 +347,7 @@ describe('spending breakdown SQL (PostgreSQL)', () => {
       to: '2026-03-01',
     });
     expect(startOnly.by_currency).toHaveLength(1);
-    expect(startOnly.by_currency[0].total).toBe(7.6);
+    expect(startOnly.by_currency[0]?.total).toBe(7.6);
 
     // [2026-03-02, 2026-03-31): neither the 1st nor the 31st.
     const inner = await service.getSpendingBreakdown(householdId, {
@@ -407,7 +408,7 @@ describe('spending breakdown SQL (PostgreSQL)', () => {
     it('puts them in their category, as a last no-sub-category item', async () => {
       const res = await service.getSpendingBreakdown(householdId, may);
 
-      const [eur] = res.by_currency;
+      const eur = defined(res.by_currency[0]);
       expect(eur.categories).toEqual([
         {
           id: id['food'],
@@ -484,7 +485,7 @@ describe('spending breakdown SQL (PostgreSQL)', () => {
           percentage: 40,
         },
       ];
-      expect(res.by_currency[0].category_stats).toEqual(expected);
+      expect(res.by_currency[0]?.category_stats).toEqual(expected);
       expect(res.in_household_currency.category_stats).toEqual(expected);
     });
   });

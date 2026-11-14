@@ -27,6 +27,7 @@ import type { DuplicateProbe } from './bill-duplicates';
 import { Category } from '../../entities/category.entity';
 import { SpendingBreakdownService } from './spending-breakdown.service';
 import { MarketService } from '../market/market.service';
+import { defined } from '../../common/testing/defined';
 
 describe('BillDuplicatesService (PostgreSQL)', () => {
   let orm: MikroORM;
@@ -278,7 +279,7 @@ describe('possible duplicates on bill reads and writes (PostgreSQL)', () => {
   });
 
   it('getBill of a duplicate returns duplicate_of and no candidates', async () => {
-    const res = await crud().getBill(ids['dupe'], householdId);
+    const res = await crud().getBill(defined(ids['dupe']), householdId);
     expect(res.possible_duplicates).toEqual([]);
     expect(res.duplicate_of).toEqual({
       id: ids['original'],
@@ -955,7 +956,7 @@ describe('duplicate suggestions (PostgreSQL)', () => {
       'weak',
       'weak',
     ]);
-    const first = res.pairs[0];
+    const first = defined(res.pairs[0]);
     expect(first.bill).toMatchObject({
       bill_date: '2025-05-01',
       currency: Currency.MDL,
@@ -1085,7 +1086,7 @@ describe('duplicate suggestions (PostgreSQL)', () => {
     // Same date range filter applies to both sides.
     const res = await suggest();
     expect(idsOf(res)).toEqual([sorted(a, b)]);
-    expect(res.pairs[0].match).toBe('fiscal');
+    expect(res.pairs[0]?.match).toBe('fiscal');
     expect((await suggest({ date_to: '2026-02-01' })).pairs).toEqual([]);
   });
 

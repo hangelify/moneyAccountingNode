@@ -312,7 +312,7 @@ export class BillCrudService {
       >,
     ]);
 
-    const total = Number(countRows[0].count);
+    const total = Number(countRows[0]?.count ?? 0);
     const meta: PaginationMetaDto = {
       total,
       page,

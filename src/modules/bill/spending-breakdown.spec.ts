@@ -5,6 +5,7 @@ import {
   SpendingRow,
   UNCATEGORIZED_NAME,
 } from './spending-breakdown';
+import { defined } from '../../common/testing/defined';
 
 const row = (r: Partial<SpendingRow>): SpendingRow => ({
   currency: Currency.EUR,
@@ -102,8 +103,8 @@ describe('foldSpendingRows', () => {
       }),
     ]);
 
-    expect(eur.categories.map((c) => c.id)).toEqual(['cat-food', null]);
-    expect(eur.categories[1]).toEqual({
+    expect(eur?.categories.map((c) => c.id)).toEqual(['cat-food', null]);
+    expect(eur?.categories[1]).toEqual({
       id: null,
       name: UNCATEGORIZED_NAME,
       total: 99,
@@ -111,7 +112,7 @@ describe('foldSpendingRows', () => {
       archived: false,
       sub_categories: [],
     });
-    expect(eur.lines).toBe(5);
+    expect(eur?.lines).toBe(5);
   });
 
   it('keeps currencies apart, sorted by code with null last', () => {
@@ -126,7 +127,9 @@ describe('foldSpendingRows', () => {
       [Currency.USD, 7],
       [null, 5],
     ]);
-    expect(series.every((s) => s.categories[0].share === 100)).toBe(true);
+    expect(series.every((s) => defined(s.categories[0]).share === 100)).toBe(
+      true,
+    );
   });
 
   it('sums in integer cents', () => {
@@ -134,8 +137,8 @@ describe('foldSpendingRows', () => {
       row({ total: '0.10' }),
       row({ sub_category_id: 'sub-milk', sub_name: 'milk', total: '0.20' }),
     ]);
-    expect(eur.total).toBe(0.3);
-    expect(eur.categories[0].total).toBe(0.3);
+    expect(eur?.total).toBe(0.3);
+    expect(eur?.categories[0]?.total).toBe(0.3);
   });
 
   it('rounds shares to 2 decimals', () => {
@@ -148,13 +151,13 @@ describe('foldSpendingRows', () => {
         total: '2.00',
       }),
     ]);
-    expect(eur.categories.map((c) => c.share)).toEqual([66.67, 33.33]);
+    expect(eur?.categories.map((c) => c.share)).toEqual([66.67, 33.33]);
   });
 
   it('gives zero shares when the total is zero', () => {
     const [eur] = foldSpendingRows([row({ total: '0.00' })]);
-    expect(eur.categories[0].share).toBe(0);
-    expect(eur.categories[0].sub_categories[0].share_of_category).toBe(0);
+    expect(eur?.categories[0]?.share).toBe(0);
+    expect(eur?.categories[0]?.sub_categories[0]?.share_of_category).toBe(0);
   });
 
   it('breaks total ties by name', () => {
@@ -162,30 +165,32 @@ describe('foldSpendingRows', () => {
       row({ sub_category_id: 's-b', sub_name: 'b', total: '5.00' }),
       row({ sub_category_id: 's-a', sub_name: 'a', total: '5.00' }),
     ]);
-    expect(eur.categories[0].sub_categories.map((s) => s.name)).toEqual([
+    expect(eur?.categories[0]?.sub_categories.map((s) => s.name)).toEqual([
       'a',
       'b',
     ]);
   });
 
   it('marks archived categories and sub-categories separately', () => {
-    const [eur] = foldSpendingRows([
-      row({ archived: true, total: '1.00' }),
-      row({
-        sub_category_id: 'sub-old',
-        sub_name: 'old',
-        category_id: 'cat-old',
-        category_name: 'Old',
-        category_archived: true,
-        archived: true,
-        total: '2.00',
-      }),
-    ]);
+    const eur = defined(
+      foldSpendingRows([
+        row({ archived: true, total: '1.00' }),
+        row({
+          sub_category_id: 'sub-old',
+          sub_name: 'old',
+          category_id: 'cat-old',
+          category_name: 'Old',
+          category_archived: true,
+          archived: true,
+          total: '2.00',
+        }),
+      ])[0],
+    );
     const [old, food] = eur.categories;
-    expect(old.archived).toBe(true);
-    expect(old.sub_categories[0].archived).toBe(true);
-    expect(food.archived).toBe(false);
-    expect(food.sub_categories[0].archived).toBe(true);
+    expect(old?.archived).toBe(true);
+    expect(old?.sub_categories[0]?.archived).toBe(true);
+    expect(food?.archived).toBe(false);
+    expect(food?.sub_categories[0]?.archived).toBe(true);
   });
 
   it('puts category-only lines in a last no-sub-category item of their category', () => {
@@ -199,7 +204,7 @@ describe('foldSpendingRows', () => {
       }),
     ]);
 
-    expect(eur.categories).toEqual([
+    expect(eur?.categories).toEqual([
       {
         id: 'cat-food',
         name: 'Food',
@@ -238,7 +243,7 @@ describe('foldSpendingRows', () => {
         total: '1.00',
       }),
     ]);
-    expect(eur.categories[0].sub_categories[0]).toMatchObject({
+    expect(eur?.categories[0]?.sub_categories[0]).toMatchObject({
       id: null,
       archived: true,
     });
@@ -248,7 +253,7 @@ describe('foldSpendingRows', () => {
     const [eur] = foldSpendingRows([
       row({ category_id: null, category_name: null, total: '2.00' }),
     ]);
-    expect(eur.categories).toEqual([
+    expect(eur?.categories).toEqual([
       {
         id: null,
         name: UNCATEGORIZED_NAME,

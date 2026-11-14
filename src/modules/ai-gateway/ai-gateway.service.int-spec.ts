@@ -58,7 +58,7 @@ class PingTask extends AiTask<PingIn, PingOut> {
   readonly requiredCapabilities = new Set<Capability>(['text', 'json']);
   readonly inputSchema = z.object({ n: z.number() });
   readonly outputSchema = z.object({ ok: z.boolean() });
-  readonly modelOverrides?: Partial<
+  override readonly modelOverrides?: Partial<
     Record<'anthropic' | 'openai' | 'deepseek', string>
   >;
 

@@ -29,7 +29,7 @@ export class NoCapableProviderError extends Error {
 export class AiInputInvalidError extends Error {
   constructor(
     public readonly taskName: string,
-    public readonly cause: unknown,
+    public override readonly cause: unknown,
   ) {
     super(`Invalid input for AI task '${taskName}'`);
     this.name = 'AiInputInvalidError';
@@ -40,7 +40,7 @@ export class AiInputInvalidError extends Error {
 export class AiImageStorageError extends Error {
   constructor(
     public readonly requestId: string,
-    public readonly cause: unknown,
+    public override readonly cause: unknown,
   ) {
     super(`Storing the image of AI request ${requestId} failed`);
     this.name = 'AiImageStorageError';

@@ -21,7 +21,7 @@ jest.mock('bcrypt', () => {
   return { ...actual, compare: jest.fn(compare) };
 });
 
-/* eslint-disable @typescript-eslint/no-unsafe-return */
+/* eslint-disable @typescript-eslint/no-unsafe-return -- реализации jest.Mock возвращают any */
 
 interface Deps {
   seedForHousehold: jest.Mock;

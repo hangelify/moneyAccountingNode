@@ -141,7 +141,7 @@ function okResponse(json: unknown, text?: string): () => Promise<LlmResponse> {
 function errResponse(err: unknown): () => Promise<LlmResponse> {
   return () =>
     new Promise<LlmResponse>((_resolve, reject) => {
-      // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
+      // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- тест отдаёт провайдеру произвольное значение ошибки, в том числе не Error
       reject(err);
     });
 }

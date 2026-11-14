@@ -397,8 +397,7 @@ export class BillCrudService {
       await em.populate(bill, ['market']);
 
       if (dto.market_id === null) {
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-        bill.market = null as any;
+        bill.market = null;
       } else {
         const market = await this.resolveMarket(em, householdId, dto);
         if (market) bill.market = market;
@@ -697,9 +696,7 @@ export class BillCrudService {
       bill.confirmed_by = em.getReference(User, userId);
       bill.confirmed_at = new Date();
 
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-      bill.market =
-        (await this.resolveMarket(em, householdId, dto)) ?? (null as any);
+      bill.market = (await this.resolveMarket(em, householdId, dto)) ?? null;
 
       // Apply overrides
       bill.bill_date = dto.bill_date;

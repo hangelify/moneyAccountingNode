@@ -164,7 +164,7 @@ export class Bill extends BaseEntity {
   confirmed_at?: Date;
 
   @ManyToOne(() => Market, { nullable: true })
-  market?: Rel<Market>;
+  market?: Rel<Market> | null;
 
   @Enum({
     items: () => Currency,

@@ -52,7 +52,9 @@ export function toCategoryRef(category: Category | null | undefined) {
   return category ? { id: category.id, name: category.name } : null;
 }
 
-export function toMarketRef(market?: Market): BillMarketRefDto | undefined {
+export function toMarketRef(
+  market?: Market | null,
+): BillMarketRefDto | undefined {
   if (!market) return undefined;
   return { id: market.id, name: market.name, city: market.city };
 }

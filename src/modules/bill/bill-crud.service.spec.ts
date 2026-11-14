@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/unbound-method */
 import {
   NotFoundException,
   BadRequestException,
@@ -60,7 +59,7 @@ function makeService() {
   const subCategoryRepo = {
     find: jest.fn().mockResolvedValue([]),
   } as unknown as EntityRepository<SubCategory>;
-  const mockExecute = jest.fn();
+  const mockExecute = jest.fn<Promise<unknown>, [string, unknown[]?]>();
   const em = {
     persist: jest.fn().mockReturnThis(),
     flush: jest.fn().mockResolvedValue(undefined),
@@ -207,11 +206,9 @@ describe('BillCrudService', () => {
       expect(result.data[0].id).toBe('bill-1');
       expect(result.data[0].total_amount).toBe(52.3);
       expect(result.data[0].market?.name).toBe('Lidl');
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
       const countSql: string = mockExecute.mock.calls[0][0] as string;
       expect(countSql).toContain('b.household_id = ?');
       expect(countSql).toContain("b.status     = 'confirmed'");
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
       const dataSql: string = mockExecute.mock.calls[1][0] as string;
       expect(dataSql).toContain('ORDER  BY b.bill_date DESC');
     });
@@ -436,9 +433,7 @@ describe('BillCrudService', () => {
 
       await service.listBills(householdId, {});
 
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
       const dataSql: string = mockExecute.mock.calls[1][0] as string;
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
       const dataParams = mockExecute.mock.calls[1][1] as unknown[];
       expect(dataSql).toContain('LIMIT  ?');
       expect(dataSql).toContain('OFFSET ?');
@@ -457,7 +452,6 @@ describe('BillCrudService', () => {
         limit: 10,
       });
 
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
       const dataParams = mockExecute.mock.calls[1][1] as unknown[];
       expect(dataParams).toContain(10); // limit
       expect(dataParams).toContain(20); // offset = (3-1)*10
@@ -501,9 +495,7 @@ describe('BillCrudService', () => {
         currency: Currency.EUR,
       });
 
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
       const countSql: string = mockExecute.mock.calls[0][0] as string;
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
       const countParams = mockExecute.mock.calls[0][1] as unknown[];
       expect(countSql).toContain('COUNT(*)');
       expect(countParams).toContain('EUR');

@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call */
+/* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call -- тест читает аргументы вызовов нетипизированного мока SDK */
 import OpenAI from 'openai';
 import { DeepSeekProvider } from './deepseek.provider';
 import {
@@ -12,7 +12,6 @@ import {
 } from './__fixtures__/call-bounds.shared';
 
 const mockCreate = jest.fn();
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const mockCtor = jest.fn((..._args: unknown[]) => ({
   chat: { completions: { create: mockCreate } },
 }));

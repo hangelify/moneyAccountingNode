@@ -18,7 +18,7 @@ export default async function globalSetup(): Promise<void> {
   applyTestEnv();
   const dbName = process.env.DB_NAME!;
 
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  // eslint-disable-next-line @typescript-eslint/no-require-imports -- pg грузится только после applyTestEnv(), до него в процессе ничего не импортируется
   const { Client } = require('pg') as {
     Client: new (config: object) => PgClient;
   };

@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/unbound-method */
 import { EntityManager, EntityRepository } from '@mikro-orm/core';
 import { BudgetService } from './budget.service';
 import { Budget } from '../../entities/budget.entity';

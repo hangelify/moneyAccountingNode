@@ -53,6 +53,15 @@ export default defineConfig(
           allowProtectedClassPropertyAccess: true,
         },
       ],
+      // Same convention as tsconfig noUnusedParameters: a leading _ marks it intentional.
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        {
+          argsIgnorePattern: '^_',
+          varsIgnorePattern: '^_',
+          caughtErrorsIgnorePattern: '^_',
+        },
+      ],
       'no-console': 'error',
       'no-warning-comments': ['error', { terms: ['todo', 'fixme'] }],
       '@eslint-community/eslint-comments/require-description': 'error',

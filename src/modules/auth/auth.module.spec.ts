@@ -16,7 +16,7 @@ describe('AuthModule', () => {
 
     expect(() => {
       jest.isolateModules(() => {
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        // eslint-disable-next-line @typescript-eslint/no-require-imports -- модуль нужно загрузить заново внутри isolateModules
         require('./auth.module');
       });
     }).not.toThrow();

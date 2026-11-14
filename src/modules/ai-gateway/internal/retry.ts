@@ -71,8 +71,7 @@ export function raceAbort<T>(
       },
       (e: unknown) => {
         signal.removeEventListener('abort', onAbort);
-        // Pass through as-is: classification relies on fields like `status`.
-        // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
+        // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- ошибку пробрасываем как есть: классификация читает её поля вроде `status`
         reject(e);
       },
     );

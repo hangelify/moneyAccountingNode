@@ -656,7 +656,7 @@ If no configured provider satisfies a required AI task, the application refuses 
 
 ## Code Checks
 
-One command runs every check that needs no database (type-check, lint, copy-paste, unit tests):
+One command runs every check that needs no database (type-check, lint, architecture, copy-paste, unit tests):
 
 ```bash
 npm run verify
@@ -676,6 +676,18 @@ A frozen count may only go down:
 
 - Fixed some frozen violations? `npm run lint:check` fails with "There are suppressions left that do not occur anymore". Run `npm run lint:prune` and commit `eslint-suppressions.json`.
 - Never add to the baseline by hand or with `--suppress-all`/`--suppress-rule` to make a new violation pass.
+
+### Architecture
+
+`npm run arch` (dependency-cruiser, `.dependency-cruiser.cjs`) enforces the module layout:
+
+- A module is `src/modules/<m>/`. Other modules, `src/app.module.ts` and tests import it only through `src/modules/<m>/index.ts`; test doubles go through `testing.ts`, and only tests may import them.
+- Controllers do not import `@mikro-orm/*` (except `health.controller.ts`); services use the `EntityManager`.
+- `src/common`, `src/types`, `src/constants` and `src/entities` never import a module.
+- No import cycles (two-way relations between entities are allowed) and no orphan files.
+
+Old violations are listed in `.dependency-cruiser-known-violations.json` (10 on 2026-11-14: module cycles auth → category → household → auth and friends, and `src/types/express.d.ts`). After fixing some, run `npm run arch:baseline` (shrink-only) and commit the file.
+Barrels list leaf files first and the Nest module last: the order keeps those old cycles loadable, so keep it when adding exports.
 
 ### Code smells
 
@@ -704,8 +716,9 @@ CI only blocks a merge when the branch requires it. In **Settings → Branches �
 | `npm run lint` | Run ESLint and auto-fix |
 | `npm run lint:check` | Run ESLint without fixing (baseline applied, 0 warnings allowed) |
 | `npm run lint:prune` | Drop baseline entries for violations that were fixed |
-| `npm run verify` | type-check, lint, copy-paste check and unit tests: the same gate CI runs |
+| `npm run verify` | type-check, lint, architecture, copy-paste check and unit tests: the same gate CI runs |
 | `npm run dup` | Copy-paste check (jscpd) |
+| `npm run arch` | Module boundaries and import cycles (dependency-cruiser) |
 | `npm run format` | Format all source files with Prettier |
 | `npm run type-check` | TypeScript type check without emitting |
 | `npm test` | Run unit tests |

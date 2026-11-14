@@ -37,7 +37,9 @@ function eventsRedis(maxRetriesPerRequest: number | null): Redis {
     ...redisConnectionOptions(),
     maxRetriesPerRequest,
   });
-  redis.on('error', (err: Error) => log.warn(err.message));
+  redis.on('error', (err: Error) => {
+    log.warn(err.message);
+  });
   return redis;
 }
 

@@ -400,12 +400,16 @@ describe('AuthService REFRESH_REUSE_GRACE_SECONDS validation', () => {
   it('fails at module init on an invalid value', () => {
     process.env.REFRESH_REUSE_GRACE_SECONDS = '30s';
     const { service } = makeService();
-    expect(() => service.onModuleInit()).toThrow('REFRESH_REUSE_GRACE_SECONDS');
+    expect(() => {
+      service.onModuleInit();
+    }).toThrow('REFRESH_REUSE_GRACE_SECONDS');
   });
 
   it('accepts an unset value', () => {
     const { service } = makeService();
-    expect(() => service.onModuleInit()).not.toThrow();
+    expect(() => {
+      service.onModuleInit();
+    }).not.toThrow();
   });
 });
 /* eslint-enable @typescript-eslint/no-unsafe-return */

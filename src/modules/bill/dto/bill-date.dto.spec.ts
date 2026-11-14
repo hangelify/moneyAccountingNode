@@ -8,7 +8,7 @@ import { ListBillsQueryDto } from './list-bills-query.dto';
 
 const items = [{ sub_category_id: randomUUID(), product_count: 1, amount: 1 }];
 
-const fields: Array<[string, new () => object, string, object]> = [
+const fields: [string, new () => object, string, object][] = [
   ['CreateBillDto', CreateBillDto, 'bill_date', { total_amount: 1, items }],
   ['ConfirmBillDto', ConfirmBillDto, 'bill_date', { items }],
   ['UpdateBillDto', UpdateBillDto, 'bill_date', {}],

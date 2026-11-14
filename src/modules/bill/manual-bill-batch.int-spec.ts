@@ -201,7 +201,7 @@ describe('manual expense batch (PostgreSQL)', () => {
        from bills b join bill_sub_categories l on l.bill_id = b.id
        where b.client_batch_id = ? order by b.client_batch_index`,
       [body.client_batch_id],
-    )) as Array<Record<string, unknown>>;
+    )) as Record<string, unknown>[];
     expect(lines).toHaveLength(10);
     expect(lines.map((l) => l.client_batch_index)).toEqual([
       0, 1, 2, 3, 4, 5, 6, 7, 8, 9,

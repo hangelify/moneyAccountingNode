@@ -41,7 +41,7 @@ describe('UUID route params (e2e)', () => {
       'markets',
       'planing-horizons',
     ];
-    const routes: Array<[Method, string]> = [];
+    const routes: [Method, string][] = [];
     for (const base of bases) {
       for (const method of ['get', 'put', 'delete'] as const) {
         routes.push([method, `${h}/${base}/abc`]);

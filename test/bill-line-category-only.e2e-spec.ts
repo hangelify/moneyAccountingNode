@@ -9,7 +9,11 @@ import type { BillDetailResponseDto } from '../src/modules/bill/dto/bill-detail-
 
 // A bill line can name a category without a sub-category on create, confirm
 // and update; with both, the sub-category must be of that category (HAN-95).
-type Seeded = { name: string; categoryId: string; subId: string };
+interface Seeded {
+  name: string;
+  categoryId: string;
+  subId: string;
+}
 
 describe('Bill line with a category and no sub-category (e2e)', () => {
   let app: NestExpressApplication;

@@ -78,7 +78,9 @@ import {
           commandTimeout: 1000,
         });
         const logger = new Logger('LoginAttemptStore');
-        redis.on('error', (err: Error) => logger.warn(err.message));
+        redis.on('error', (err: Error) => {
+          logger.warn(err.message);
+        });
         return new RedisLoginAttemptStore(redis);
       },
     },

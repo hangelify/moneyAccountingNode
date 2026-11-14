@@ -45,6 +45,14 @@ export default defineConfig(
         'error',
         { allowWithDecorator: true },
       ],
+      // Tests reach private members via obj['name'] on purpose.
+      '@typescript-eslint/dot-notation': [
+        'error',
+        {
+          allowPrivateClassPropertyAccess: true,
+          allowProtectedClassPropertyAccess: true,
+        },
+      ],
       'no-console': 'error',
       'no-warning-comments': ['error', { terms: ['todo', 'fixme'] }],
       '@eslint-community/eslint-comments/require-description': 'error',

@@ -19,7 +19,7 @@ export interface BeginArgs {
   householdId?: string;
   requiredCapabilities: string[];
   imageS3Keys?: string[];
-  prompt: { messages: Array<{ role: string; text: string }> };
+  prompt: { messages: { role: string; text: string }[] };
 }
 
 export interface BeginAttemptArgs {
@@ -63,7 +63,7 @@ export class AiRequestLogger {
       .execute(
         'SELECT SUM(total_cost_usd) AS spent FROM ai_requests WHERE user_id = ? AND created_at > ?',
         [userId, since],
-      ) as Promise<Array<{ spent: string | null }>>);
+      ) as Promise<{ spent: string | null }[]>);
     return Number(rows[0]?.spent ?? 0);
   }
 

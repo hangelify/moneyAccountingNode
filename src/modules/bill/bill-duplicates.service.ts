@@ -198,7 +198,7 @@ export class BillDuplicatesService {
           SELECT 1 FROM bill_duplicate_dismissals d
            WHERE d.bill_id = c.a_id AND d.other_bill_id = c.b_id)`,
       [householdId, ...rangeParams],
-    )) as Array<{ a_id: string; b_id: string }>;
+    )) as { a_id: string; b_id: string }[];
     if (pairs.length === 0) return { pairs: [] };
 
     const ids = [...new Set(pairs.flatMap((p) => [p.a_id, p.b_id]))];
@@ -248,7 +248,7 @@ export class BillDuplicatesService {
       `SELECT id FROM bills
         WHERE id IN (?, ?) AND household_id = ? AND deleted_at IS NULL`,
       [id, otherBillId, householdId],
-    )) as Array<{ id: string }>;
+    )) as { id: string }[];
     for (const billId of [id, otherBillId]) {
       if (!found.some((r) => r.id === billId)) {
         throw new NotFoundException(`Bill with ID ${billId} not found`);

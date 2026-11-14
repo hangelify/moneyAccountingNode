@@ -20,7 +20,7 @@ export async function runExclusive<T>(
         [`retention:${name}`],
         'all',
         tx.getTransactionContext(),
-      )) as Array<{ locked: boolean }>;
+      )) as { locked: boolean }[];
     if (!rows[0]?.locked) return { ran: false };
     return { ran: true, result: await fn(tx) };
   });

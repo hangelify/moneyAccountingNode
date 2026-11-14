@@ -156,7 +156,7 @@ describe('spending breakdown SQL (PostgreSQL)', () => {
     // Category alone is a line without a sub-category.
     const bill = (
       data: Record<string, unknown>,
-      items: Array<[SubCategory | Category | null, number]>,
+      items: [SubCategory | Category | null, number][],
     ) => {
       const b = em.create(Bill, {
         household,

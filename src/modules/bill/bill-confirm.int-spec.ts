@@ -597,7 +597,7 @@ describe('confirm and create bill (PostgreSQL)', () => {
         .getConnection()
         .execute(
           `SELECT indexdef FROM pg_indexes WHERE tablename = 'bills' AND indexname = 'bills_confirmed_by_user_id_index'`,
-        )) as Array<{ indexdef: string }>;
+        )) as { indexdef: string }[];
       expect(rows[0]?.indexdef).toMatch(/\(confirmed_by_user_id\)/);
     });
 

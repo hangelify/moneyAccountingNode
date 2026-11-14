@@ -83,7 +83,7 @@ describe('LoginLockoutService', () => {
     await attempts(5);
     const locks: number[] = [];
     for (let i = 0; i < 6; i++) {
-      const seconds = (await attempt()) as number;
+      const seconds = (await attempt())!;
       locks.push(seconds);
       jest.advanceTimersByTime(seconds * 1000);
       expect(await attempt()).toBeNull();
@@ -128,12 +128,16 @@ describe('LoginLockoutService', () => {
     process.env.LOGIN_LOCKOUT_SECONDS = '120';
     process.env.LOGIN_LOCKOUT_MAX_SECONDS = '60';
 
-    expect(() => service.onModuleInit()).toThrow('LOGIN_LOCKOUT_SECONDS');
+    expect(() => {
+      service.onModuleInit();
+    }).toThrow('LOGIN_LOCKOUT_SECONDS');
   });
 
   it.each(ENV_KEYS)('rejects %s=0 at startup', (key) => {
     process.env[key] = '0';
 
-    expect(() => service.onModuleInit()).toThrow(key);
+    expect(() => {
+      service.onModuleInit();
+    }).toThrow(key);
   });
 });

@@ -79,7 +79,7 @@ describe('Household isolation (e2e)', () => {
   // Every household-scoped route, with the ids filled in from `r`.
   function scopedRoutes(hid: string, r: Resources, uid: string) {
     const h = `/households/${hid}`;
-    const crud = (base: string, id: string): Array<[Method, string]> => [
+    const crud = (base: string, id: string): [Method, string][] => [
       ['post', `${h}/${base}`],
       ['get', `${h}/${base}`],
       ['get', `${h}/${base}/${id}`],
@@ -108,7 +108,7 @@ describe('Household isolation (e2e)', () => {
       ['get', `${h}/bills/dashboard?type=year&year=2026`],
       ['post', `${h}/bills/${r.bill}/confirm`],
       ...crud('bills', r.bill),
-    ] as Array<[Method, string]>;
+    ] as [Method, string][];
   }
 
   beforeAll(async () => {
@@ -127,7 +127,7 @@ describe('Household isolation (e2e)', () => {
   // Bob still sees all of his data, unchanged.
   async function expectBobsDataIntact() {
     const h = `/households/${bob.householdId}`;
-    const names: Array<[string, string, string]> = [
+    const names: [string, string, string][] = [
       ['budgets', bobs.budget, 'Budget'],
       ['planing-horizons', bobs.horizon, 'Horizon'],
       ['categories', bobs.category, 'Category'],
@@ -163,7 +163,7 @@ describe('Household isolation (e2e)', () => {
 
     it('lists only the households the user belongs to', async () => {
       const res = await call(alice, 'get', '/households').expect(200);
-      expect((res.body as Array<{ id: string }>).map((h) => h.id)).toEqual([
+      expect((res.body as { id: string }[]).map((h) => h.id)).toEqual([
         alice.householdId,
       ]);
     });
@@ -212,7 +212,7 @@ describe('Household isolation (e2e)', () => {
 
     const expectOnlyOwn = async (base: string) => {
       const res = await call(alice, 'get', `${own()}/${base}`).expect(200);
-      const body = res.body as Array<{ id: string }> | { data: [] };
+      const body = res.body as { id: string }[] | { data: [] };
       const ids = (Array.isArray(body) ? body : body.data).map(
         (r: { id: string }) => r.id,
       );

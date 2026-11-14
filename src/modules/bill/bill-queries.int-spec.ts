@@ -98,7 +98,7 @@ describe('bill list and dashboard SQL (PostgreSQL)', () => {
 
     const bill = (
       data: Record<string, unknown>,
-      items: Array<[SubCategory | null, number]> = [],
+      items: [SubCategory | null, number][] = [],
     ) => {
       const b = em.create(Bill, {
         household,

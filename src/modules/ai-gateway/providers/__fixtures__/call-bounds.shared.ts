@@ -17,9 +17,9 @@ const req: LlmRequest = {
 /** Never settles on its own; rejects like the SDK does once aborted. */
 function hangingSdkCall(_body: unknown, opts: { signal: AbortSignal }) {
   return new Promise((_resolve, reject) => {
-    opts.signal.addEventListener('abort', () =>
-      reject(new Error('Request was aborted.')),
-    );
+    opts.signal.addEventListener('abort', () => {
+      reject(new Error('Request was aborted.'));
+    });
   });
 }
 

@@ -207,7 +207,7 @@ describe('soft delete of categories and their sub-categories (PostgreSQL)', () =
       const calls = (orchestrator.parseAndCategorize as jest.Mock).mock
         .calls as unknown[][];
       expect(calls).toHaveLength(1);
-      const offered = (calls[0][3] as Array<{ id: string }>).map((s) => s.id);
+      const offered = (calls[0][3] as { id: string }[]).map((s) => s.id);
       expect(offered).toEqual(expect.arrayContaining(live.subIds));
       expect(offered).not.toContain(subId);
     });

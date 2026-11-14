@@ -173,7 +173,9 @@ async function openEvents(
         if (!check()) listeners.add(check);
       });
     },
-    close: () => abort.abort(),
+    close: () => {
+      abort.abort();
+    },
   };
 }
 

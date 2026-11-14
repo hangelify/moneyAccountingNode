@@ -29,7 +29,9 @@ export class HealthController {
   ): Promise<HealthStatus> {
     let timer: NodeJS.Timeout | undefined;
     const timeout = new Promise<never>((_, reject) => {
-      timer = setTimeout(() => reject(new Error('db timeout')), DB_TIMEOUT_MS);
+      timer = setTimeout(() => {
+        reject(new Error('db timeout'));
+      }, DB_TIMEOUT_MS);
     });
     try {
       await Promise.race([

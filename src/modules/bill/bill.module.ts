@@ -20,15 +20,15 @@ import { BillDuplicatesService } from './bill-duplicates.service';
 import { BillDashboardService } from './bill-dashboard.service';
 import { SpendingBreakdownService } from './spending-breakdown.service';
 import { BillController } from './bill.controller';
-import { StorageModule } from '../storage';
-import { ExchangeRateModule } from '../exchange-rate';
+import { StorageModule } from '../storage/storage.module';
+import { ExchangeRateModule } from '../exchange-rate/exchange-rate.module';
 import { BillConversionService } from './household-conversion';
 import { DraftCleanupService } from './draft-cleanup.service';
 import {
   DRAFT_RETENTION_DAYS,
   readDraftRetentionDays,
 } from './draft-cleanup.env';
-import { MarketModule } from '../market';
+import { MarketModule } from '../market/market.module';
 import { BILL_ITEM_TOLERANCE, readBillItemTolerance } from './bill-totals';
 
 @Module({

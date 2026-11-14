@@ -1,7 +1,7 @@
 // Public API of the bill module.
 // Other modules import from here, never from files inside the module.
-// Order matters: leaf files first, the Nest module last, so a module that
-// imports this barrel back during loading still finds the leaf exports.
+// The Nest module is not exported here: import it from ./<m>.module, so
+// loading this barrel never pulls the module graph (and its cycles) in.
 
 export type { BillBatchResponseDto } from './batch/dto/bill-batch-response.dto';
 export type { BillDashboardResponseDto } from './dto/bill-dashboard.dto';
@@ -22,5 +22,3 @@ export { BillPhotoProcessor } from './batch/bill-photo.processor';
 export type { BillAiOrchestrator } from './bill-ai.orchestrator';
 export { BillCrudService } from './bill-crud.service';
 export { BillPhotoService } from './bill-photo.service';
-export { BillBatchModule } from './batch/bill-batch.module';
-export { BillModule } from './bill.module';

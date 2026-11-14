@@ -9,7 +9,7 @@ import { BillBatchItem } from '../../../entities/bill-batch-item.entity';
 import { Household } from '../../../entities/household.entity';
 import { HouseholdMember } from '../../../entities/household-member.entity';
 import { HouseholdMemberGuard } from '../../household';
-import { StorageModule } from '../../storage';
+import { StorageModule } from '../../storage/storage.module';
 import { BillModule } from '../bill.module';
 import {
   BILL_BATCH_DISABLED,

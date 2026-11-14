@@ -6,6 +6,12 @@
 const TESTS =
   '(\\.(spec|int-spec|e2e-spec)\\.ts$|^test/|/__fixtures__/|/testing/|^src/modules/[^/]+/testing\\.ts$)';
 
+// What other code may import from a module: its index.ts barrel, its
+// testing.ts (tests only) and its Nest modules (*.module.ts), which the
+// barrels leave out so loading a barrel never drags the module graph in.
+const PUBLIC_ENTRY =
+  '(^src/modules/[^/]+/(index|testing)\\.ts$|^src/modules/.+\\.module\\.ts$)';
+
 /** @type {import('dependency-cruiser').IConfiguration} */
 module.exports = {
   forbidden: [
@@ -29,15 +35,13 @@ module.exports = {
       severity: 'error',
       comment:
         "Import another module through its index.ts: from '../market', not " +
-        "'../market/market.service'. If what you need is not in that index.ts, " +
-        'add it there on purpose (it becomes public API).',
+        "'../market/market.service' (Nest modules: '../market/market.module'). " +
+        'If what you need is not in that index.ts, add it there on purpose ' +
+        '(it becomes public API).',
       from: { path: '^src/modules/([^/]+)/' },
       to: {
         path: '^src/modules/[^/]+/',
-        pathNot: [
-          '^src/modules/$1/',
-          '^src/modules/[^/]+/(index|testing)\\.ts$',
-        ],
+        pathNot: ['^src/modules/$1/', PUBLIC_ENTRY],
       },
     },
     {
@@ -49,7 +53,7 @@ module.exports = {
       from: { path: '^(src|test|scripts)/', pathNot: '^src/modules/' },
       to: {
         path: '^src/modules/[^/]+/',
-        pathNot: '^src/modules/[^/]+/(index|testing)\\.ts$',
+        pathNot: PUBLIC_ENTRY,
       },
     },
     {

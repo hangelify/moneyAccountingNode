@@ -681,13 +681,12 @@ A frozen count may only go down:
 
 `npm run arch` (dependency-cruiser, `.dependency-cruiser.cjs`) enforces the module layout:
 
-- A module is `src/modules/<m>/`. Other modules, `src/app.module.ts` and tests import it only through `src/modules/<m>/index.ts`; test doubles go through `testing.ts`, and only tests may import them.
+- A module is `src/modules/<m>/`. Other modules, `src/app.module.ts` and tests import it only through `src/modules/<m>/index.ts`, and its Nest module through `<m>.module.ts`; test doubles go through `testing.ts`, and only tests may import them. Barrels never re-export a Nest module, so importing a guard or a service does not load the whole module graph.
 - Controllers do not import `@mikro-orm/*` (except `health.controller.ts`); services use the `EntityManager`.
 - `src/common`, `src/types`, `src/constants` and `src/entities` never import a module.
 - No import cycles (two-way relations between entities are allowed) and no orphan files.
 
-Old violations are listed in `.dependency-cruiser-known-violations.json` (10 on 2026-11-14: module cycles auth → category → household → auth and friends, and `src/types/express.d.ts`). After fixing some, run `npm run arch:baseline` (shrink-only) and commit the file.
-Barrels list leaf files first and the Nest module last: the order keeps those old cycles loadable, so keep it when adding exports.
+Old violations are listed in `.dependency-cruiser-known-violations.json` (1 on 2026-11-14: `src/types/express.d.ts` augments Express with the auth user type). After fixing some, run `npm run arch:baseline` (shrink-only) and commit the file.
 
 ### Code smells
 

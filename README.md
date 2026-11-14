@@ -656,7 +656,7 @@ If no configured provider satisfies a required AI task, the application refuses 
 
 ## Code Checks
 
-One command runs every check that needs no database:
+One command runs every check that needs no database (type-check, lint, copy-paste, unit tests):
 
 ```bash
 npm run verify
@@ -676,6 +676,11 @@ A frozen count may only go down:
 
 - Fixed some frozen violations? `npm run lint:check` fails with "There are suppressions left that do not occur anymore". Run `npm run lint:prune` and commit `eslint-suppressions.json`.
 - Never add to the baseline by hand or with `--suppress-all`/`--suppress-rule` to make a new violation pass.
+
+### Code smells
+
+- ESLint (`eslint-plugin-sonarjs` recommended + limits): cognitive complexity 15, file 300 lines, function 60 lines, 4 params, depth 3, no nested ternaries. Tests have no size limits. Old violations are in the baseline.
+- Copy-paste: `npm run dup` (jscpd, `.jscpd.json`: `src/**` without migrations and tests, blocks of 6+ lines and 60+ tokens). `threshold` is the duplication share it may not exceed: **2.52%**, set on 2026-11-14 when `dev` measured **2.51%** (32 clones). Lower it when clones are removed; never raise it.
 
 ### Branch protection (GitHub settings, owner only)
 
@@ -699,7 +704,8 @@ CI only blocks a merge when the branch requires it. In **Settings â†’ Branches â
 | `npm run lint` | Run ESLint and auto-fix |
 | `npm run lint:check` | Run ESLint without fixing (baseline applied, 0 warnings allowed) |
 | `npm run lint:prune` | Drop baseline entries for violations that were fixed |
-| `npm run verify` | type-check, lint and unit tests: the same gate CI runs |
+| `npm run verify` | type-check, lint, copy-paste check and unit tests: the same gate CI runs |
+| `npm run dup` | Copy-paste check (jscpd) |
 | `npm run format` | Format all source files with Prettier |
 | `npm run type-check` | TypeScript type check without emitting |
 | `npm test` | Run unit tests |

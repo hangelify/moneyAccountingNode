@@ -1,0 +1,25 @@
+{
+  "path": [
+    "src"
+  ],
+  "format": [
+    "typescript"
+  ],
+  "minLines": 6,
+  "minTokens": 60,
+  "ignore": [
+    "**/migrations/**",
+    "**/*.spec.ts",
+    "**/*.int-spec.ts",
+    "**/*.e2e-spec.ts",
+    "**/testing/**",
+    "**/seeders/**"
+  ],
+  "reporters": [
+    "console",
+    "ai"
+  ],
+  "gitignore": true,
+  "threshold": 2.52,
+  "silent": false
+}

@@ -714,9 +714,11 @@ npm run verify
 `AGENTS.md` lists the rules for coding agents. For Claude Code, `.claude/settings.json` (committed; personal overrides go in the ignored `.claude/settings.local.json`) adds hooks in `.claude/hooks/` (they need `bash`, `jq` and Node):
 
 - after every edit of a `.ts` file: ESLint on that file, errors go straight back to the agent;
-- before an edit: no changes to check configs, baselines, `.claude/`, `.github/`, committed migrations, and no new `eslint-disable`, `@ts-ignore`, `@ts-nocheck`, `@ts-expect-error` or `as any`;
-- before a shell command: no `schema:update/drop`, `migration:fresh` (outside CI), force push, `--no-verify`, `--suppress-all/--suppress-rule`, growing the dependency-cruiser baseline;
-- before the agent finishes: `npm run verify` when the branch changed anything against `origin/dev`.
+- before an edit: no changes to check configs, baselines, `.claude/settings.json`, `.claude/hooks/`, `.github/`, migrations already on the base branch, and no new `eslint-disable`, `@ts-ignore`, `@ts-nocheck`, `@ts-expect-error` or `as any` in code;
+- before a shell command (quoted text and heredocs are ignored, so commit messages and `grep` patterns are fine): no `schema:update/drop`, `migration:fresh` (outside CI), force push, skipping the commit hook (`--no-verify`, `-n`, `HUSKY=0`), `--suppress-all/--suppress-rule`, growing the dependency-cruiser baseline;
+- before the agent finishes: `npm run verify` when the branch changed anything against `origin/dev` and the tree differs from the last green run.
+
+`bash .claude/hooks/test-hooks.sh` (also a CI step) checks the guards against the cases they must block and allow.
 
 `.github/CODEOWNERS` asks for the owner's review on the same files.
 

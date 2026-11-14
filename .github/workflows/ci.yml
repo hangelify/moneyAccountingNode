@@ -82,6 +82,10 @@ jobs:
       - name: Audit production dependencies
         run: npm audit --omit=dev --audit-level=high
 
+      # Claude Code guard hooks: what they must block and must allow.
+      - name: Test agent hooks
+        run: bash .claude/hooks/test-hooks.sh
+
       # The same command people and the agent run locally: type-check, lint
       # (with the eslint-suppressions.json baseline) and unit tests. Unit
       # tests need no database, Redis or .env.

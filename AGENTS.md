@@ -4,10 +4,10 @@ Notes for AI coding agents working in this repository (NestJS 11 + MikroORM 7 + 
 
 ## Architecture
 
-- A module is `src/modules/<m>/`. Other code imports it only through `src/modules/<m>/index.ts`; test doubles through `testing.ts`, from tests only.
+- A module is `src/modules/<m>/`. Other code imports it only through `src/modules/<m>/index.ts`, its Nest module through `<m>.module.ts`, test doubles through `testing.ts` (tests only).
 - Controller → service → `EntityManager`. Controllers never touch `@mikro-orm/*`.
 - `src/entities` holds every entity; `src/common`, `src/types`, `src/constants` and `src/entities` never import a module.
-- Barrels list leaf files first and the Nest module last. Keep that order when you add an export.
+- Never re-export a `*Module` from an `index.ts`: barrels hold leaves and services only.
 
 ## Commands
 

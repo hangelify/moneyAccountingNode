@@ -12,7 +12,7 @@ import { MikroOrmModule } from '@mikro-orm/nestjs';
 import { DiscoveryModule, DiscoveryService } from '@nestjs/core';
 import { AiRequest } from '../../entities/ai-request.entity';
 import { AiRequestAttempt } from '../../entities/ai-request-attempt.entity';
-import { StorageModule } from '../storage/storage.module';
+import { StorageModule } from '../storage';
 import { AiGatewayService } from './ai-gateway.service';
 import { AiUserQuota } from './ai-user-quota.service';
 import { AiRequestLogger } from './internal/ai-request-logger';

@@ -5,7 +5,7 @@ import {
   AiBudgetExceededError,
   AiCapacityExceededError,
   AiGatewayExhaustedError,
-} from '../../ai-gateway/errors';
+} from '../../ai-gateway';
 import { BillBatchItemStatus } from '../../../types/bill-batch-item-status.enum';
 import { BillParseErrorCode } from '../../../types/bill-parse-error.enum';
 import type { BillBatchEnv } from './bill-batch.env';

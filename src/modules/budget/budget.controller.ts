@@ -21,10 +21,10 @@ import { BudgetService } from './budget.service';
 import { CreateBudgetDto } from './dto/create-budget.dto';
 import { UpdateBudgetDto } from './dto/update-budget.dto';
 import { BudgetResponseDto } from './dto/budget-response.dto';
-import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { HouseholdMemberGuard } from '../household/guards/household-member.guard';
-import { CurrentHousehold } from '../household/decorators/current-household.decorator';
-import type { HouseholdContext } from '../household/guards/household-member.guard';
+import { JwtAuthGuard } from '../auth';
+import { HouseholdMemberGuard } from '../household';
+import { CurrentHousehold } from '../household';
+import type { HouseholdContext } from '../household';
 import {
   ApiCreateBudgetResponses,
   ApiGetBudgetResponses,

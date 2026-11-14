@@ -8,7 +8,7 @@ import { Response } from 'express';
 import {
   AiBudgetExceededError,
   AiCapacityExceededError,
-} from '../../ai-gateway/errors';
+} from '../../ai-gateway';
 import { aiErrorBody } from './ai-error-body';
 
 @Catch(AiBudgetExceededError, AiCapacityExceededError)

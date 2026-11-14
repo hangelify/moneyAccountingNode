@@ -26,7 +26,7 @@ import {
   AiInputInvalidError,
   NoCapableProviderError,
 } from './errors';
-import { STORAGE_SERVICE, StorageService } from '../storage/storage.service';
+import { STORAGE_SERVICE, StorageService } from '../storage';
 import { AI_CALL_CONFIG, AiCallConfig } from './internal/ai-call-config';
 import { DeadlineExceededError } from './internal/retry';
 import {

@@ -26,9 +26,9 @@ import {
 } from './bill-batch.service';
 import { BillEventsHub } from './bill-events.hub';
 import type { BillEvent } from './bill-events.types';
-import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
-import { HouseholdMemberGuard } from '../../household/guards/household-member.guard';
-import { UserThrottlerGuard } from '../../ai-gateway/guards/user-throttler.guard';
+import { JwtAuthGuard } from '../../auth';
+import { HouseholdMemberGuard } from '../../household';
+import { UserThrottlerGuard } from '../../ai-gateway';
 import { AiGatewayErrorFilter } from '../filters/ai-gateway-error.filter';
 import { AiUsageLimitFilter } from '../filters/ai-usage-limit.filter';
 import { AiHttpExceptionFilter } from '../filters/ai-http-exception.filter';

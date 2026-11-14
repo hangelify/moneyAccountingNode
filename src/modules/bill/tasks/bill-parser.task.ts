@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { z } from 'zod';
-import { AiTask, TaskRequest } from '../../ai-gateway/types/ai-task';
-import { Capability } from '../../ai-gateway/types/capability';
+import { AiTask, TaskRequest } from '../../ai-gateway';
+import { Capability } from '../../ai-gateway';
 import { ParsedBill, ParsedBillSchema } from './schemas/parsed-bill.schema';
 import { BILL_PARSER_SYSTEM_PROMPT } from './prompts';
 

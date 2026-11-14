@@ -8,8 +8,8 @@ import { BillBatch } from '../../../entities/bill-batch.entity';
 import { BillBatchItem } from '../../../entities/bill-batch-item.entity';
 import { Household } from '../../../entities/household.entity';
 import { HouseholdMember } from '../../../entities/household-member.entity';
-import { HouseholdMemberGuard } from '../../household/guards/household-member.guard';
-import { StorageModule } from '../../storage/storage.module';
+import { HouseholdMemberGuard } from '../../household';
+import { StorageModule } from '../../storage';
 import { BillModule } from '../bill.module';
 import {
   BILL_BATCH_DISABLED,

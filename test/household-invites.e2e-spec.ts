@@ -9,12 +9,12 @@ import {
   TestUser,
 } from './utils/app';
 import { HouseholdInvite } from '../src/entities/household-invite.entity';
-import type { JwtPayload } from '../src/modules/auth/types/jwt-payload.interface';
+import type { JwtPayload } from '../src/modules/auth';
 import type {
   HouseholdDetailResponseDto,
   InviteListItemDto,
   InviteResponseDto,
-} from '../src/modules/household/dto/household-response.dto';
+} from '../src/modules/household';
 import { defined } from '../src/common/testing/defined';
 
 // An invite is bound to the invitee's email, carries its token in the request

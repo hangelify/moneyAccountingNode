@@ -3,7 +3,7 @@ import {
   MAIL_SENDER,
   type MailMessage,
   type MailSender,
-} from '../../src/modules/mail/mail-sender';
+} from '../../src/modules/mail';
 import { defined } from '../../src/common/testing/defined';
 
 /** Keeps sent emails in memory so specs can read the links in them. */

@@ -11,8 +11,8 @@ import {
   AiImageStorageError,
   AiInputInvalidError,
   NoCapableProviderError,
-} from '../../ai-gateway/errors';
-import type { FailureKind } from '../../ai-gateway/internal/error-classifier';
+} from '../../ai-gateway';
+import type { FailureKind } from '../../ai-gateway';
 import { aiErrorBody } from './ai-error-body';
 
 /** Providers are usually back within this time after a 429/5xx/timeout. */

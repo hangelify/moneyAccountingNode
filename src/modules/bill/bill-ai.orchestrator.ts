@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
-import { AiGatewayService } from '../ai-gateway/ai-gateway.service';
-import type { AiTaskResult } from '../ai-gateway/types/ai-task';
+import { AiGatewayService } from '../ai-gateway';
+import type { AiTaskResult } from '../ai-gateway';
 import { BillParserTask } from './tasks/bill-parser.task';
 import { BillParseCategorizeTask } from './tasks/bill-parse-categorize.task';
 import { ParsedBill } from './tasks/schemas/parsed-bill.schema';

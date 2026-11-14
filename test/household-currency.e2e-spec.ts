@@ -7,13 +7,13 @@ import {
   resetThrottling,
   TestUser,
 } from './utils/app';
-import { EXCHANGE_RATE_PROVIDER } from '../src/modules/exchange-rate/exchange-rate.provider';
-import { StubProvider } from '../src/modules/exchange-rate/testing/stub-exchange-rate.provider';
+import { EXCHANGE_RATE_PROVIDER } from '../src/modules/exchange-rate';
+import { StubProvider } from '../src/modules/exchange-rate/testing';
 import type {
   HouseholdDetailResponseDto,
   HouseholdResponseDto,
   InviteResponseDto,
-} from '../src/modules/household/dto/household-response.dto';
+} from '../src/modules/household';
 
 describe('Household currency (e2e)', () => {
   let app: NestExpressApplication;

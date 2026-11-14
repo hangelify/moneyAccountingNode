@@ -30,10 +30,10 @@ import {
   RecentCategoriesQueryDto,
   RecentCategoryDto,
 } from './dto/recent-categories.dto';
-import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { HouseholdMemberGuard } from '../household/guards/household-member.guard';
-import type { HouseholdContext } from '../household/guards/household-member.guard';
-import { CurrentHousehold } from '../household/decorators/current-household.decorator';
+import { JwtAuthGuard } from '../auth';
+import { HouseholdMemberGuard } from '../household';
+import type { HouseholdContext } from '../household';
+import { CurrentHousehold } from '../household';
 import {
   ApiCreateCategoryResponses,
   ApiBulkCreateCategoryResponses,

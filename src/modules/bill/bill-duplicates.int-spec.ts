@@ -17,8 +17,8 @@ import { BillStatus } from '../../types/bill-status.enum';
 import { Currency } from '../../types/currency.enum';
 import { BillCrudService } from './bill-crud.service';
 import { BillDuplicatesService } from './bill-duplicates.service';
-import { ExchangeRateService } from '../exchange-rate/exchange-rate.service';
-import { StubProvider } from '../exchange-rate/testing/stub-exchange-rate.provider';
+import { ExchangeRateService } from '../exchange-rate';
+import { StubProvider } from '../exchange-rate/testing';
 import { BillConversionService } from './household-conversion';
 import { SubCategory } from '../../entities/sub-category.entity';
 import { BillSubCategory } from '../../entities/bill-sub-category.entity';
@@ -26,7 +26,7 @@ import { BillDashboardService } from './bill-dashboard.service';
 import type { DuplicateProbe } from './bill-duplicates';
 import { Category } from '../../entities/category.entity';
 import { SpendingBreakdownService } from './spending-breakdown.service';
-import { MarketService } from '../market/market.service';
+import { MarketService } from '../market';
 import { defined } from '../../common/testing/defined';
 
 describe('BillDuplicatesService (PostgreSQL)', () => {

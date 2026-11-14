@@ -5,7 +5,7 @@ import { BillEventsHub } from './bill-events.hub';
 import { BillPhotoProcessor } from './bill-photo.processor';
 import { BillBatchSweeper } from './bill-batch.sweeper';
 import { BillBatchController } from './bill-batch.controller';
-import { HouseholdMemberGuard } from '../../household/guards/household-member.guard';
+import { HouseholdMemberGuard } from '../../household';
 
 describe('BillBatchModule.register', () => {
   const saved = process.env['BILL_BATCH_ENABLED'];

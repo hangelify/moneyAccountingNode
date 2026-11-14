@@ -2,7 +2,7 @@ import type { NestExpressApplication } from '@nestjs/platform-express';
 import request from 'supertest';
 import sharp from 'sharp';
 import { createTestApp, registerUser } from './utils/app';
-import { STORAGE_SERVICE } from '../src/modules/storage/storage.service';
+import { STORAGE_SERVICE } from '../src/modules/storage';
 import { defined } from '../src/common/testing/defined';
 
 // No AI provider key at all, as on a dev machine with only manual accounting.

@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { CategoryResponseDto } from '../../category/dto/category-response.dto';
+import { CategoryResponseDto } from '../../category';
 import { PlaningHorizonBaseResponseDto } from './planing-horizon-base-response.dto';
 
 /**

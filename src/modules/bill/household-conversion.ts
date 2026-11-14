@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { Connection, EntityManager, Transaction } from '@mikro-orm/core';
 import { Currency } from '../../types/currency.enum';
-import { ExchangeRateService } from '../exchange-rate/exchange-rate.service';
+import { ExchangeRateService } from '../exchange-rate';
 import {
   BillExchangeRateDto,
   UnconvertedDto,

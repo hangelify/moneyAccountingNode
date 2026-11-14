@@ -12,8 +12,8 @@ import {
 import { Session } from '../src/entities/session.entity';
 import { RefreshToken } from '../src/entities/refresh-token.entity';
 import { Log, LogSource } from '../src/entities/log.entity';
-import type { TokenResponseDto } from '../src/modules/auth/dto/token-response.dto';
-import type { JwtPayload } from '../src/modules/auth/types/jwt-payload.interface';
+import type { TokenResponseDto } from '../src/modules/auth';
+import type { JwtPayload } from '../src/modules/auth';
 import { defined } from '../src/common/testing/defined';
 
 // Session lifecycle: refresh rotation, reuse detection, logout, expiry and

@@ -14,13 +14,13 @@ import { Category } from '../src/entities/category.entity';
 import { SubCategory } from '../src/entities/sub-category.entity';
 import { BillStatus } from '../src/types/bill-status.enum';
 import { Currency } from '../src/types/currency.enum';
-import { STORAGE_SERVICE } from '../src/modules/storage/storage.service';
-import { EXCHANGE_RATE_PROVIDER } from '../src/modules/exchange-rate/exchange-rate.provider';
-import { StubProvider } from '../src/modules/exchange-rate/testing/stub-exchange-rate.provider';
-import type { BillListResponseDto } from '../src/modules/bill/dto/bill-list-response.dto';
-import type { BillDashboardResponseDto } from '../src/modules/bill/dto/bill-dashboard.dto';
-import type { SpendingBreakdownResponseDto } from '../src/modules/bill/dto/spending-breakdown.dto';
-import type { DuplicateSuggestionsResponseDto } from '../src/modules/bill/dto/bill-duplicates.dto';
+import { STORAGE_SERVICE } from '../src/modules/storage';
+import { EXCHANGE_RATE_PROVIDER } from '../src/modules/exchange-rate';
+import { StubProvider } from '../src/modules/exchange-rate/testing';
+import type { BillListResponseDto } from '../src/modules/bill';
+import type { BillDashboardResponseDto } from '../src/modules/bill';
+import type { SpendingBreakdownResponseDto } from '../src/modules/bill';
+import type { DuplicateSuggestionsResponseDto } from '../src/modules/bill';
 
 const DASHBOARD = 'dashboard?type=year&year=2026';
 const BREAKDOWN =

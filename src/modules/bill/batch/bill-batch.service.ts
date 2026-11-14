@@ -19,15 +19,12 @@ import { BillStatus } from '../../../types/bill-status.enum';
 import { BillBatchItemStatus } from '../../../types/bill-batch-item-status.enum';
 import { BillParseErrorCode } from '../../../types/bill-parse-error.enum';
 import { BillCrudService } from '../bill-crud.service';
-import { STORAGE_SERVICE } from '../../storage/storage.service';
-import type {
-  ImageMediaType,
-  StorageService,
-} from '../../storage/storage.service';
-import { AiUserQuota } from '../../ai-gateway/ai-user-quota.service';
-import { AiGatewayService } from '../../ai-gateway/ai-gateway.service';
-import { AI_USAGE_LIMITS } from '../../ai-gateway/internal/ai-usage-limits';
-import type { AiUsageLimits } from '../../ai-gateway/internal/ai-usage-limits';
+import { STORAGE_SERVICE } from '../../storage';
+import type { ImageMediaType, StorageService } from '../../storage';
+import { AiUserQuota } from '../../ai-gateway';
+import { AiGatewayService } from '../../ai-gateway';
+import { AI_USAGE_LIMITS } from '../../ai-gateway';
+import type { AiUsageLimits } from '../../ai-gateway';
 import { BILL_BATCH_ENV, BILL_PHOTO_QUEUE } from './bill-batch.env';
 import type { BillBatchEnv } from './bill-batch.env';
 import { BillEventsPublisher } from './bill-events.publisher';

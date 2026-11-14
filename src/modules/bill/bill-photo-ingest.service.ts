@@ -2,7 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { BillPhotoService } from './bill-photo.service';
 import { BillCrudService } from './bill-crud.service';
 import type { ParsedBillResponseDto } from './dto/parsed-bill-response.dto';
-import type { ImageMediaType } from '../storage/storage.service';
+import type { ImageMediaType } from '../storage';
 
 export interface IngestInput {
   /** The normalized receipt image. */

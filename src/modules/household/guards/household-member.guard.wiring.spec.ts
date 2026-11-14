@@ -2,14 +2,14 @@ import { Test } from '@nestjs/testing';
 import { MikroOrmModule } from '@mikro-orm/nestjs';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { createMikroOrmConfig } from '../../../mikro-orm.config';
-import { AiGatewayModule } from '../../ai-gateway/ai-gateway.module';
-import { BillModule } from '../../bill/bill.module';
-import { BudgetModule } from '../../budget/budget.module';
-import { CategoryModule } from '../../category/category.module';
+import { AiGatewayModule } from '../../ai-gateway';
+import { BillModule } from '../../bill';
+import { BudgetModule } from '../../budget';
+import { CategoryModule } from '../../category';
 import { HouseholdModule } from '../household.module';
-import { MarketModule } from '../../market/market.module';
-import { PlaningHorizonModule } from '../../planing-horizon/planing-horizon.module';
-import { SubCategoryModule } from '../../sub-category/sub-category.module';
+import { MarketModule } from '../../market';
+import { PlaningHorizonModule } from '../../planing-horizon';
+import { SubCategoryModule } from '../../sub-category';
 import { HouseholdMemberGuard } from './household-member.guard';
 
 // Nest instantiates a @UseGuards() guard inside the controller's own module,

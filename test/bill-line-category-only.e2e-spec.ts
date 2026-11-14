@@ -4,8 +4,8 @@ import { MikroORM, RequestContext } from '@mikro-orm/core';
 import { createTestApp, registerUser, TestUser } from './utils/app';
 import { Category } from '../src/entities/category.entity';
 import { SubCategory } from '../src/entities/sub-category.entity';
-import { BillCrudService } from '../src/modules/bill/bill-crud.service';
-import type { BillDetailResponseDto } from '../src/modules/bill/dto/bill-detail-response.dto';
+import { BillCrudService } from '../src/modules/bill';
+import type { BillDetailResponseDto } from '../src/modules/bill';
 import { defined } from '../src/common/testing/defined';
 
 // A bill line can name a category without a sub-category on create, confirm

@@ -4,8 +4,8 @@ import { plainToInstance } from 'class-transformer';
 import { CreateBillDto } from './create-bill.dto';
 import { ConfirmBillDto } from './confirm-bill.dto';
 import { UpdateBillDto } from './update-bill.dto';
-import { CreatePlaningHorizonDto } from '../../planing-horizon/dto/create-planing-horizon.dto';
-import { UpdatePlaningHorizonDto } from '../../planing-horizon/dto/update-planing-horizon.dto';
+import { CreatePlaningHorizonDto } from '../../planing-horizon';
+import { UpdatePlaningHorizonDto } from '../../planing-horizon';
 
 const item = (over: object = {}) => ({
   sub_category_id: randomUUID(),

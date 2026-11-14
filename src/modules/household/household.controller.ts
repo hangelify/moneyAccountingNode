@@ -17,11 +17,11 @@ import {
   ApiOperation,
   ApiParam,
 } from '@nestjs/swagger';
-import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { JwtAuthGuard } from '../auth';
 import { HouseholdMemberGuard } from './guards/household-member.guard';
-import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import { CurrentUser } from '../auth';
 import { CurrentHousehold } from './decorators/current-household.decorator';
-import type { AuthenticatedUser } from '../auth/types/jwt-payload.interface';
+import type { AuthenticatedUser } from '../auth';
 import type { HouseholdContext } from './guards/household-member.guard';
 import { HouseholdService } from './household.service';
 import { CreateHouseholdDto } from './dto/create-household.dto';

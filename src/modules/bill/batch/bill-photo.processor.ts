@@ -9,10 +9,10 @@ import {
   AiBudgetExceededError,
   AiCapacityExceededError,
   AiGatewayExhaustedError,
-} from '../../ai-gateway/errors';
-import { AiUserQuota } from '../../ai-gateway/ai-user-quota.service';
-import { STORAGE_SERVICE } from '../../storage/storage.service';
-import type { StorageService } from '../../storage/storage.service';
+} from '../../ai-gateway';
+import { AiUserQuota } from '../../ai-gateway';
+import { STORAGE_SERVICE } from '../../storage';
+import type { StorageService } from '../../storage';
 import { BillPhotoIngestService } from '../bill-photo-ingest.service';
 import type { IngestResult } from '../bill-photo-ingest.service';
 import { BILL_BATCH_ENV, BILL_PHOTO_QUEUE } from './bill-batch.env';

@@ -16,12 +16,12 @@ import { BillStatus } from '../../../types/bill-status.enum';
 import { BillParseErrorCode } from '../../../types/bill-parse-error.enum';
 import { BillBatchItemStatus } from '../../../types/bill-batch-item-status.enum';
 import { Currency } from '../../../types/currency.enum';
-import { MarketService } from '../../market/market.service';
+import { MarketService } from '../../market';
 import { BillCrudService } from '../bill-crud.service';
 import { BillDuplicatesService } from '../bill-duplicates.service';
 import { BillConversionService } from '../household-conversion';
-import { ExchangeRateService } from '../../exchange-rate/exchange-rate.service';
-import { StubProvider } from '../../exchange-rate/testing/stub-exchange-rate.provider';
+import { ExchangeRateService } from '../../exchange-rate';
+import { StubProvider } from '../../exchange-rate/testing';
 import {
   BillBatchService,
   BillQuotaExceededException,

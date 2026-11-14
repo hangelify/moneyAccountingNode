@@ -1,4 +1,4 @@
-import type { MailMessage } from '../../mail/mail-sender';
+import type { MailMessage } from '../../mail';
 
 // No user input in the body: anyone can register any address, so a name
 // placed here would let them send their own text from our domain.

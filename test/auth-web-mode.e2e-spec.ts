@@ -6,7 +6,7 @@ import {
   resetThrottling,
   TestUser,
 } from './utils/app';
-import type { TokenResponseDto } from '../src/modules/auth/dto/token-response.dto';
+import type { TokenResponseDto } from '../src/modules/auth';
 import { defined } from '../src/common/testing/defined';
 
 const FRONTEND = process.env['FRONTEND_URL'] || 'http://localhost:5173';

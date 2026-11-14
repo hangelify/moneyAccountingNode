@@ -10,7 +10,7 @@ import {
   TestUser,
 } from './utils/app';
 import { RefreshToken } from '../src/entities/refresh-token.entity';
-import type { TokenResponseDto } from '../src/modules/auth/dto/token-response.dto';
+import type { TokenResponseDto } from '../src/modules/auth';
 
 // Token format and response conventions: RFC 6749 §5.1 (no caching of token
 // responses), RFC 6750 §3 (WWW-Authenticate on 401), RFC 8725 / RFC 9068

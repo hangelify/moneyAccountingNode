@@ -17,7 +17,7 @@ import {
 import { Bill } from '../../entities/bill.entity';
 import { BillSubCategory } from '../../entities/bill-sub-category.entity';
 import { Market } from '../../entities/market.entity';
-import { MarketService } from '../market/market.service';
+import { MarketService } from '../market';
 import { SubCategory } from '../../entities/sub-category.entity';
 import { Category } from '../../entities/category.entity';
 import { User } from '../../entities/user.entity';
@@ -69,7 +69,7 @@ import {
 import { ListDraftsQueryDto } from './dto/list-drafts-query.dto';
 import { PossibleDuplicateDto } from './dto/bill-duplicates.dto';
 import { BillDuplicatesService } from './bill-duplicates.service';
-import { ExchangeRateService } from '../exchange-rate/exchange-rate.service';
+import { ExchangeRateService } from '../exchange-rate';
 import {
   BillConversionService,
   householdConversionJoin,

@@ -1,9 +1,6 @@
 import Redis from 'ioredis';
 import { redisConnectionOptions } from '../src/config/redis';
-import {
-  LockoutPolicy,
-  RedisLoginAttemptStore,
-} from '../src/modules/auth/login-lockout/login-attempt.store';
+import { LockoutPolicy, RedisLoginAttemptStore } from '../src/modules/auth';
 
 // The e2e apps use the in-memory store; this checks the one production uses.
 describe('RedisLoginAttemptStore (integration)', () => {

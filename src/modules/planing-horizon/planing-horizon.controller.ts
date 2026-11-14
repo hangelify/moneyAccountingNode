@@ -22,10 +22,10 @@ import { CreatePlaningHorizonDto } from './dto/create-planing-horizon.dto';
 import { UpdatePlaningHorizonDto } from './dto/update-planing-horizon.dto';
 import { PlaningHorizonResponseDto } from './dto/planing-horizon-response.dto';
 import { PlaningHorizonBaseResponseDto } from './dto/planing-horizon-base-response.dto';
-import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { HouseholdMemberGuard } from '../household/guards/household-member.guard';
-import { CurrentHousehold } from '../household/decorators/current-household.decorator';
-import type { HouseholdContext } from '../household/guards/household-member.guard';
+import { JwtAuthGuard } from '../auth';
+import { HouseholdMemberGuard } from '../household';
+import { CurrentHousehold } from '../household';
+import type { HouseholdContext } from '../household';
 import {
   ApiCreatePlaningHorizonResponses,
   ApiGetPlaningHorizonResponses,

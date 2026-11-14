@@ -10,9 +10,9 @@ import { PlaningHorizon } from '../../entities/planing-horizon.entity';
 import { SubCategory } from '../../entities/sub-category.entity';
 import { User } from '../../entities/user.entity';
 import { CategoryService } from './category.service';
-import { SubCategoryService } from '../sub-category/sub-category.service';
-import { BillPhotoService } from '../bill/bill-photo.service';
-import type { BillAiOrchestrator } from '../bill/bill-ai.orchestrator';
+import { SubCategoryService } from '../sub-category';
+import { BillPhotoService } from '../bill';
+import type { BillAiOrchestrator } from '../bill';
 import { Currency } from '../../types/currency.enum';
 import { defined } from '../../common/testing/defined';
 

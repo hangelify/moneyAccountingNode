@@ -9,7 +9,7 @@ import {
   TestUser,
 } from './utils/app';
 import { User } from '../src/entities/user.entity';
-import type { TokenResponseDto } from '../src/modules/auth/dto/token-response.dto';
+import type { TokenResponseDto } from '../src/modules/auth';
 
 // Account lifecycle: password change, password hashing and soft-deleted
 // users, through the HTTP API.

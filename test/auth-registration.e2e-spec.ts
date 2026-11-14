@@ -1,7 +1,7 @@
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import request from 'supertest';
 import { createTestApp, resetThrottling } from './utils/app';
-import { TokenResponseDto } from '../src/modules/auth/dto/token-response.dto';
+import { TokenResponseDto } from '../src/modules/auth';
 import { MikroORM } from '@mikro-orm/core';
 
 describe('Auth Registration (e2e)', () => {

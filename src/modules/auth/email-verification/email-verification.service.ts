@@ -12,7 +12,7 @@ import {
 import { InjectRepository } from '@mikro-orm/nestjs';
 import { EntityRepository, type FilterQuery } from '@mikro-orm/core';
 import { User } from '../../../entities/user.entity';
-import { MAIL_SENDER, type MailSender } from '../../mail/mail-sender';
+import { MAIL_SENDER, type MailSender } from '../../mail';
 import {
   EMAIL_VERIFICATION_CONFIG,
   type EmailVerificationConfig,

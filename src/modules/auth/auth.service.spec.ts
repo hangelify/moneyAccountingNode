@@ -4,7 +4,7 @@ import * as bcrypt from 'bcrypt';
 import { EntityManager, EntityRepository } from '@mikro-orm/core';
 import { AuthService } from './auth.service';
 import type { EmailVerificationService } from './email-verification/email-verification.service';
-import { CategoryDefaultsService } from '../category/category-defaults.service';
+import { CategoryDefaultsService } from '../category';
 import { User } from '../../entities/user.entity';
 import { RefreshToken } from '../../entities/refresh-token.entity';
 import { Session } from '../../entities/session.entity';

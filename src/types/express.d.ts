@@ -1,4 +1,4 @@
-import type { AuthenticatedUser } from '../modules/auth/types/jwt-payload.interface';
+import type { AuthenticatedUser } from '../modules/auth';
 
 declare global {
   namespace Express {

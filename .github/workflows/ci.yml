@@ -82,7 +82,7 @@ jobs:
       # The same command people and the agent run locally: type-check, lint
       # (with the eslint-suppressions.json baseline) and unit tests. Unit
       # tests need no database, Redis or .env.
-      - name: Verify (type-check, lint, unit tests)
+      - name: Verify (type-check, lint, copy-paste, unit tests)
         run: npm run verify
 
       - name: Build project

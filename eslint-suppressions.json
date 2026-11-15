@@ -25,6 +25,11 @@
       "count": 1
     }
   },
+  "src/common/transforms/normalize-email.spec.ts": {
+    "sonarjs/no-incompatible-assertion-types": {
+      "count": 1
+    }
+  },
   "src/common/utils/period-range.ts": {
     "@typescript-eslint/explicit-function-return-type": {
       "count": 1
@@ -57,6 +62,11 @@
   },
   "src/config/swagger.ts": {
     "@typescript-eslint/restrict-template-expressions": {
+      "count": 1
+    }
+  },
+  "src/config/trust-proxy.ts": {
+    "sonarjs/function-return-type": {
       "count": 1
     }
   },
@@ -136,6 +146,26 @@
       "count": 2
     }
   },
+  "src/migrations/Migration20260508140000_CreateAiRequestTables.ts": {
+    "max-lines-per-function": {
+      "count": 1
+    }
+  },
+  "src/migrations/Migration20260603130000_MigrateOwnershipToHouseholds.ts": {
+    "max-lines-per-function": {
+      "count": 1
+    }
+  },
+  "src/migrations/Migration20261101120001_AddBillDuplicates.ts": {
+    "max-lines-per-function": {
+      "count": 1
+    }
+  },
+  "src/migrations/Migration20261102120001_AddBillBatches.ts": {
+    "max-lines-per-function": {
+      "count": 1
+    }
+  },
   "src/mikro-orm.config.ts": {
     "@typescript-eslint/explicit-function-return-type": {
       "count": 1
@@ -175,11 +205,29 @@
     },
     "@typescript-eslint/restrict-template-expressions": {
       "count": 3
+    },
+    "sonarjs/prefer-promise-shorthand": {
+      "count": 1
     }
   },
   "src/modules/ai-gateway/ai-gateway.service.ts": {
     "@typescript-eslint/restrict-template-expressions": {
       "count": 3
+    },
+    "max-depth": {
+      "count": 1
+    },
+    "max-lines": {
+      "count": 1
+    },
+    "max-lines-per-function": {
+      "count": 1
+    },
+    "max-params": {
+      "count": 1
+    },
+    "sonarjs/cognitive-complexity": {
+      "count": 1
     }
   },
   "src/modules/ai-gateway/ai-user-quota.service.int-spec.ts": {
@@ -263,6 +311,12 @@
     },
     "@typescript-eslint/restrict-template-expressions": {
       "count": 2
+    },
+    "sonarjs/cognitive-complexity": {
+      "count": 1
+    },
+    "sonarjs/prefer-promise-shorthand": {
+      "count": 1
     }
   },
   "src/modules/ai-gateway/internal/transient.spec.ts": {
@@ -278,6 +332,9 @@
   "src/modules/ai-gateway/providers/__fixtures__/call-bounds.shared.ts": {
     "@typescript-eslint/explicit-function-return-type": {
       "count": 2
+    },
+    "max-lines-per-function": {
+      "count": 1
     }
   },
   "src/modules/ai-gateway/providers/__fixtures__/fake.provider.ts": {
@@ -296,15 +353,24 @@
   "src/modules/ai-gateway/providers/anthropic.provider.ts": {
     "@typescript-eslint/no-non-null-assertion": {
       "count": 1
+    },
+    "max-lines-per-function": {
+      "count": 1
     }
   },
   "src/modules/ai-gateway/providers/deepseek.provider.spec.ts": {
     "@typescript-eslint/no-explicit-any": {
       "count": 2
+    },
+    "sonarjs/constructor-for-side-effects": {
+      "count": 1
     }
   },
   "src/modules/ai-gateway/providers/deepseek.provider.ts": {
     "@typescript-eslint/no-non-null-assertion": {
+      "count": 1
+    },
+    "max-lines-per-function": {
       "count": 1
     }
   },
@@ -316,6 +382,14 @@
   "src/modules/ai-gateway/providers/openai.provider.ts": {
     "@typescript-eslint/no-non-null-assertion": {
       "count": 1
+    },
+    "max-lines-per-function": {
+      "count": 1
+    }
+  },
+  "src/modules/auth/auth.controller.spec.ts": {
+    "sonarjs/no-misleading-array-reverse": {
+      "count": 1
     }
   },
   "src/modules/auth/auth.controller.ts": {
@@ -323,6 +397,9 @@
       "count": 1
     },
     "@typescript-eslint/no-unnecessary-condition": {
+      "count": 1
+    },
+    "max-lines": {
       "count": 1
     }
   },
@@ -355,6 +432,17 @@
     },
     "@typescript-eslint/no-unnecessary-condition": {
       "count": 1
+    }
+  },
+  "src/modules/auth/auth.service.ts": {
+    "max-lines": {
+      "count": 1
+    },
+    "max-lines-per-function": {
+      "count": 2
+    },
+    "max-params": {
+      "count": 3
     }
   },
   "src/modules/auth/client-mode.spec.ts": {
@@ -439,6 +527,9 @@
   "src/modules/auth/strategies/jwt.strategy.ts": {
     "@typescript-eslint/no-deprecated": {
       "count": 1
+    },
+    "max-lines-per-function": {
+      "count": 1
     }
   },
   "src/modules/auth/token-format.ts": {
@@ -476,6 +567,9 @@
     },
     "@typescript-eslint/restrict-template-expressions": {
       "count": 1
+    },
+    "max-lines-per-function": {
+      "count": 1
     }
   },
   "src/modules/bill/batch/bill-batch.env.ts": {
@@ -506,6 +600,12 @@
     },
     "@typescript-eslint/restrict-template-expressions": {
       "count": 2
+    },
+    "max-lines": {
+      "count": 1
+    },
+    "max-params": {
+      "count": 1
     }
   },
   "src/modules/bill/batch/bill-batch.sweeper.ts": {
@@ -525,6 +625,9 @@
   },
   "src/modules/bill/batch/bill-photo.processor.ts": {
     "@typescript-eslint/no-non-null-assertion": {
+      "count": 1
+    },
+    "max-params": {
       "count": 1
     }
   },
@@ -574,6 +677,18 @@
     },
     "@typescript-eslint/prefer-nullish-coalescing": {
       "count": 1
+    },
+    "max-lines": {
+      "count": 1
+    },
+    "max-lines-per-function": {
+      "count": 2
+    },
+    "max-params": {
+      "count": 1
+    },
+    "sonarjs/cognitive-complexity": {
+      "count": 1
     }
   },
   "src/modules/bill/bill-dashboard.service.spec.ts": {
@@ -596,6 +711,18 @@
     },
     "@typescript-eslint/restrict-template-expressions": {
       "count": 9
+    },
+    "max-lines": {
+      "count": 1
+    },
+    "max-params": {
+      "count": 6
+    },
+    "no-nested-ternary": {
+      "count": 3
+    },
+    "sonarjs/use-type-alias": {
+      "count": 1
     }
   },
   "src/modules/bill/bill-draft-from-ai.int-spec.ts": {
@@ -643,6 +770,12 @@
     },
     "@typescript-eslint/no-unnecessary-type-conversion": {
       "count": 1
+    },
+    "max-lines": {
+      "count": 1
+    },
+    "max-lines-per-function": {
+      "count": 2
     }
   },
   "src/modules/bill/bill-duplicates.spec.ts": {
@@ -655,6 +788,12 @@
   },
   "src/modules/bill/bill-duplicates.ts": {
     "@typescript-eslint/prefer-nullish-coalescing": {
+      "count": 1
+    },
+    "no-nested-ternary": {
+      "count": 1
+    },
+    "sonarjs/cognitive-complexity": {
       "count": 1
     }
   },
@@ -737,6 +876,15 @@
     },
     "@typescript-eslint/no-unsafe-enum-assignment": {
       "count": 1
+    },
+    "max-lines": {
+      "count": 1
+    },
+    "max-lines-per-function": {
+      "count": 1
+    },
+    "max-params": {
+      "count": 1
     }
   },
   "src/modules/bill/draft-cleanup.int-spec.ts": {
@@ -758,6 +906,12 @@
   "src/modules/bill/dto/api-responses.decorator.ts": {
     "@typescript-eslint/explicit-function-return-type": {
       "count": 20
+    },
+    "max-lines": {
+      "count": 1
+    },
+    "max-lines-per-function": {
+      "count": 1
     }
   },
   "src/modules/bill/dto/bill-date.dto.spec.ts": {
@@ -793,6 +947,11 @@
       "count": 1
     }
   },
+  "src/modules/bill/dto/list-bills-query.dto.ts": {
+    "no-nested-ternary": {
+      "count": 3
+    }
+  },
   "src/modules/bill/dto/manual-batch.dto.spec.ts": {
     "@typescript-eslint/explicit-function-return-type": {
       "count": 4
@@ -801,6 +960,9 @@
   "src/modules/bill/dto/money-bounds.dto.spec.ts": {
     "@typescript-eslint/explicit-function-return-type": {
       "count": 4
+    },
+    "max-params": {
+      "count": 1
     }
   },
   "src/modules/bill/dto/receipt-identity.dto.spec.ts": {
@@ -847,6 +1009,11 @@
       "count": 1
     }
   },
+  "src/modules/bill/household-conversion.ts": {
+    "max-params": {
+      "count": 2
+    }
+  },
   "src/modules/bill/manual-bill-batch.int-spec.ts": {
     "@typescript-eslint/explicit-function-return-type": {
       "count": 10
@@ -870,6 +1037,15 @@
     },
     "@typescript-eslint/no-non-null-assertion": {
       "count": 2
+    },
+    "max-lines-per-function": {
+      "count": 1
+    },
+    "max-params": {
+      "count": 2
+    },
+    "no-nested-ternary": {
+      "count": 1
     }
   },
   "src/modules/bill/spending-breakdown.int-spec.ts": {
@@ -889,6 +1065,9 @@
     },
     "@typescript-eslint/no-unnecessary-condition": {
       "count": 1
+    },
+    "max-lines-per-function": {
+      "count": 1
     }
   },
   "src/modules/bill/spending-breakdown.ts": {
@@ -896,6 +1075,18 @@
       "count": 5
     },
     "@typescript-eslint/no-non-null-assertion": {
+      "count": 1
+    },
+    "max-lines-per-function": {
+      "count": 1
+    },
+    "no-nested-ternary": {
+      "count": 4
+    },
+    "sonarjs/cognitive-complexity": {
+      "count": 1
+    },
+    "sonarjs/no-misleading-array-reverse": {
       "count": 1
     }
   },
@@ -952,6 +1143,9 @@
   "src/modules/category/category-defaults.service.ts": {
     "@typescript-eslint/restrict-template-expressions": {
       "count": 2
+    },
+    "max-depth": {
+      "count": 1
     }
   },
   "src/modules/category/category.service.ts": {
@@ -975,6 +1169,9 @@
       "count": 1
     },
     "@typescript-eslint/restrict-template-expressions": {
+      "count": 1
+    },
+    "max-params": {
       "count": 1
     }
   },
@@ -1000,6 +1197,9 @@
     },
     "@typescript-eslint/restrict-template-expressions": {
       "count": 1
+    },
+    "sonarjs/super-linear-regex": {
+      "count": 1
     }
   },
   "src/modules/exchange-rate/exchange-rate.int-spec.ts": {
@@ -1018,6 +1218,15 @@
       "count": 1
     },
     "@typescript-eslint/restrict-template-expressions": {
+      "count": 2
+    },
+    "max-depth": {
+      "count": 2
+    },
+    "sonarjs/cognitive-complexity": {
+      "count": 1
+    },
+    "sonarjs/no-alphabetical-sort": {
       "count": 2
     }
   },
@@ -1051,6 +1260,9 @@
       "count": 1
     },
     "@typescript-eslint/restrict-template-expressions": {
+      "count": 1
+    },
+    "max-lines": {
       "count": 1
     }
   },
@@ -1114,6 +1326,9 @@
   "src/modules/planing-horizon/planing-horizon.service.ts": {
     "@typescript-eslint/no-unnecessary-type-conversion": {
       "count": 4
+    },
+    "max-lines-per-function": {
+      "count": 1
     }
   },
   "src/modules/retention/retention.env.spec.ts": {
@@ -1150,6 +1365,11 @@
       "count": 1
     }
   },
+  "src/modules/storage/storage.service.spec.ts": {
+    "sonarjs/constructor-for-side-effects": {
+      "count": 1
+    }
+  },
   "src/modules/storage/storage.service.ts": {
     "@typescript-eslint/explicit-function-return-type": {
       "count": 1
@@ -1161,6 +1381,9 @@
       "count": 1
     },
     "preserve-caught-error": {
+      "count": 1
+    },
+    "sonarjs/different-types-comparison": {
       "count": 1
     }
   },
@@ -1267,6 +1490,15 @@
     },
     "@typescript-eslint/restrict-template-expressions": {
       "count": 4
+    },
+    "max-depth": {
+      "count": 5
+    },
+    "sonarjs/cognitive-complexity": {
+      "count": 1
+    },
+    "sonarjs/no-misleading-array-reverse": {
+      "count": 2
     }
   },
   "test/bill-date-format.e2e-spec.ts": {

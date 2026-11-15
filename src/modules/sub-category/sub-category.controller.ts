@@ -22,10 +22,10 @@ import { CreateSubCategoryDto } from './dto/create-sub-category.dto';
 import { BulkCreateSubCategoryDto } from './dto/bulk-create-sub-category.dto';
 import { UpdateSubCategoryDto } from './dto/update-sub-category.dto';
 import { SubCategoryResponseDto } from './dto/sub-category-response.dto';
-import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { HouseholdMemberGuard } from '../household/guards/household-member.guard';
-import type { HouseholdContext } from '../household/guards/household-member.guard';
-import { CurrentHousehold } from '../household/decorators/current-household.decorator';
+import { JwtAuthGuard } from '../auth';
+import { HouseholdMemberGuard } from '../household';
+import type { HouseholdContext } from '../household';
+import { CurrentHousehold } from '../household';
 import {
   ApiCreateSubCategoryResponses,
   ApiBulkCreateSubCategoryResponses,

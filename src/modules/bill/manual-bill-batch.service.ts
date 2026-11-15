@@ -19,8 +19,8 @@ import { User } from '../../entities/user.entity';
 import { BillSource } from '../../types/bill-source.enum';
 import { BillStatus } from '../../types/bill-status.enum';
 import { Currency } from '../../types/currency.enum';
-import { ExchangeRateService } from '../exchange-rate/exchange-rate.service';
-import { MarketService } from '../market/market.service';
+import { ExchangeRateService } from '../exchange-rate';
+import { MarketService } from '../market';
 import { assignLineCategory, toBillResponse } from './bill-lines';
 import {
   BILL_ITEM_TOLERANCE,

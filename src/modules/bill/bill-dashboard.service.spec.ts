@@ -1,6 +1,6 @@
 import { EntityManager } from '@mikro-orm/core';
 import { BillDashboardService } from './bill-dashboard.service';
-import { ExchangeRateService } from '../exchange-rate/exchange-rate.service';
+import { ExchangeRateService } from '../exchange-rate';
 import {
   BillDashboardQueryDto,
   BillDashboardResponseDto,

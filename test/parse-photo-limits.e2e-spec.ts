@@ -2,7 +2,7 @@ import type { NestExpressApplication } from '@nestjs/platform-express';
 import request from 'supertest';
 import sharp from 'sharp';
 import { createTestApp, registerUser, seedAiRequest } from './utils/app';
-import { BillPhotoService } from '../src/modules/bill/bill-photo.service';
+import { BillPhotoService } from '../src/modules/bill';
 
 // A distinct photo per call: a re-uploaded photo is answered from its draft
 // without an AI call.

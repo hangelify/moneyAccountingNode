@@ -1,4 +1,4 @@
-import { toProviderJsonSchema } from '../../../ai-gateway/internal/provider-json-schema';
+import { toProviderJsonSchema } from '../../../ai-gateway';
 import { ParsedBillSchema } from './parsed-bill.schema';
 import { ParsedAndCategorizedBillSchema } from './parsed-and-categorized-bill.schema';
 import { Currency } from '../../../../types/currency.enum';

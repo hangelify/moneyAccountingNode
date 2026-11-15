@@ -12,7 +12,7 @@ import { CreatePlaningHorizonDto } from './dto/create-planing-horizon.dto';
 import { UpdatePlaningHorizonDto } from './dto/update-planing-horizon.dto';
 import { PlaningHorizonResponseDto } from './dto/planing-horizon-response.dto';
 import { PlaningHorizonBaseResponseDto } from './dto/planing-horizon-base-response.dto';
-import { CategoryResponseDto } from '../category/dto/category-response.dto';
+import { CategoryResponseDto } from '../category';
 
 @Injectable()
 export class PlaningHorizonService {

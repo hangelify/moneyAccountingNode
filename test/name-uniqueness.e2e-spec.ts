@@ -1,8 +1,8 @@
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import request from 'supertest';
 import { createTestApp, registerUser, TestUser } from './utils/app';
-import { CategoryBaseResponseDto } from '../src/modules/category/dto/category-base-response.dto';
-import { DEFAULT_CATEGORY_TREE } from '../src/modules/category/defaults';
+import { CategoryBaseResponseDto } from '../src/modules/category';
+import { DEFAULT_CATEGORY_TREE } from '../src/modules/category';
 import { defined } from '../src/common/testing/defined';
 
 // Names are unique case-insensitively among live rows: categories per

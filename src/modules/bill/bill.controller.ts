@@ -32,12 +32,12 @@ import {
   ApiParam,
   ApiTags,
 } from '@nestjs/swagger';
-import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { CurrentUser } from '../auth/decorators/current-user.decorator';
-import type { AuthenticatedUser } from '../auth/types/jwt-payload.interface';
-import { HouseholdMemberGuard } from '../household/guards/household-member.guard';
-import type { HouseholdContext } from '../household/guards/household-member.guard';
-import { CurrentHousehold } from '../household/decorators/current-household.decorator';
+import { JwtAuthGuard } from '../auth';
+import { CurrentUser } from '../auth';
+import type { AuthenticatedUser } from '../auth';
+import { HouseholdMemberGuard } from '../household';
+import type { HouseholdContext } from '../household';
+import { CurrentHousehold } from '../household';
 import { BillPhotoIngestService } from './bill-photo-ingest.service';
 import { ManualBillBatchService } from './manual-bill-batch.service';
 import { ManualBatchDto } from './dto/manual-batch.dto';
@@ -99,10 +99,10 @@ import { AiGatewayErrorFilter } from './filters/ai-gateway-error.filter';
 import { AiUsageLimitFilter } from './filters/ai-usage-limit.filter';
 import { AiHttpExceptionFilter } from './filters/ai-http-exception.filter';
 import { aiErrorBody } from './filters/ai-error-body';
-import { UserThrottlerGuard } from '../ai-gateway/guards/user-throttler.guard';
+import { UserThrottlerGuard } from '../ai-gateway';
 import { MAX_UPLOAD_BYTES, prepareReceiptImage } from './receipt-image';
-import { STORAGE_SERVICE } from '../storage/storage.service';
-import type { StorageService } from '../storage/storage.service';
+import { STORAGE_SERVICE } from '../storage';
+import type { StorageService } from '../storage';
 
 /** Lifetime of a presigned draft-image URL. */
 const DRAFT_IMAGE_URL_TTL_SEC = 300;

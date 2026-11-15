@@ -28,7 +28,7 @@ import {
 } from '@nestjs/swagger';
 import type { Request, Response } from 'express';
 import { AuthService } from './auth.service';
-import { UserService } from '../user/user.service';
+import { UserService } from '../user';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
@@ -40,7 +40,7 @@ import {
   ClientTokenResponse,
   TokenResponseDto,
 } from './dto/token-response.dto';
-import { UserProfileDto } from '../user/dto/user-profile.dto';
+import { UserProfileDto } from '../user';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { AllowUnverified } from './decorators/allow-unverified.decorator';
 import { CurrentUser } from './decorators/current-user.decorator';

@@ -11,7 +11,7 @@ import {
 } from './dto/bill-dashboard.dto';
 import { UnconvertedDto } from './dto/household-conversion.dto';
 import { Currency } from '../../types/currency.enum';
-import { ExchangeRateService } from '../exchange-rate/exchange-rate.service';
+import { ExchangeRateService } from '../exchange-rate';
 import {
   fetchUnconverted,
   householdConversionJoin,

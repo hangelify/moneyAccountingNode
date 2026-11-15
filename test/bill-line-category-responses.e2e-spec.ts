@@ -4,11 +4,11 @@ import { MikroORM, RequestContext } from '@mikro-orm/core';
 import { createTestApp, registerUser, TestUser } from './utils/app';
 import { Category } from '../src/entities/category.entity';
 import { SubCategory } from '../src/entities/sub-category.entity';
-import { BillCrudService } from '../src/modules/bill/bill-crud.service';
+import { BillCrudService } from '../src/modules/bill';
 import type {
   BillDetailResponseDto,
   DraftListResponseDto,
-} from '../src/modules/bill/dto/bill-detail-response.dto';
+} from '../src/modules/bill';
 import { defined } from '../src/common/testing/defined';
 
 // Every bill line in a response carries its own category (HAN-94), read from

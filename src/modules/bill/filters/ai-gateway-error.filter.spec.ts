@@ -6,8 +6,8 @@ import {
   AiImageStorageError,
   AiInputInvalidError,
   NoCapableProviderError,
-} from '../../ai-gateway/errors';
-import type { FailureKind } from '../../ai-gateway/internal/error-classifier';
+} from '../../ai-gateway';
+import type { FailureKind } from '../../ai-gateway';
 
 describe('AiGatewayErrorFilter', () => {
   function run(exception: Parameters<AiGatewayErrorFilter['catch']>[0]) {

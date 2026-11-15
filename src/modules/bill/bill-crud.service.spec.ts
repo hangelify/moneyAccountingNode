@@ -5,11 +5,11 @@ import {
   Logger,
 } from '@nestjs/common';
 import { EntityManager, EntityRepository } from '@mikro-orm/core';
-import { MarketService } from '../market/market.service';
+import { MarketService } from '../market';
 import { BillCrudService } from './bill-crud.service';
 import { BillDuplicatesService } from './bill-duplicates.service';
 import type { BillConversionService } from './household-conversion';
-import type { ExchangeRateService } from '../exchange-rate/exchange-rate.service';
+import type { ExchangeRateService } from '../exchange-rate';
 import { Bill } from '../../entities/bill.entity';
 import { BillSubCategory } from '../../entities/bill-sub-category.entity';
 import { todayIsoDate } from '../../common/utils/calendar-date';

@@ -6,7 +6,7 @@ import type {
 } from './dto/spending-breakdown.dto';
 import { computePeriodRange } from '../../common/utils/period-range';
 import { foldSpendingRows, type SpendingRow } from './spending-breakdown';
-import { ExchangeRateService } from '../exchange-rate/exchange-rate.service';
+import { ExchangeRateService } from '../exchange-rate';
 import {
   fetchUnconverted,
   householdConversionJoin,

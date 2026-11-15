@@ -1,5 +1,5 @@
-import { readInt } from '../../ai-gateway/internal/ai-call-config';
-import type { Env } from '../../ai-gateway/internal/ai-call-config';
+import { readInt } from '../../ai-gateway';
+import type { Env } from '../../ai-gateway';
 
 export const BILL_PHOTO_QUEUE = 'bill-photo';
 export const BILL_BATCH_ENV = Symbol('BILL_BATCH_ENV');

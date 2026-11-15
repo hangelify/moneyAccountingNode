@@ -1,7 +1,7 @@
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import request from 'supertest';
 import { createTestApp, registerUser, TestUser } from './utils/app';
-import { CategoryBaseResponseDto } from '../src/modules/category/dto/category-base-response.dto';
+import { CategoryBaseResponseDto } from '../src/modules/category';
 
 describe('Category seed-defaults (e2e)', () => {
   let app: NestExpressApplication;

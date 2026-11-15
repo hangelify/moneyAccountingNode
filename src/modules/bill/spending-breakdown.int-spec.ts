@@ -11,9 +11,9 @@ import { User } from '../../entities/user.entity';
 import { BillStatus } from '../../types/bill-status.enum';
 import { Currency } from '../../types/currency.enum';
 import { ExchangeRateModule } from '../exchange-rate/exchange-rate.module';
-import { ExchangeRateService } from '../exchange-rate/exchange-rate.service';
-import { EXCHANGE_RATE_PROVIDER } from '../exchange-rate/exchange-rate.provider';
-import { StubProvider } from '../exchange-rate/testing/stub-exchange-rate.provider';
+import { ExchangeRateService } from '../exchange-rate';
+import { EXCHANGE_RATE_PROVIDER } from '../exchange-rate';
+import { StubProvider } from '../exchange-rate/testing';
 import { SpendingBreakdownService } from './spending-breakdown.service';
 import { BillDashboardService } from './bill-dashboard.service';
 import {

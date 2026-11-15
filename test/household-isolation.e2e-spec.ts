@@ -4,7 +4,7 @@ import { JwtService } from '@nestjs/jwt';
 import { MikroORM } from '@mikro-orm/core';
 import request from 'supertest';
 import { createTestApp, registerUser, TestUser } from './utils/app';
-import type { JwtPayload } from '../src/modules/auth/types/jwt-payload.interface';
+import type { JwtPayload } from '../src/modules/auth';
 import { Bill } from '../src/entities/bill.entity';
 import { BillStatus } from '../src/types/bill-status.enum';
 

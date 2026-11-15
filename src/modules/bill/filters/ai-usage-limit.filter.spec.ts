@@ -3,7 +3,7 @@ import { AiUsageLimitFilter } from './ai-usage-limit.filter';
 import {
   AiBudgetExceededError,
   AiCapacityExceededError,
-} from '../../ai-gateway/errors';
+} from '../../ai-gateway';
 
 describe('AiUsageLimitFilter', () => {
   function makeHost() {

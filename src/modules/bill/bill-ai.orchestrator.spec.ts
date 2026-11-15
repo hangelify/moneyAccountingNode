@@ -1,5 +1,5 @@
 import { BillAiOrchestrator } from './bill-ai.orchestrator';
-import type { AiGatewayService } from '../ai-gateway/ai-gateway.service';
+import type { AiGatewayService } from '../ai-gateway';
 import type { BillParserTask } from './tasks/bill-parser.task';
 import type { BillParseCategorizeTask } from './tasks/bill-parse-categorize.task';
 

@@ -1,4 +1,4 @@
-import { requireEnv } from '../auth/auth.env';
+import { requireEnv } from '../auth';
 
 export interface StorageEnv {
   region: string;

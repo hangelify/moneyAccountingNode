@@ -2,7 +2,7 @@ import { createHash } from 'crypto';
 import { BadRequestException, HttpException, HttpStatus } from '@nestjs/common';
 import type { EntityRepository } from '@mikro-orm/core';
 import type { User } from '../../../entities/user.entity';
-import type { MailMessage, MailSender } from '../../mail/mail-sender';
+import type { MailMessage, MailSender } from '../../mail';
 import { EmailVerificationService } from './email-verification.service';
 import { defined } from '../../../common/testing/defined';
 

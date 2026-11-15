@@ -14,22 +14,19 @@ import {
   seedAiRequest,
   type TestUser,
 } from './utils/app';
-import { BillPhotoService } from '../src/modules/bill/bill-photo.service';
-import { STORAGE_SERVICE } from '../src/modules/storage/storage.service';
-import type {
-  ImageMediaType,
-  StorageService,
-} from '../src/modules/storage/storage.service';
-import { AI_USAGE_LIMITS } from '../src/modules/ai-gateway/internal/ai-usage-limits';
-import type { AiUsageLimits } from '../src/modules/ai-gateway/internal/ai-usage-limits';
-import { AiGatewayService } from '../src/modules/ai-gateway/ai-gateway.service';
-import { AiBudgetExceededError } from '../src/modules/ai-gateway/errors';
+import { BillPhotoService } from '../src/modules/bill';
+import { STORAGE_SERVICE } from '../src/modules/storage';
+import type { ImageMediaType, StorageService } from '../src/modules/storage';
+import { AI_USAGE_LIMITS } from '../src/modules/ai-gateway';
+import type { AiUsageLimits } from '../src/modules/ai-gateway';
+import { AiGatewayService } from '../src/modules/ai-gateway';
+import { AiBudgetExceededError } from '../src/modules/ai-gateway';
 import { redisConnectionOptions } from '../src/config/redis';
-import { BILL_PHOTO_QUEUE } from '../src/modules/bill/batch/bill-batch.env';
-import { BillPhotoProcessor } from '../src/modules/bill/batch/bill-photo.processor';
-import { BillEventsPublisher } from '../src/modules/bill/batch/bill-events.publisher';
-import type { BillBatchResponseDto } from '../src/modules/bill/batch/dto/bill-batch-response.dto';
-import type { BillDetailResponseDto } from '../src/modules/bill/dto/bill-detail-response.dto';
+import { BILL_PHOTO_QUEUE } from '../src/modules/bill';
+import { BillPhotoProcessor } from '../src/modules/bill';
+import { BillEventsPublisher } from '../src/modules/bill';
+import type { BillBatchResponseDto } from '../src/modules/bill';
+import type { BillDetailResponseDto } from '../src/modules/bill';
 import { defined } from '../src/common/testing/defined';
 
 const AI_REQUEST_ID = '00000000-0000-4000-8000-0000000000b1';

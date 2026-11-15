@@ -8,8 +8,8 @@ import {
   type TestUser,
 } from './utils/app';
 import { sentMail, setMailFailing, verificationTokenFor } from './utils/mail';
-import type { InviteResponseDto } from '../src/modules/household/dto/household-response.dto';
-import type { UserProfileDto } from '../src/modules/user/dto/user-profile.dto';
+import type { InviteResponseDto } from '../src/modules/household';
+import type { UserProfileDto } from '../src/modules/user';
 
 describe('Email verification (e2e)', () => {
   let app: NestExpressApplication;

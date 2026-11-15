@@ -1,8 +1,8 @@
 import { validate } from 'class-validator';
 import { plainToInstance } from 'class-transformer';
-import { RegisterDto } from '../../modules/auth/dto/register.dto';
-import { LoginDto } from '../../modules/auth/dto/login.dto';
-import { CreateInviteDto } from '../../modules/household/dto/create-invite.dto';
+import { RegisterDto } from '../../modules/auth';
+import { LoginDto } from '../../modules/auth';
+import { CreateInviteDto } from '../../modules/household';
 
 describe('email normalization in request DTOs', () => {
   const base = { password: 'password123', first_name: 'Test' };

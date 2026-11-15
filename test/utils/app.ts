@@ -14,10 +14,10 @@ import { parseTrustProxy } from '../../src/config/trust-proxy';
 import {
   InMemoryLoginAttemptStore,
   LOGIN_ATTEMPT_STORE,
-} from '../../src/modules/auth/login-lockout/login-attempt.store';
-import { MAIL_SENDER } from '../../src/modules/mail/mail-sender';
+} from '../../src/modules/auth';
+import { MAIL_SENDER } from '../../src/modules/mail';
 import { InMemoryMailSender } from './mail';
-import type { TokenResponseDto } from '../../src/modules/auth/dto/token-response.dto';
+import type { TokenResponseDto } from '../../src/modules/auth';
 import { defined } from '../../src/common/testing/defined';
 
 export interface TestAppOptions {

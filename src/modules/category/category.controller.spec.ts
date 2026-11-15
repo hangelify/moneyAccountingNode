@@ -4,8 +4,8 @@ import { GUARDS_METADATA, HTTP_CODE_METADATA } from '@nestjs/common/constants';
 import { CategoryController } from './category.controller';
 import { CategoryService } from './category.service';
 import { CategoryDefaultsService } from './category-defaults.service';
-import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { HouseholdMemberGuard } from '../household/guards/household-member.guard';
+import { JwtAuthGuard } from '../auth';
+import { HouseholdMemberGuard } from '../household';
 
 describe('CategoryController', () => {
   let controller: CategoryController;

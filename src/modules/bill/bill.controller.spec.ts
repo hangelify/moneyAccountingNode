@@ -24,12 +24,12 @@ import { BillDashboardService } from './bill-dashboard.service';
 import { BillDashboardQueryDto } from './dto/bill-dashboard.dto';
 import { SpendingBreakdownService } from './spending-breakdown.service';
 import { SpendingBreakdownQueryDto } from './dto/spending-breakdown.dto';
-import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { HouseholdMemberGuard } from '../household/guards/household-member.guard';
+import { JwtAuthGuard } from '../auth';
+import { HouseholdMemberGuard } from '../household';
 import { AiGatewayErrorFilter } from './filters/ai-gateway-error.filter';
 import { AiUsageLimitFilter } from './filters/ai-usage-limit.filter';
-import { UserThrottlerGuard } from '../ai-gateway/guards/user-throttler.guard';
-import { STORAGE_SERVICE } from '../storage/storage.service';
+import { UserThrottlerGuard } from '../ai-gateway';
+import { STORAGE_SERVICE } from '../storage';
 
 function makeImage(format: 'png' | 'jpeg'): Promise<Buffer> {
   return sharp({

@@ -26,8 +26,8 @@ import {
   InvalidResponseError,
 } from './internal/error-classifier';
 import type { FailureKind } from './internal/error-classifier';
-import { STORAGE_SERVICE } from '../storage/storage.service';
-import type { StorageService } from '../storage/storage.service';
+import { STORAGE_SERVICE } from '../storage';
+import type { StorageService } from '../storage';
 import { AI_CALL_CONFIG } from './internal/ai-call-config';
 import type { AiCallConfig } from './internal/ai-call-config';
 import { DeadlineExceededError, raceAbort } from './internal/retry';

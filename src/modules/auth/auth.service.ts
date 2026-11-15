@@ -42,7 +42,7 @@ import {
   requireEnv,
   requireIntEnv,
 } from './auth.env';
-import { CategoryDefaultsService } from '../category/category-defaults.service';
+import { CategoryDefaultsService } from '../category';
 import { sanitizeIp } from '../../common/utils/ip.util';
 import { normalizeEmail } from '../../common/transforms/normalize-email';
 import { PasswordService } from './password.service';

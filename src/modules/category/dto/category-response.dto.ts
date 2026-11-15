@@ -1,5 +1,5 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { SubCategoryResponseDto } from '../../sub-category/dto/sub-category-response.dto';
+import { SubCategoryResponseDto } from '../../sub-category';
 import { CategoryBaseResponseDto } from './category-base-response.dto';
 
 /**

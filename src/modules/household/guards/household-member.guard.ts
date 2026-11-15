@@ -10,7 +10,7 @@ import { EntityRepository } from '@mikro-orm/core';
 import { isUUID } from 'class-validator';
 import { Household } from '../../../entities/household.entity';
 import { HouseholdMember } from '../../../entities/household-member.entity';
-import type { AuthenticatedUser } from '../../auth/types/jwt-payload.interface';
+import type { AuthenticatedUser } from '../../auth';
 
 export interface HouseholdContext {
   householdId: string;

@@ -21,10 +21,10 @@ import { MarketService } from './market.service';
 import { CreateMarketDto } from './dto/create-market.dto';
 import { UpdateMarketDto } from './dto/update-market.dto';
 import { MarketResponseDto } from './dto/market-response.dto';
-import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { HouseholdMemberGuard } from '../household/guards/household-member.guard';
-import { CurrentHousehold } from '../household/decorators/current-household.decorator';
-import type { HouseholdContext } from '../household/guards/household-member.guard';
+import { JwtAuthGuard } from '../auth';
+import { HouseholdMemberGuard } from '../household';
+import { CurrentHousehold } from '../household';
+import type { HouseholdContext } from '../household';
 import {
   ApiCreateMarketResponses,
   ApiListMarketsResponses,

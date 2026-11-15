@@ -5,10 +5,10 @@ import { MikroORM } from '@mikro-orm/core';
 import { createTestApp, registerUser, TestUser } from './utils/app';
 import { Category } from '../src/entities/category.entity';
 import { SubCategory } from '../src/entities/sub-category.entity';
-import { EXCHANGE_RATE_PROVIDER } from '../src/modules/exchange-rate/exchange-rate.provider';
-import { StubProvider } from '../src/modules/exchange-rate/testing/stub-exchange-rate.provider';
-import type { ManualBatchResponseDto } from '../src/modules/bill/dto/manual-batch-response.dto';
-import type { RecentCategoryDto } from '../src/modules/category/dto/recent-categories.dto';
+import { EXCHANGE_RATE_PROVIDER } from '../src/modules/exchange-rate';
+import { StubProvider } from '../src/modules/exchange-rate/testing';
+import type { ManualBatchResponseDto } from '../src/modules/bill';
+import type { RecentCategoryDto } from '../src/modules/category';
 import { defined } from '../src/common/testing/defined';
 
 // The quick-entry form over HTTP: guards, the global validation pipe, the

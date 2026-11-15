@@ -3,8 +3,8 @@ import {
   toAnthropicOutputSchema,
   toProviderJsonSchema,
 } from './provider-json-schema';
-import { ParsedBillSchema } from '../../bill/tasks/schemas/parsed-bill.schema';
-import { ParsedAndCategorizedBillSchema } from '../../bill/tasks/schemas/parsed-and-categorized-bill.schema';
+import { ParsedBillSchema } from '../../bill';
+import { ParsedAndCategorizedBillSchema } from '../../bill';
 
 describe('toProviderJsonSchema', () => {
   const schema = z.object({

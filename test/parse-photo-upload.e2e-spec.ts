@@ -2,8 +2,8 @@ import type { NestExpressApplication } from '@nestjs/platform-express';
 import request from 'supertest';
 import sharp from 'sharp';
 import { createTestApp, registerUser, seedAiRequest } from './utils/app';
-import { BillPhotoService } from '../src/modules/bill/bill-photo.service';
-import { MAX_UPLOAD_BYTES } from '../src/modules/bill/receipt-image';
+import { BillPhotoService } from '../src/modules/bill';
+import { MAX_UPLOAD_BYTES } from '../src/modules/bill';
 
 describe('parse-photo upload handling (e2e)', () => {
   let app: NestExpressApplication;

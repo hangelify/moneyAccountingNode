@@ -463,6 +463,36 @@ npm run seed
 
 ---
 
+
+### Rules for new migrations
+
+CI runs `npm run migrations:lint` (locally: `MIGRATIONS_BASE=dev npm run migrations:lint`):
+
+- **Applied migrations never change.** Editing, renaming or deleting a file in `src/migrations` that exists on the base branch fails CI; write a new migration instead. The snapshot (`.snapshot-accounting.json`) may change.
+- **New migrations pass [Squawk](https://squawkhq.com/docs/rules).** Production applies migrations while the previous version still serves traffic, so every rule is on. Start `up()` with timeouts:
+
+  ```ts
+  this.addSql(`set local lock_timeout = '5s';`);
+  this.addSql(`set local statement_timeout = '60s';`);
+  ```
+
+- **Indexes on existing tables are built `CONCURRENTLY`.** That cannot run inside a transaction, and MikroORM wraps each migration in one, so put such an index in a migration of its own:
+
+  ```ts
+  export class Migration20270101000000_AddBillsCurrencyIndex extends Migration {
+    override isTransactional(): boolean {
+      return false;
+    }
+
+    override up(): void {
+      this.addSql(`set lock_timeout = '5s';`);
+      this.addSql(
+        `create index concurrently if not exists "bills_currency_index" on "bills" ("currency");`,
+      );
+    }
+  }
+  ```
+
 ## Authentication: web and mobile clients
 
 Login returns a short-lived access token (send it as `Authorization: Bearer <token>`) and a refresh token. How the refresh token travels depends on the client mode, which the server picks for `POST /auth/login`, `/auth/register`, `/auth/refresh` and `/auth/logout`:

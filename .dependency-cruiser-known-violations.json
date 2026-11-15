@@ -1,0 +1,17 @@
+[
+  {
+    "type": "dependency",
+    "from": "src/types/express.d.ts",
+    "to": "src/modules/auth/index.ts",
+    "unresolvedTo": "../modules/auth",
+    "dependencyTypes": [
+      "local",
+      "type-only",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "common-is-leaf"
+    }
+  }
+]

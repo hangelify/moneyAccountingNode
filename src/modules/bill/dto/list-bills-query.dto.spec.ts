@@ -2,6 +2,7 @@ import { validate } from 'class-validator';
 import { plainToInstance } from 'class-transformer';
 import { ListBillsQueryDto } from './list-bills-query.dto';
 import { Currency } from '../../../types/currency.enum';
+import { BillSource } from '../../../types/bill-source.enum';
 
 function toDto(plain: Record<string, unknown>): ListBillsQueryDto {
   return plainToInstance(ListBillsQueryDto, plain);
@@ -87,5 +88,27 @@ describe('ListBillsQueryDto', () => {
     expect(no.include_duplicates).toBe(false);
     const bad = await validate(toDto({ include_duplicates: 'yes' }));
     expect(bad.some((e) => e.property === 'include_duplicates')).toBe(true);
+  });
+  it('accepts a single source and wraps it in an array', async () => {
+    const dto = toDto({ source: 'manual' });
+    expect(dto.source).toEqual([BillSource.MANUAL]);
+    expect(await validate(dto)).toHaveLength(0);
+  });
+
+  it('accepts several sources', async () => {
+    const errors = await validate(toDto({ source: ['manual', 'bank'] }));
+    expect(errors).toHaveLength(0);
+  });
+
+  it('rejects an unknown source', async () => {
+    const errors = await validate(toDto({ source: ['cash'] }));
+    expect(errors.some((e) => e.property === 'source')).toBe(true);
+  });
+
+  it('treats source="" as absent', async () => {
+    const dto = toDto({ source: '' });
+    expect(dto.source).toBeUndefined();
+    const errors = await validate(dto);
+    expect(errors.some((e) => e.property === 'source')).toBe(false);
   });
 });

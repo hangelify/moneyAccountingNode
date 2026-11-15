@@ -245,6 +245,13 @@ export class BillCrudService {
       conditions.push(`b.currency = ?`);
       params.push(filters.currency);
     }
+    if (filters.source?.length) {
+      // One placeholder per value: knex would expand an array bound to ANY(?).
+      conditions.push(
+        `b.source IN (${filters.source.map(() => '?').join(', ')})`,
+      );
+      params.push(...filters.source);
+    }
     for (const bound of filters.amount_range ?? []) {
       const match = /^(gt|lt)_(\d+(?:\.\d+)?)$/.exec(bound);
       if (!match) continue;

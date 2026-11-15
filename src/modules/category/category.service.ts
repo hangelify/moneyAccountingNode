@@ -207,13 +207,13 @@ export class CategoryService {
                  c.id, sc.id NULLS FIRST
        LIMIT  ?`,
       [householdId, since, limit],
-    )) as Array<{
+    )) as {
       category_id: string;
       category_name: string;
       sub_category_id: string | null;
       sub_category_name: string | null;
       last_used_at: string;
-    }>;
+    }[];
     return rows.map((r) => ({
       category: { id: r.category_id, name: r.category_name },
       sub_category: r.sub_category_id

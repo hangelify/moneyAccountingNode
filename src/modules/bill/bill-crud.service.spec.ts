@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/unbound-method */
 import {
   NotFoundException,
   BadRequestException,
@@ -60,7 +59,7 @@ function makeService() {
   const subCategoryRepo = {
     find: jest.fn().mockResolvedValue([]),
   } as unknown as EntityRepository<SubCategory>;
-  const mockExecute = jest.fn();
+  const mockExecute = jest.fn<Promise<unknown>, [string, unknown[]]>();
   const em = {
     persist: jest.fn().mockReturnThis(),
     flush: jest.fn().mockResolvedValue(undefined),
@@ -207,12 +206,10 @@ describe('BillCrudService', () => {
       expect(result.data[0].id).toBe('bill-1');
       expect(result.data[0].total_amount).toBe(52.3);
       expect(result.data[0].market?.name).toBe('Lidl');
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-      const countSql: string = mockExecute.mock.calls[0][0] as string;
+      const countSql: string = mockExecute.mock.calls[0][0];
       expect(countSql).toContain('b.household_id = ?');
       expect(countSql).toContain("b.status     = 'confirmed'");
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-      const dataSql: string = mockExecute.mock.calls[1][0] as string;
+      const dataSql: string = mockExecute.mock.calls[1][0];
       expect(dataSql).toContain('ORDER  BY b.bill_date DESC');
     });
 
@@ -240,7 +237,7 @@ describe('BillCrudService', () => {
         date_from: '2026-03-01',
       });
 
-      const [sql, params] = mockExecute.mock.calls[0] as [string, unknown[]];
+      const [sql, params] = mockExecute.mock.calls[0];
       expect(sql).toContain('b.bill_date >= ?');
       expect(params).toContain('2026-03-01');
     });
@@ -255,7 +252,7 @@ describe('BillCrudService', () => {
         date_to: '2026-03-31',
       });
 
-      const [sql, params] = mockExecute.mock.calls[0] as [string, unknown[]];
+      const [sql, params] = mockExecute.mock.calls[0];
       expect(sql).toContain('b.bill_date <= ?');
       expect(params).toContain('2026-03-31');
     });
@@ -271,7 +268,7 @@ describe('BillCrudService', () => {
         date_to: '2026-03-31',
       });
 
-      const [sql, params] = mockExecute.mock.calls[0] as [string, unknown[]];
+      const [sql, params] = mockExecute.mock.calls[0];
       expect(sql).toContain('b.bill_date >= ?');
       expect(sql).toContain('b.bill_date <= ?');
       expect(params).toContain('2026-03-01');
@@ -288,7 +285,7 @@ describe('BillCrudService', () => {
         market_names: ['Lidl'],
       });
 
-      const [sql, params] = mockExecute.mock.calls[0] as [string, unknown[]];
+      const [sql, params] = mockExecute.mock.calls[0];
       expect(sql).toContain('m.name = ANY(?)');
       expect(params).toContainEqual(['Lidl']);
     });
@@ -303,7 +300,7 @@ describe('BillCrudService', () => {
         market_names: ['Lidl', 'Kaufland'],
       });
 
-      const [sql, params] = mockExecute.mock.calls[0] as [string, unknown[]];
+      const [sql, params] = mockExecute.mock.calls[0];
       expect(sql).toContain('m.name = ANY(?)');
       expect(params).toContainEqual(['Lidl', 'Kaufland']);
     });
@@ -318,7 +315,7 @@ describe('BillCrudService', () => {
         currency: Currency.EUR,
       });
 
-      const [sql, params] = mockExecute.mock.calls[0] as [string, unknown[]];
+      const [sql, params] = mockExecute.mock.calls[0];
       expect(sql).toContain('b.currency = ?');
       expect(params).toContain('EUR');
     });
@@ -333,7 +330,7 @@ describe('BillCrudService', () => {
         amount_range: ['gt_100'],
       });
 
-      const [sql, params] = mockExecute.mock.calls[0] as [string, unknown[]];
+      const [sql, params] = mockExecute.mock.calls[0];
       expect(sql).toContain('b.amount > ?');
       expect(params).toContain(100);
     });
@@ -348,7 +345,7 @@ describe('BillCrudService', () => {
         amount_range: ['lt_500'],
       });
 
-      const [sql, params] = mockExecute.mock.calls[0] as [string, unknown[]];
+      const [sql, params] = mockExecute.mock.calls[0];
       expect(sql).toContain('b.amount < ?');
       expect(params).toContain(500);
     });
@@ -363,7 +360,7 @@ describe('BillCrudService', () => {
         amount_range: ['gt_100', 'lt_500'],
       });
 
-      const [sql, params] = mockExecute.mock.calls[0] as [string, unknown[]];
+      const [sql, params] = mockExecute.mock.calls[0];
       expect(sql).toContain('b.amount > ?');
       expect(sql).toContain('b.amount < ?');
       expect(params).toContain(100);
@@ -381,7 +378,7 @@ describe('BillCrudService', () => {
         amount_range: ['gt_100'],
       });
 
-      const [sql, params] = mockExecute.mock.calls[0] as [string, unknown[]];
+      const [sql, params] = mockExecute.mock.calls[0];
       expect(sql).toContain('b.currency = ?');
       expect(sql).toContain('b.amount > ?');
       expect(params).toContain('EUR');
@@ -436,10 +433,8 @@ describe('BillCrudService', () => {
 
       await service.listBills(householdId, {});
 
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-      const dataSql: string = mockExecute.mock.calls[1][0] as string;
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-      const dataParams = mockExecute.mock.calls[1][1] as unknown[];
+      const dataSql: string = mockExecute.mock.calls[1][0];
+      const dataParams = mockExecute.mock.calls[1][1];
       expect(dataSql).toContain('LIMIT  ?');
       expect(dataSql).toContain('OFFSET ?');
       expect(dataParams).toContain(20); // limit
@@ -457,8 +452,7 @@ describe('BillCrudService', () => {
         limit: 10,
       });
 
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-      const dataParams = mockExecute.mock.calls[1][1] as unknown[];
+      const dataParams = mockExecute.mock.calls[1][1];
       expect(dataParams).toContain(10); // limit
       expect(dataParams).toContain(20); // offset = (3-1)*10
     });
@@ -501,10 +495,8 @@ describe('BillCrudService', () => {
         currency: Currency.EUR,
       });
 
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-      const countSql: string = mockExecute.mock.calls[0][0] as string;
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-      const countParams = mockExecute.mock.calls[0][1] as unknown[];
+      const countSql: string = mockExecute.mock.calls[0][0];
+      const countParams = mockExecute.mock.calls[0][1];
       expect(countSql).toContain('COUNT(*)');
       expect(countParams).toContain('EUR');
     });

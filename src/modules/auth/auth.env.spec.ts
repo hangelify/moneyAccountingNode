@@ -41,32 +41,42 @@ describe('assertJwtSecrets', () => {
   it('accepts two distinct secrets of at least 32 bytes', () => {
     process.env.JWT_SECRET = strong('a');
     process.env.JWT_REFRESH_SECRET = strong('b');
-    expect(() => assertJwtSecrets()).not.toThrow();
+    expect(() => {
+      assertJwtSecrets();
+    }).not.toThrow();
   });
 
   it.each(KEYS)('rejects %s shorter than 32 bytes', (key) => {
     process.env.JWT_SECRET = strong('a');
     process.env.JWT_REFRESH_SECRET = strong('b');
     process.env[key] = 'x'.repeat(31);
-    expect(() => assertJwtSecrets()).toThrow(key);
+    expect(() => {
+      assertJwtSecrets();
+    }).toThrow(key);
   });
 
   it('counts bytes, not characters', () => {
     // 16 two-byte characters: 32 bytes.
     process.env.JWT_SECRET = 'ж'.repeat(16);
     process.env.JWT_REFRESH_SECRET = strong('b');
-    expect(() => assertJwtSecrets()).not.toThrow();
+    expect(() => {
+      assertJwtSecrets();
+    }).not.toThrow();
   });
 
   it('rejects equal access and refresh secrets', () => {
     process.env.JWT_SECRET = strong('a');
     process.env.JWT_REFRESH_SECRET = strong('a');
-    expect(() => assertJwtSecrets()).toThrow(/must differ/);
+    expect(() => {
+      assertJwtSecrets();
+    }).toThrow(/must differ/);
   });
 
   it('rejects a missing secret', () => {
     process.env.JWT_SECRET = strong('a');
     delete process.env.JWT_REFRESH_SECRET;
-    expect(() => assertJwtSecrets()).toThrow('JWT_REFRESH_SECRET');
+    expect(() => {
+      assertJwtSecrets();
+    }).toThrow('JWT_REFRESH_SECRET');
   });
 });

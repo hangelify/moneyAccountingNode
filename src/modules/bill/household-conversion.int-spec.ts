@@ -155,7 +155,7 @@ describe('household currency conversion (PostgreSQL)', () => {
 
     const bill = (
       data: Record<string, unknown>,
-      items: Array<[SubCategory, number]>,
+      items: [SubCategory, number][],
     ) => {
       const b = em.create(Bill, {
         household,
@@ -219,7 +219,7 @@ describe('household currency conversion (PostgreSQL)', () => {
     mdlHouseholdId = mdlHousehold.id;
     writeHouseholdId = writeHousehold.id;
     writeSubId = writeBread.id;
-    for (const key of Object.keys(id) as Array<keyof typeof id>) {
+    for (const key of Object.keys(id) as (keyof typeof id)[]) {
       id[key] = bills[key].id;
     }
   });
@@ -652,7 +652,7 @@ describe('household currency conversion (PostgreSQL)', () => {
     /** An own household with confirmed bills of `[date, amount, currency]`. */
     async function ownHousehold(
       currency: Currency,
-      bills: Array<[string, number, Currency | null]>,
+      bills: [string, number, Currency | null][],
     ): Promise<{ hid: string; billIds: string[] }> {
       const em = orm.em.fork();
       const household = em.create(Household, {

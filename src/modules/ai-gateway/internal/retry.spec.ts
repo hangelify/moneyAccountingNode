@@ -13,9 +13,9 @@ function hangingCall() {
   const fn = jest.fn((signal: AbortSignal) => {
     seen.push(signal);
     return new Promise<string>((_resolve, reject) => {
-      signal.addEventListener('abort', () =>
-        reject(new Error('aborted by caller')),
-      );
+      signal.addEventListener('abort', () => {
+        reject(new Error('aborted by caller'));
+      });
     });
   });
   return { fn, seen };

@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/unbound-method */
 import {
   BadRequestException,
   ForbiddenException,
@@ -80,16 +79,16 @@ describe('HouseholdService', () => {
   describe('assertOwner', () => {
     it('does nothing when role is owner', () => {
       const { service } = makeService();
-      expect(() =>
-        service.assertOwner({ householdId: hid, role: 'owner' }),
-      ).not.toThrow();
+      expect(() => {
+        service.assertOwner({ householdId: hid, role: 'owner' });
+      }).not.toThrow();
     });
 
     it('throws ForbiddenException when role is member', () => {
       const { service } = makeService();
-      expect(() =>
-        service.assertOwner({ householdId: hid, role: 'member' }),
-      ).toThrow(ForbiddenException);
+      expect(() => {
+        service.assertOwner({ householdId: hid, role: 'member' });
+      }).toThrow(ForbiddenException);
     });
   });
 

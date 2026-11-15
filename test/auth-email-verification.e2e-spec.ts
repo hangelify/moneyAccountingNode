@@ -55,7 +55,9 @@ describe('Email verification (e2e)', () => {
     app = await createTestApp();
   });
 
-  beforeEach(() => resetThrottling(app));
+  beforeEach(() => {
+    resetThrottling(app);
+  });
 
   afterAll(async () => {
     await app.close();
@@ -81,11 +83,11 @@ describe('Email verification (e2e)', () => {
 
     await verify(token)
       .expect(400)
-      .expect((res) =>
+      .expect((res) => {
         expect((res.body as { message: string }).message).toBe(
           'Invalid or expired verification token',
-        ),
-      );
+        );
+      });
   });
 
   it('rejects an unknown token (400)', async () => {
@@ -106,7 +108,9 @@ describe('Email verification (e2e)', () => {
   });
 
   describe('when the email cannot be sent', () => {
-    afterEach(() => setMailFailing(app, false));
+    afterEach(() => {
+      setMailFailing(app, false);
+    });
 
     it('still registers, and the user can ask again right away', async () => {
       setMailFailing(app, true);
@@ -165,11 +169,11 @@ describe('Email verification (e2e)', () => {
 
       await households(jane)
         .expect(403)
-        .expect((r) =>
+        .expect((r) => {
           expect((r.body as { error: string }).error).toBe(
             'email_not_verified',
-          ),
-        );
+          );
+        });
     });
 
     it('keeps the profile and the sessions open', async () => {
@@ -222,12 +226,12 @@ describe('Email verification (e2e)', () => {
 
       await accept(jane, token)
         .expect(403)
-        .expect((r) =>
+        .expect((r) => {
           expect(r.body).toMatchObject({
             error: 'email_not_verified',
             message: 'Email address is not verified',
-          }),
-        );
+          });
+        });
 
       await verify(verificationTokenFor(app, jane.email)).expect(204);
       await accept(jane, token).expect(204);

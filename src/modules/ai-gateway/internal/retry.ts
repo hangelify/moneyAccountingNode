@@ -37,7 +37,10 @@ function abortReason(signal: AbortSignal): Error {
 
 function sleep(ms: number, signal?: AbortSignal): Promise<void> {
   return new Promise((resolve, reject) => {
-    if (signal?.aborted) return reject(abortReason(signal));
+    if (signal?.aborted) {
+      reject(abortReason(signal));
+      return;
+    }
     const onAbort = () => {
       clearTimeout(timer);
       reject(abortReason(signal!));
@@ -56,7 +59,9 @@ export function raceAbort<T>(
   signal: AbortSignal,
 ): Promise<T> {
   return new Promise<T>((resolve, reject) => {
-    const onAbort = () => reject(abortReason(signal));
+    const onAbort = () => {
+      reject(abortReason(signal));
+    };
     if (signal.aborted) onAbort();
     else signal.addEventListener('abort', onAbort, { once: true });
     promise.then(
@@ -66,8 +71,7 @@ export function raceAbort<T>(
       },
       (e: unknown) => {
         signal.removeEventListener('abort', onAbort);
-        // Pass through as-is: classification relies on fields like `status`.
-        // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
+        // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- ошибку пробрасываем как есть: классификация читает её поля вроде `status`
         reject(e);
       },
     );
@@ -90,15 +94,18 @@ async function attempt<T>(
   parent?: AbortSignal,
 ): Promise<T> {
   const ctrl = new AbortController();
-  const onParentAbort = () => ctrl.abort(parent!.reason);
+  const onParentAbort = () => {
+    ctrl.abort(parent!.reason);
+  };
   parent?.addEventListener('abort', onParentAbort, { once: true });
-  const timer = setTimeout(
-    () => ctrl.abort(new TimeoutError(timeoutMs)),
-    timeoutMs,
-  );
+  const timer = setTimeout(() => {
+    ctrl.abort(new TimeoutError(timeoutMs));
+  }, timeoutMs);
   try {
     return await raceAbort(
-      new Promise<T>((resolve) => resolve(fn(ctrl.signal))),
+      new Promise<T>((resolve) => {
+        resolve(fn(ctrl.signal));
+      }),
       ctrl.signal,
     );
   } finally {

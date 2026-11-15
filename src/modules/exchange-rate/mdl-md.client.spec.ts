@@ -18,7 +18,9 @@ describe('MdlMdClient', () => {
   beforeEach(() => {
     fetchSpy = jest.spyOn(globalThis, 'fetch');
   });
-  afterEach(() => fetchSpy.mockRestore());
+  afterEach(() => {
+    fetchSpy.mockRestore();
+  });
 
   it('requests the day and returns its rates', async () => {
     fetchSpy.mockResolvedValue(

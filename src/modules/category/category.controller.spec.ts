@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/unbound-method */
 import { Test } from '@nestjs/testing';
 import { HttpStatus } from '@nestjs/common';
 import { GUARDS_METADATA, HTTP_CODE_METADATA } from '@nestjs/common/constants';

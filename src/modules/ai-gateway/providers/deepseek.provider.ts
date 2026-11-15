@@ -45,10 +45,10 @@ export class DeepSeekProvider implements LlmProvider {
     if (!this.client) throw new Error('DeepSeekProvider is not configured');
     const model = req.modelOverride ?? this.defaultModel;
 
-    const messages: Array<{
+    const messages: {
       role: 'system' | 'user' | 'assistant';
       content: string;
-    }> = req.messages.map((m) => {
+    }[] = req.messages.map((m) => {
       if (m.role === 'system') {
         return { role: 'system' as const, content: m.text };
       }
@@ -114,10 +114,10 @@ export class DeepSeekProvider implements LlmProvider {
     );
 
     const resp = response as {
-      choices?: Array<{
+      choices?: {
         message?: { content?: string | null };
         finish_reason?: string | null;
-      }>;
+      }[];
       usage?: { prompt_tokens?: number; completion_tokens?: number };
       model?: string;
     };

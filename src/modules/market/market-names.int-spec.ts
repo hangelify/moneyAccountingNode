@@ -82,7 +82,7 @@ describe('market names (PostgreSQL)', () => {
     (await sql(
       'select id from markets where household_id = ? and lower(name) = lower(?) and deleted_at is null',
       [householdId, name],
-    )) as Array<{ id: string }>;
+    )) as { id: string }[];
 
   it('finds the market of the same name, ignoring case', async () => {
     const id = await insertMarket('Lidl');

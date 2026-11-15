@@ -6,9 +6,9 @@ import {
 } from '../../types/llm-provider';
 import { LlmRequest, LlmResponse } from '../../types/llm-request';
 
-export type FakeProviderScript = Array<
-  (opts?: LlmCallOptions) => Promise<LlmResponse>
->;
+export type FakeProviderScript = ((
+  opts?: LlmCallOptions,
+) => Promise<LlmResponse>)[];
 
 export class FakeLlmProvider implements LlmProvider {
   readonly isConfigured = true;

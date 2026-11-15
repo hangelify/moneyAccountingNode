@@ -60,11 +60,11 @@ describe('Auth Registration (e2e)', () => {
       .get('/households')
       .set('Authorization', `Bearer ${body.access_token}`)
       .expect(403)
-      .expect((res) =>
+      .expect((res) => {
         expect((res.body as { error: string }).error).toBe(
           'email_not_verified',
-        ),
-      );
+        );
+      });
   });
 
   it('rejects a second registration with the same email', async () => {

@@ -19,14 +19,18 @@ import {
 } from './household-conversion';
 
 type DbConn = ReturnType<EntityManager['getConnection']>;
-type PeriodRow = { currency: Currency | null; period: string; total: string };
-type CategoryRow = {
+interface PeriodRow {
+  currency: Currency | null;
+  period: string;
+  total: string;
+}
+interface CategoryRow {
   currency: Currency | null;
   category_id: string;
   category_name: string;
   total_amount: string;
-};
-type BillRow = {
+}
+interface BillRow {
   id: string;
   bill_date: string;
   total_amount: string;
@@ -34,7 +38,7 @@ type BillRow = {
   currency: Currency | null;
   market_name: string | null;
   items_count: string;
-};
+}
 
 @Injectable()
 export class BillDashboardService {

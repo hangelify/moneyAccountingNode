@@ -129,7 +129,7 @@ export class Bill extends BaseEntity {
 
   /** True when the model read no date and bill_date was set to the upload day. */
   @Property({ type: 'boolean', nullable: false, default: false })
-  bill_date_inferred: boolean = false;
+  bill_date_inferred = false;
 
   /** sha256 (hex) of the stored receipt image; set on AI drafts only. */
   @Property({ type: 'varchar', length: 64, nullable: true })
@@ -164,7 +164,7 @@ export class Bill extends BaseEntity {
   confirmed_at?: Date;
 
   @ManyToOne(() => Market, { nullable: true })
-  market?: Rel<Market>;
+  market?: Rel<Market> | null;
 
   @Enum({
     items: () => Currency,

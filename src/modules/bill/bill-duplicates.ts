@@ -77,12 +77,12 @@ export function rankCandidates(
   probe: DuplicateProbe,
   rows: CandidateRow[],
   opts: { dateToleranceDays: number; limit: number; fiscalOnly?: boolean },
-): Array<{ row: CandidateRow; match: DuplicateMatch }> {
-  const ranked: Array<{
+): { row: CandidateRow; match: DuplicateMatch }[] {
+  const ranked: {
     row: CandidateRow;
     match: DuplicateMatch;
     distance: number;
-  }> = [];
+  }[] = [];
   for (const row of rows) {
     const match = classify(probe, row, opts.dateToleranceDays);
     // Fiscal-only probes have no reliable date or total to rank by.

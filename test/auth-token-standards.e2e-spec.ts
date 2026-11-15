@@ -84,7 +84,7 @@ describe('Auth token standards (e2e)', () => {
   describe('token responses are not cached', () => {
     const expectNoStore = (res: request.Response) => {
       expect(res.headers['cache-control']).toBe('no-store');
-      expect(res.headers['pragma']).toBe('no-cache');
+      expect(res.headers.pragma).toBe('no-cache');
     };
 
     it('on register', async () => {

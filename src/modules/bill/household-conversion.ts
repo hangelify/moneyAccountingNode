@@ -91,11 +91,11 @@ export async function fetchUnconverted(
     params,
     'all',
     ctx,
-  )) as Array<{
+  )) as {
     currency: Currency | null;
     bill_count: number;
     amount: string;
-  }>;
+  }[];
   return rows.map((r) => ({
     currency: r.currency,
     bill_count: r.bill_count,
@@ -138,7 +138,7 @@ export async function loadRateDays(
             ) d ON true
      WHERE  h.id = ?`,
     params,
-  )) as Array<{ currency: Currency; bill_date: string | null }>;
+  )) as { currency: Currency; bill_date: string | null }[];
   const dates = rows.flatMap((r) => (r.bill_date ? [r.bill_date] : []));
   if (dates.length > 0) await rates.ensureDays(dates, { max: 10 });
   return rows[0].currency;
@@ -176,13 +176,13 @@ export class BillConversionService {
        WHERE  b.household_id = ?
          AND  b.id = ANY(?::uuid[])`,
       [source, source, householdId, `{${billIds.join(',')}}`],
-    )) as Array<{
+    )) as {
       id: string;
       household_currency: Currency;
       household_amount: string | null;
       rate: string | null;
       rate_date: string | null;
-    }>;
+    }[];
     return new Map(
       rows.map((r) => [
         r.id,

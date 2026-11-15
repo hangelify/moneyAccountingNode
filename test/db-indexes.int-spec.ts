@@ -23,7 +23,7 @@ describe('database indexes (PostgreSQL)', () => {
       .getConnection()
       .execute(
         `select indexname, indexdef from pg_indexes where schemaname = 'public'`,
-      ) as Promise<Array<{ indexname: string; indexdef: string }>>);
+      ) as Promise<{ indexname: string; indexdef: string }[]>);
     return new Map(rows.map((r) => [r.indexname, r.indexdef]));
   };
 
@@ -36,7 +36,7 @@ describe('database indexes (PostgreSQL)', () => {
         [],
         'all',
         trx,
-      ) as Promise<Array<{ 'QUERY PLAN': string }>>);
+      ) as Promise<{ 'QUERY PLAN': string }[]>);
       return rows.map((r) => r['QUERY PLAN']).join('\n');
     });
   };
@@ -228,11 +228,11 @@ describe('database indexes (PostgreSQL)', () => {
           conn.execute(sql, params, 'all', trx) as Promise<unknown>;
         const [user] = (await run(
           `insert into users (first_name, email, password) values ('T', 'schema-test@x.com', 'x') returning id`,
-        )) as Array<{ id: string }>;
+        )) as { id: string }[];
         const [household] = (await run(
           `insert into households (name, currency, created_by) values ('H', 'EUR', ?) returning id`,
           [user.id],
-        )) as Array<{ id: string }>;
+        )) as { id: string }[];
         await fn(run, household.id);
         throw rollback;
       })
@@ -268,7 +268,7 @@ describe('database indexes (PostgreSQL)', () => {
       const [batch] = (await run(
         `insert into bill_batches (household_id, total) values (?, 2) returning id`,
         [householdId],
-      )) as Array<{ id: string }>;
+      )) as { id: string }[];
       const insert = (position: number) =>
         run(
           `insert into bill_batch_items (batch_id, position, image_key, image_sha256, status)

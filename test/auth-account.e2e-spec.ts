@@ -166,7 +166,7 @@ describe('Auth account lifecycle (e2e)', () => {
       .set('Authorization', `Bearer ${tokens.access_token}`)
       .expect(200);
     const mine = (
-      sessions.body as Array<{ current: boolean; user_agent: string }>
+      sessions.body as { current: boolean; user_agent: string }[]
     ).find((s) => s.current)!;
     expect(mine.user_agent).toBe('u'.repeat(512));
   });

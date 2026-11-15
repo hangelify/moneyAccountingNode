@@ -62,7 +62,7 @@ export class MarketService {
       ],
       'all',
       em.getTransactionContext(),
-    )) as Array<{ id: string }>;
+    )) as { id: string }[];
     const [row] = inserted.length
       ? inserted
       : ((await conn.execute(
@@ -72,7 +72,7 @@ export class MarketService {
           [householdId, dto.name],
           'all',
           em.getTransactionContext(),
-        )) as Array<{ id: string }>);
+        )) as { id: string }[]);
     return em.findOneOrFail(Market, row.id);
   }
 
@@ -88,7 +88,7 @@ export class MarketService {
     const counts = (await conn.execute(
       `SELECT market_id, COUNT(*) AS cnt FROM bills WHERE market_id = ANY(?) AND status = 'confirmed' AND deleted_at IS NULL GROUP BY market_id`,
       [markets.map((m) => m.id)],
-    )) as Array<{ market_id: string; cnt: string }>;
+    )) as { market_id: string; cnt: string }[];
     const countMap = new Map<string, number>(
       counts.map((r) => [r.market_id, Number(r.cnt)]),
     );

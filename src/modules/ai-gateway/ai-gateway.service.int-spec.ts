@@ -46,8 +46,12 @@ jest.setTimeout(30_000);
 
 // ---- Inline tasks ---------------------------------------------------------
 
-type PingIn = { n: number };
-type PingOut = { ok: boolean };
+interface PingIn {
+  n: number;
+}
+interface PingOut {
+  ok: boolean;
+}
 
 class PingTask extends AiTask<PingIn, PingOut> {
   readonly name = 'test.ping';
@@ -90,8 +94,12 @@ class TunedPingTask extends PingTask {
   }
 }
 
-type VisionIn = { data: Buffer };
-type VisionOut = { ok: boolean };
+interface VisionIn {
+  data: Buffer;
+}
+interface VisionOut {
+  ok: boolean;
+}
 
 class VisionPingTask extends AiTask<VisionIn, VisionOut> {
   readonly name = 'test.vision-ping';
@@ -133,7 +141,7 @@ function okResponse(json: unknown, text?: string): () => Promise<LlmResponse> {
 function errResponse(err: unknown): () => Promise<LlmResponse> {
   return () =>
     new Promise<LlmResponse>((_resolve, reject) => {
-      // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
+      // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- тест отдаёт провайдеру произвольное значение ошибки, в том числе не Error
       reject(err);
     });
 }
@@ -499,9 +507,9 @@ describe('AiGatewayService', () => {
         new Promise<LlmResponse>((_resolve, reject) => {
           const signal = opts!.signal!;
           seen.push(signal);
-          signal.addEventListener('abort', () =>
-            reject(signal.reason as Error),
-          );
+          signal.addEventListener('abort', () => {
+            reject(signal.reason as Error);
+          });
         });
     }
 
@@ -569,7 +577,9 @@ describe('AiGatewayService', () => {
         [
           () =>
             new Promise<LlmResponse>((_resolve, reject) =>
-              setTimeout(() => reject(new Error('permanent')), 150),
+              setTimeout(() => {
+                reject(new Error('permanent'));
+              }, 150),
             ),
         ],
       );

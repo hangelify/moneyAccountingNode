@@ -61,7 +61,7 @@ export class AiRequest extends BaseEntity {
 
   // Null once the retention job has scrubbed the raw payloads.
   @Property({ type: 'jsonb', nullable: true })
-  prompt?: { messages: Array<{ role: string; text: string }> } | null;
+  prompt?: { messages: { role: string; text: string }[] } | null;
 
   @Property({ type: 'jsonb', nullable: true })
   final_output?: unknown;

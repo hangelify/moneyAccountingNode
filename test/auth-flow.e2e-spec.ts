@@ -491,7 +491,7 @@ describe('Auth session flow (e2e)', () => {
           .get('/auth/sessions')
           .set('Authorization', `Bearer ${current.access_token}`)
           .expect(200);
-        const sessions = res.body as Array<Record<string, unknown>>;
+        const sessions = res.body as Record<string, unknown>[];
 
         const ids = sessions.map((s) => s.id);
         expect(ids).toContain(sessionId(current.access_token));
@@ -521,7 +521,7 @@ describe('Auth session flow (e2e)', () => {
           .get('/auth/sessions')
           .set('Authorization', `Bearer ${owner.accessToken}`)
           .expect(200);
-        const ids = (res.body as Array<{ id: string }>).map((s) => s.id);
+        const ids = (res.body as { id: string }[]).map((s) => s.id);
         expect(ids).not.toContain(sessionId(theirs.access_token));
       });
 
@@ -536,7 +536,7 @@ describe('Auth session flow (e2e)', () => {
           .get('/auth/sessions')
           .set('Authorization', `Bearer ${owner.accessToken}`)
           .expect(200);
-        const ids = (res.body as Array<{ id: string }>).map((s) => s.id);
+        const ids = (res.body as { id: string }[]).map((s) => s.id);
         expect(ids).not.toContain(sessionId(stale.access_token));
       });
 
@@ -557,7 +557,7 @@ describe('Auth session flow (e2e)', () => {
           .get('/auth/sessions')
           .set('Authorization', `Bearer ${newer.access_token}`)
           .expect(200);
-        expect((res.body as Array<{ id: string }>).map((s) => s.id)).toEqual([
+        expect((res.body as { id: string }[]).map((s) => s.id)).toEqual([
           sessionId(newer.access_token),
           sessionId(older.access_token),
           sessionId(owner.accessToken),

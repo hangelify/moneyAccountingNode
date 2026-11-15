@@ -270,7 +270,7 @@ export class BillCrudService {
          LEFT   JOIN markets m ON m.id = b.market_id
          WHERE  ${where}`,
         params,
-      ) as Promise<Array<{ count: string }>>,
+      ) as Promise<{ count: string }[]>,
       this.em.getConnection().execute(
         `SELECT b.id, b.bill_date::text, b.currency, b.amount::text, b.description,
                 b.status, b.source, b.duplicate_of_id, b.created_at::text,
@@ -292,7 +292,7 @@ export class BillCrudService {
          LIMIT  ? OFFSET ?`,
         [this.itemTolerance, source, source, ...params, limit, offset],
       ) as Promise<
-        Array<{
+        {
           id: string;
           bill_date: string;
           currency: string | null;
@@ -308,7 +308,7 @@ export class BillCrudService {
           amount_mismatch: boolean;
           household_currency: Currency;
           household_amount: string | null;
-        }>
+        }[]
       >,
     ]);
 
@@ -397,8 +397,7 @@ export class BillCrudService {
       await em.populate(bill, ['market']);
 
       if (dto.market_id === null) {
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-        bill.market = null as any;
+        bill.market = null;
       } else {
         const market = await this.resolveMarket(em, householdId, dto);
         if (market) bill.market = market;
@@ -697,9 +696,7 @@ export class BillCrudService {
       bill.confirmed_by = em.getReference(User, userId);
       bill.confirmed_at = new Date();
 
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-      bill.market =
-        (await this.resolveMarket(em, householdId, dto)) ?? (null as any);
+      bill.market = (await this.resolveMarket(em, householdId, dto)) ?? null;
 
       // Apply overrides
       bill.bill_date = dto.bill_date;

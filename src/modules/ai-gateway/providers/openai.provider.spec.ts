@@ -11,7 +11,6 @@ import {
 } from './__fixtures__/call-bounds.shared';
 
 const mockCreate = jest.fn();
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const mockCtor = jest.fn((..._args: unknown[]) => ({
   chat: { completions: { create: mockCreate } },
 }));
@@ -26,7 +25,7 @@ jest.mock('openai', () => {
   return { __esModule: true, default: MockOpenAI };
 });
 
-/* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call */
+/* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call -- тест читает аргументы вызовов нетипизированного мока SDK */
 describe('OpenAiProvider', () => {
   beforeEach(() => {
     mockCreate.mockReset();
@@ -209,4 +208,4 @@ describe('OpenAiProvider', () => {
     connectionError: () => new OpenAI.APIConnectionError({}),
   });
 });
-/* eslint-enable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call */
+/* eslint-enable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call -- конец блока выше */

@@ -34,9 +34,9 @@ const rowFailures = (r: Record<string, unknown>) =>
   failuresOf({ rows: [row(r)] });
 
 describe('ManualBatchDto', () => {
-  beforeEach(() =>
-    jest.useFakeTimers().setSystemTime(new Date('2026-11-09T12:00:00Z')),
-  );
+  beforeEach(() => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-11-09T12:00:00Z'));
+  });
   afterEach(() => jest.useRealTimers());
 
   it('accepts a minimal row and every optional field', () => {

@@ -105,10 +105,10 @@ export class OpenAiProvider implements LlmProvider {
     );
 
     const resp = response as {
-      choices?: Array<{
+      choices?: {
         message?: { content?: string | null; refusal?: string | null };
         finish_reason?: string | null;
-      }>;
+      }[];
       usage?: { prompt_tokens?: number; completion_tokens?: number };
       model?: string;
     };

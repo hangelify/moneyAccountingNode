@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/unbound-method, @typescript-eslint/no-unsafe-assignment */
+/* eslint-disable @typescript-eslint/no-unsafe-assignment -- expect.objectContaining() и expect.any() типизированы как any */
 import { EntityManager, EntityRepository } from '@mikro-orm/core';
 import { PlaningHorizonService } from './planing-horizon.service';
 import { PlaningHorizon } from '../../entities/planing-horizon.entity';

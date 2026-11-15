@@ -93,7 +93,7 @@ describe('duplicate bills schema (PostgreSQL)', () => {
     const rows = (await exec(
       `select "status", "duplicate_of_id" from "bills" where "id" = ?`,
       [billA],
-    )) as Array<{ status: string; duplicate_of_id: string }>;
+    )) as { status: string; duplicate_of_id: string }[];
     expect(rows[0]).toEqual({ status: 'duplicate', duplicate_of_id: billB });
   });
 

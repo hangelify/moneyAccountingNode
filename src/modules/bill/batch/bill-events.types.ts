@@ -15,7 +15,7 @@ export function householdOfChannel(channel: string): string | null {
     : null;
 }
 
-export type ItemEvent = {
+export interface ItemEvent {
   batch_id: string;
   item_id: string;
   position: number;
@@ -24,15 +24,15 @@ export type ItemEvent = {
   bill_id?: string;
   parse_error_code?: BillParseErrorCode;
   parse_error_message?: string;
-};
+}
 
-export type BatchCompletedEvent = {
+export interface BatchCompletedEvent {
   batch_id: string;
   total: number;
   done: number;
   failed: number;
   created_by_user_id: string | null;
-};
+}
 
 export type BillEvent =
   | { type: 'item.processing' | 'item.done' | 'item.failed'; data: ItemEvent }

@@ -13,7 +13,7 @@ RUN npm pkg delete scripts.prepare && npm ci
 # --- Lint, type check and unit tests (no database needed) ---
 FROM deps AS test
 
-COPY tsconfig*.json nest-cli.json eslint.config.mjs .prettierrc ./
+COPY tsconfig*.json nest-cli.json eslint.config.mjs eslint-suppressions.json .prettierrc ./
 COPY src ./src
 COPY scripts ./scripts
 COPY test ./test

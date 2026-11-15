@@ -1252,7 +1252,7 @@ describe('totals and the bill list with a duplicate (PostgreSQL)', () => {
     await orm.close();
   });
 
-  const sum = (rows: Array<{ total: number }>) =>
+  const sum = (rows: { total: number }[]) =>
     rows.reduce((s, r) => s + r.total, 0);
 
   it('the dashboard counts the receipt once, per currency and in the household currency', async () => {

@@ -1,7 +1,7 @@
-export type LlmImage = {
+export interface LlmImage {
   data: Buffer;
   mediaType: 'image/png' | 'image/jpeg' | 'image/webp';
-};
+}
 
 export type LlmMessage =
   | { role: 'system'; text: string }

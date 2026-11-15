@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/unbound-method */
 import { NotFoundException } from '@nestjs/common';
 import { EntityManager, EntityRepository } from '@mikro-orm/core';
 import { MarketService } from './market.service';

@@ -122,10 +122,9 @@ export class AiGatewayService {
     const ms = this.config.taskDeadlineMs;
     const endsAt = Date.now() + ms;
     const ctrl = new AbortController();
-    const timer = setTimeout(
-      () => ctrl.abort(new DeadlineExceededError(ms)),
-      ms,
-    );
+    const timer = setTimeout(() => {
+      ctrl.abort(new DeadlineExceededError(ms));
+    }, ms);
     try {
       return await this.runWithin(task, input, opts, {
         signal: ctrl.signal,

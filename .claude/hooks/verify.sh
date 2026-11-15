@@ -8,6 +8,8 @@ input=$(cat)
 [ "$(jq -r '.stop_hook_active // false' <<<"$input")" = "true" ] && exit 0
 root=$(git -C "$(dirname "$0")" rev-parse --show-toplevel)
 cd "$root" || exit 0
+# shellcheck source=project-node.sh
+. "$(dirname "$0")/project-node.sh"
 base=$(git merge-base HEAD origin/dev 2>/dev/null || git rev-parse HEAD)
 if git diff --quiet "$base" -- && [ -z "$(git ls-files --others --exclude-standard)" ]; then
   exit 0
@@ -22,6 +24,7 @@ fingerprint=$( {
 } | sha256sum | cut -d' ' -f1)
 [ -f "$stamp" ] && [ "$(cat "$stamp")" = "$fingerprint" ] && exit 0
 
+use_project_node "$root" || exit 2
 if ! out=$(npm run --silent verify 2>&1); then
   {
     echo "npm run verify is red, so the task is not done:"

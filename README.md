@@ -718,7 +718,9 @@ npm run verify
 - before a shell command (quoted text and heredocs are ignored, so commit messages and `grep` patterns are fine): no `schema:update/drop`, `migration:fresh` (outside CI), force push, skipping the commit hook (`--no-verify`, `-n`, `HUSKY=0`), `--suppress-all/--suppress-rule`, growing the dependency-cruiser baseline;
 - before the agent finishes: `npm run verify` when the branch changed anything against `origin/dev` and the tree differs from the last green run.
 
-`bash .claude/hooks/test-hooks.sh` (also a CI step) checks the guards against the cases they must block and allow.
+The lint and verify hooks run the Node major from `.nvmrc`, whatever `node` is first on the `PATH` Claude Code started with: they take the newest matching version from nvm (`$NVM_DIR`, default `~/.nvm`). If none is installed they stop with "Node 24 is required" instead of running the tests (on older Node, Jest cannot load the ESM-only packages and fails dozens of suites).
+
+`bash .claude/hooks/test-hooks.sh` (also a CI step) checks the guards against the cases they must block and allow, and the Node selection.
 
 `.github/CODEOWNERS` asks for the owner's review on the same files.
 

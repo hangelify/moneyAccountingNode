@@ -15,6 +15,9 @@ case "$(realpath "$file")" in
   *) exit 0 ;;
 esac
 cd "$root" || exit 0
+# shellcheck source=project-node.sh
+. "$(dirname "$0")/project-node.sh"
+use_project_node "$root" || exit 2
 if ! out=$(npx eslint --max-warnings 0 "$file" 2>&1); then
   {
     echo "ESLint failed for $file:"

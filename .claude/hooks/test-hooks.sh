@@ -61,5 +61,30 @@ GUARD_BASE=fa578d4 expect 2 guard-files.sh 'migration on base' "$(edit src/migra
 expect 0 guard-files.sh 'rewrite keeps disables' "$(write src/modules/auth/auth.module.spec.ts "$(cat "$root/src/modules/auth/auth.module.spec.ts")")"
 expect 0 guard-files.sh 'new migration'      "$(write src/migrations/Migration20991231000000_New.ts x)"
 
+# project-node: hooks run the Node major from .nvmrc, whatever PATH they get.
+node_case() { # node_case <name> <want node -v | "fail"> <PATH node version> [nvm versions...]
+  local name=$1 want=$2 onpath=$3 tmp got v
+  shift 3
+  tmp=$(mktemp -d)
+  echo 24 >"$tmp/.nvmrc"
+  mkdir -p "$tmp/path"
+  printf '#!/bin/sh\necho v%s\n' "$onpath" >"$tmp/path/node"
+  for v in "$@"; do
+    mkdir -p "$tmp/nvm/versions/node/v$v/bin"
+    printf '#!/bin/sh\necho v%s\n' "$v" >"$tmp/nvm/versions/node/v$v/bin/node"
+  done
+  chmod +x "$tmp"/path/node "$tmp"/nvm/versions/node/*/bin/node 2>/dev/null
+  got=$(PATH="$tmp/path:/usr/bin:/bin" NVM_DIR="$tmp/nvm" bash -c \
+    '. "$1/project-node.sh"; use_project_node "$2" 2>/dev/null && node -v || echo fail' _ "$dir" "$tmp")
+  rm -rf "$tmp"
+  if [ "$got" != "$want" ]; then
+    echo "FAIL project-node: $name (got $got, want $want)"
+    fail=1
+  fi
+}
+node_case 'already on 24'        v24.1.0  24.1.0
+node_case 'picks newest 24'      v24.21.0 22.13.1 22.13.1 24.9.0 24.21.0
+node_case 'no 24 installed'      fail     22.13.1 22.13.1
+
 [ "$fail" = 0 ] && echo "hooks: all cases pass"
 exit "$fail"

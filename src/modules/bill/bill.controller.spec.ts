@@ -22,6 +22,7 @@ import { BillCrudService } from './bill-crud.service';
 import { BillDuplicatesService } from './bill-duplicates.service';
 import { BillDashboardService } from './bill-dashboard.service';
 import { BillDashboardQueryDto } from './dto/bill-dashboard.dto';
+import { BillMoveService } from './bill-move.service';
 import { SpendingBreakdownService } from './spending-breakdown.service';
 import { SpendingBreakdownQueryDto } from './dto/spending-breakdown.dto';
 import { JwtAuthGuard } from '../auth';
@@ -62,9 +63,11 @@ describe('BillController', () => {
   const getSignedUrl = jest.fn();
   const getSpendingBreakdown = jest.fn();
   const createBatch = jest.fn();
+  const move = jest.fn();
 
   beforeEach(async () => {
     createBatch.mockReset();
+    move.mockReset();
     parseAndCategorize.mockReset();
     getSignedUrl.mockReset();
     findCandidates.mockReset();
@@ -89,6 +92,7 @@ describe('BillController', () => {
           provide: BillDashboardService,
           useValue: { getDashboard: jest.fn() },
         },
+        { provide: BillMoveService, useValue: { move } },
         { provide: STORAGE_SERVICE, useValue: { getSignedUrl } },
         {
           provide: SpendingBreakdownService,
@@ -165,6 +169,22 @@ describe('BillController', () => {
       duplicate: false,
       possible_duplicates: [],
     });
+  });
+
+  it('moveBills passes the household and user to BillMoveService', async () => {
+    const dto = { target_household_id: 'hh-2', bill_ids: ['b-1'] };
+    const result = {
+      target_household_id: 'hh-2',
+      bills: [{ id: 'b-1', already_moved: false }],
+    };
+    move.mockResolvedValue(result);
+    const res = await controller.moveBills(
+      { id: 'user-xyz' } as never,
+      { householdId: 'hh-1', role: 'owner' } as never,
+      dto,
+    );
+    expect(move).toHaveBeenCalledWith('hh-1', 'user-xyz', dto);
+    expect(res).toBe(result);
   });
 
   describe('possible duplicates', () => {

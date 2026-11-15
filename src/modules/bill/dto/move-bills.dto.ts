@@ -7,7 +7,7 @@ import {
 } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
-export const MAX_MOVE_BILLS = 100;
+const MAX_MOVE_BILLS = 100;
 
 export class MoveBillsDto {
   @ApiProperty({
@@ -109,7 +109,8 @@ export class MoveBillsNotFoundResponseDto {
   @ApiProperty({
     type: [String],
     format: 'uuid',
-    description: 'The ids that are not bills of the household in the path',
+    description:
+      'The ids found live in neither the source household (the path) nor the target household',
   })
   bill_ids!: string[];
 }

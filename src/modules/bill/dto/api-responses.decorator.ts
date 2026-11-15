@@ -37,6 +37,11 @@ import {
   ManualBatchResponseDto,
   ValidationErrorResponseDto,
 } from './manual-batch-response.dto';
+import {
+  MoveBillsConflictResponseDto,
+  MoveBillsNotFoundResponseDto,
+  MoveBillsResponseDto,
+} from './move-bills.dto';
 
 export function ApiParsePhotoResponses(): MethodDecorator & ClassDecorator {
   return applyDecorators(
@@ -153,6 +158,34 @@ export const ApiManualBatchResponses = () =>
     ApiForbiddenResponse({ description: 'Not a member of the household' }),
     ApiTooManyRequestsResponse({
       description: 'More than 20 batches a minute',
+    }),
+  );
+
+export const ApiMoveBillsResponses = (): MethodDecorator & ClassDecorator =>
+  applyDecorators(
+    ApiOkResponse({
+      type: MoveBillsResponseDto,
+      description:
+        'Bills moved; bills already in the target are flagged already_moved',
+    }),
+    ApiBadRequestResponse({
+      type: ValidationErrorResponseDto,
+      description:
+        'The body fails validation (no bill_ids, more than 100, a non-UUID id, or a target equal to the household in the path)',
+    }),
+    ApiUnauthorizedResponse({ description: 'Unauthorized' }),
+    ApiForbiddenResponse({
+      description: 'Not a member of the target household, or it does not exist',
+    }),
+    ApiNotFoundResponse({
+      type: MoveBillsNotFoundResponseDto,
+      description:
+        'Some bill ids are live in neither the household in the path nor the target; bill_ids lists them. Nothing is moved',
+    }),
+    ApiConflictResponse({
+      type: MoveBillsConflictResponseDto,
+      description:
+        'Nothing is moved. conflicts[].reason is one of: status_not_movable, has_duplicates, draft_image_conflict, client_batch_conflict',
     }),
   );
 
@@ -280,7 +313,8 @@ export const ApiMarkDuplicateResponses = () =>
     ApiResponse({ status: 401, description: 'Unauthorized' }),
   );
 
-export const ApiUnmarkDuplicateResponses = () =>
+export const ApiUnmarkDuplicateResponses = (): MethodDecorator &
+  ClassDecorator =>
   applyDecorators(
     ApiResponse({
       status: 200,
@@ -292,7 +326,8 @@ export const ApiUnmarkDuplicateResponses = () =>
     ApiResponse({ status: 401, description: 'Unauthorized' }),
   );
 
-export const ApiDuplicateSuggestionsResponses = () =>
+export const ApiDuplicateSuggestionsResponses = (): MethodDecorator &
+  ClassDecorator =>
   applyDecorators(
     ApiResponse({
       status: 200,
@@ -306,7 +341,8 @@ export const ApiDuplicateSuggestionsResponses = () =>
     ApiResponse({ status: 401, description: 'Unauthorized' }),
   );
 
-export const ApiDismissDuplicateResponses = () =>
+export const ApiDismissDuplicateResponses = (): MethodDecorator &
+  ClassDecorator =>
   applyDecorators(
     ApiResponse({
       status: 204,
@@ -331,7 +367,8 @@ export const ApiDashboardResponses = () =>
     ApiResponse({ status: 401, description: 'Unauthorized' }),
   );
 
-export const ApiSpendingBreakdownResponses = () =>
+export const ApiSpendingBreakdownResponses = (): MethodDecorator &
+  ClassDecorator =>
   applyDecorators(
     ApiResponse({
       status: 200,

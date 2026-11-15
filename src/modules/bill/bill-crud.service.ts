@@ -65,6 +65,7 @@ import {
   applyLineShortcut,
   checkLineShortcut,
   hasLineShortcut,
+  sumCents,
   syncManualTotal,
 } from './manual-bill-edit';
 import {
@@ -420,10 +421,16 @@ export class BillCrudService {
       if (dto.purchase_time !== undefined)
         bill.purchase_time = dto.purchase_time;
 
+      const centsBefore = sumCents(
+        await em.find(BillSubCategory, { bill: bill.id }),
+      );
       const lines = dto.items
         ? await this.applyItems(em, bill, dto.items, found!)
         : await this.editLines(em, bill, dto, found);
-      syncManualTotal(bill, lines, dto, this.itemTolerance);
+      syncManualTotal(bill, lines, dto, {
+        tolerance: this.itemTolerance,
+        centsBefore,
+      });
       await em.flush();
       await em.populate(lines, ['sub_category.category', 'category']);
       return { bill, dto: this.toDetailDto(bill, lines) };

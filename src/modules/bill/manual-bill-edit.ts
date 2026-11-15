@@ -19,6 +19,11 @@ import { UpdateBillDto } from './dto/update-bill.dto';
 
 const toCents = (v: number | string): number => Math.round(Number(v) * 100);
 
+/** The sum of the line amounts, in integer cents. */
+export function sumCents(lines: { amount: number | string }[]): number {
+  return lines.reduce((sum, l) => sum + toCents(l.amount), 0);
+}
+
 /** True when the update names a field that edits the bill's only line. */
 export function hasLineShortcut(dto: UpdateBillDto): boolean {
   return (
@@ -76,12 +81,14 @@ export function applyLineShortcut(
 /**
  * Keeps a manual bill's total and lines in step after an update; a no-op
  * on other bills. Throws 400 when the update sets both and they disagree.
+ * `centsBefore` is the line sum before the update: items that leave it as
+ * it was (a recategorised line) keep the total, even one already apart.
  */
 export function syncManualTotal(
   bill: Bill,
   lines: BillSubCategory[],
   dto: UpdateBillDto,
-  tolerance: number,
+  ctx: { tolerance: number; centsBefore: number },
 ): void {
   if (bill.source !== BillSource.MANUAL) return;
   const [only] = lines;
@@ -94,7 +101,8 @@ export function syncManualTotal(
     return;
   }
   if (dto.items && dto.total_amount === undefined) {
-    bill.amount = lines.reduce((sum, l) => sum + toCents(l.amount), 0) / 100;
+    const cents = sumCents(lines);
+    if (cents !== ctx.centsBefore) bill.amount = cents / 100;
     return;
   }
   if (
@@ -102,7 +110,7 @@ export function syncManualTotal(
     isAmountMismatch(
       bill.amount,
       lines.map((l) => l.amount),
-      tolerance,
+      ctx.tolerance,
     )
   ) {
     throw new BadRequestException(

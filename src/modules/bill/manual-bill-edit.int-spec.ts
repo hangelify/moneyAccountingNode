@@ -297,6 +297,23 @@ describe('manual bill edit (PostgreSQL)', () => {
     expect(money((await load(id)).bill.amount)).toBe(10);
   });
 
+  it('keeps the total of a mismatched manual bill when items only recategorise', async () => {
+    const { id } = await makeBill([4, 4]);
+    const { lines } = await load(id);
+
+    const result = await update(id, {
+      items: lines.map((l) => ({
+        id: l.id,
+        category_id: transport,
+        product_count: 1,
+        amount: money(l.amount),
+      })),
+    });
+
+    expect(result.total_amount).toBe(10);
+    expect(money((await load(id)).bill.amount)).toBe(10);
+  });
+
   it('edits the date of a legacy manual bill with mismatched lines', async () => {
     const { id } = await makeBill([4, 4]);
 

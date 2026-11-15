@@ -22,6 +22,7 @@ A NestJS REST API for household financial management. Supports multi-user househ
 - [Rate Limiting](#rate-limiting)
 - [Data Retention](#data-retention)
 - [Testing](#testing)
+- [Code Checks](#code-checks)
 - [Useful Scripts](#useful-scripts)
 
 ---
@@ -653,6 +654,39 @@ If no configured provider satisfies a required AI task, the application refuses 
 
 ---
 
+## Code Checks
+
+One command runs every check that needs no database:
+
+```bash
+npm run verify
+```
+
+| Where | What runs |
+|---|---|
+| `git commit` (husky) | `prettier --check` and `eslint --max-warnings 0` on staged `.ts` files, then `npm run type-check`. Nothing is auto-fixed. |
+| GitHub CI (`.github/workflows/ci.yml`) | `npm run verify`, then build, migrations, e2e and integration tests, smoke test, Docker image. |
+
+`--no-verify` skips the commit hook, so CI is the gate that matters.
+
+### Lint baseline
+
+Old violations are frozen in `eslint-suppressions.json`; new code must pass every rule.
+A frozen count may only go down:
+
+- Fixed some frozen violations? `npm run lint:check` fails with "There are suppressions left that do not occur anymore". Run `npm run lint:prune` and commit `eslint-suppressions.json`.
+- Never add to the baseline by hand or with `--suppress-all`/`--suppress-rule` to make a new violation pass.
+
+### Branch protection (GitHub settings, owner only)
+
+CI only blocks a merge when the branch requires it. In **Settings → Branches → Add branch ruleset** for `dev` and `main`:
+
+1. Target branches: `dev`, `main`.
+2. Enable **Require a pull request before merging**.
+3. Enable **Require status checks to pass**, add `lint-and-test` and `docker-image`, and tick **Require branches to be up to date**.
+4. Enable **Block force pushes**.
+5. Bypass list: the repository owner only (for emergencies).
+
 ## Useful Scripts
 
 | Script | Description |
@@ -663,7 +697,9 @@ If no configured provider satisfies a required AI task, the application refuses 
 | `npm run start:debug` | Start in debug + watch mode |
 | `npm run start:prod` | Run production build (`node dist/main`) |
 | `npm run lint` | Run ESLint and auto-fix |
-| `npm run lint:check` | Run ESLint without fixing |
+| `npm run lint:check` | Run ESLint without fixing (baseline applied, 0 warnings allowed) |
+| `npm run lint:prune` | Drop baseline entries for violations that were fixed |
+| `npm run verify` | type-check, lint and unit tests: the same gate CI runs |
 | `npm run format` | Format all source files with Prettier |
 | `npm run type-check` | TypeScript type check without emitting |
 | `npm test` | Run unit tests |

@@ -1,10 +1,6 @@
-import {
-  Injectable,
-  NotFoundException,
-  BadRequestException,
-} from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@mikro-orm/nestjs';
-import { EntityRepository, EntityManager } from '@mikro-orm/core';
+import { EntityRepository, EntityManager, LockMode } from '@mikro-orm/core';
 import { Category } from '../../entities/category.entity';
 import { Household } from '../../entities/household.entity';
 import { CreateCategoryDto } from './dto/create-category.dto';
@@ -229,19 +225,18 @@ export class CategoryService {
     now: Date = new Date(),
   ): Promise<void> {
     await this.em.fork().transactional(async (tx) => {
+      // Lock first, then read sub-categories: one created concurrently is
+      // either committed before the lock is granted (and loaded below) or
+      // blocked until this transaction ends.
       const category = await tx.findOne(
         Category,
         { id, household: { id: householdId }, deleted_at: null },
-        { populate: ['subCategories'] },
+        { lockMode: LockMode.PESSIMISTIC_WRITE },
       );
       if (!category) {
         throw new NotFoundException(`Category with ID ${id} not found`);
       }
-      if (category.deleted_at) {
-        throw new BadRequestException(
-          `Category with ID ${id} is already deleted`,
-        );
-      }
+      await tx.populate(category, ['subCategories'], { refresh: true });
       // Before deleted_at is set: the lock inside only finds a live category,
       // and a pending change would be flushed by its first query.
       await writeCategoryLimit(

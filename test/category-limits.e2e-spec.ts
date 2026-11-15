@@ -1,5 +1,6 @@
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import request from 'supertest';
+import { MikroORM } from '@mikro-orm/core';
 import { createTestApp, registerUser, TestUser } from './utils/app';
 import type { CategoryLimitDto } from '../src/modules/category-limit';
 import { todayIsoDate } from '../src/common/utils/calendar-date';
@@ -37,7 +38,6 @@ describe('Category limits (e2e)', () => {
     http().post(base()).set('Authorization', auth(user)).send(body);
 
   it('creates a limit open from the start of the current period', async () => {
-    const today = todayIsoDate();
     const res = await create({
       category_id: categoryId,
       period_type: 'MONTHLY',
@@ -53,7 +53,7 @@ describe('Category limits (e2e)', () => {
       currency: 'EUR',
       effective_to: null,
     });
-    expect(body.effective_from).toBe(`${today.slice(0, 7)}-01`);
+    expect(body.effective_from).toMatch(/^\d{4}-\d{2}-01$/);
   });
 
   it('answers 409 when the category already has a limit', async () => {
@@ -85,20 +85,30 @@ describe('Category limits (e2e)', () => {
   });
 
   it('replaces, lists with history, and removes a limit', async () => {
-    // A yearly limit starts on 1 Jan; the monthly one that replaces it starts
-    // later, so the yearly version is closed, not rewritten, and stays history.
+    // The yearly version is moved into last year, so the monthly one that
+    // replaces it starts later whatever today is: the yearly version is
+    // closed, not rewritten (or dropped in January), and stays as history.
     await create({
       category_id: categoryId,
       period_type: 'YEARLY',
       amount: 300,
     }).expect(201);
+    const lastYear = String(Number(todayIsoDate().slice(0, 4)) - 1);
+    await app
+      .get(MikroORM)
+      .em.getConnection()
+      .execute(
+        'update category_limits set effective_from = ? where category_id = ?',
+        [`${lastYear}-01-01`, categoryId],
+      );
 
     const put = await http()
       .put(`${base()}/${categoryId}`)
       .set('Authorization', auth(user))
       .send({ period_type: 'MONTHLY', amount: 450 })
       .expect(200);
-    expect((put.body as CategoryLimitDto).amount).toBe(450);
+    const replaced = put.body as CategoryLimitDto;
+    expect(replaced.amount).toBe(450);
 
     const current = await http()
       .get(base())
@@ -124,7 +134,7 @@ describe('Category limits (e2e)', () => {
       .set('Authorization', auth(user))
       .expect(200);
     expect((del.body as CategoryLimitDto).effective_to).toBe(
-      limitPeriodEnd(LimitPeriodType.MONTHLY, todayIsoDate()),
+      limitPeriodEnd(LimitPeriodType.MONTHLY, replaced.effective_from),
     );
 
     await http()

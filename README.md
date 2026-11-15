@@ -99,13 +99,11 @@ HouseholdMember                                   RefreshToken
  ├──────────────────────────────────────────────────────┐
  │                                                      │
  ▼                                                      ▼
-CategoryLimit ───► Category ──── SubCategory
- (versions per category)                    │
-                                            │
-Market ◄──── Bill ──────────────────────── BillSubCategory ─────────┘
-              (created_by → User)           (line items, amount, AI confidence)
-              (household → Household)
-              (status: DRAFT | CONFIRMED)
+Category ──── SubCategory ──────┐                  Market ◄──── Bill
+ │                              │                               (created_by → User)
+ │ has versions                 ▼                               (household → Household)
+ ▼                       BillSubCategory ◄─────────────────────  (status: DRAFT | CONFIRMED)
+CategoryLimit            (line items, amount, AI confidence)
 
 User ──► AiRequest ──► AiRequestAttempt
          (task_name)    (provider, model, tokens, cost)

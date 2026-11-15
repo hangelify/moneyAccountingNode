@@ -7,6 +7,9 @@ type Decorator = MethodDecorator & ClassDecorator;
 const ApiUnauthorizedResponse = (): Decorator =>
   ApiResponse({ status: 401, description: 'Unauthorized' });
 
+const ApiForbiddenResponse = (): Decorator =>
+  ApiResponse({ status: 403, description: 'Not a member of the household' });
+
 const ApiBadRequestResponse = (description: string): Decorator =>
   ApiResponse({ status: 400, description });
 
@@ -23,6 +26,7 @@ export const ApiListCategoryLimitsResponses = (): Decorator =>
     }),
     ApiBadRequestResponse('include_history is not true or false'),
     ApiUnauthorizedResponse(),
+    ApiForbiddenResponse(),
   );
 
 export const ApiCreateCategoryLimitResponses = (): Decorator =>
@@ -42,6 +46,7 @@ export const ApiCreateCategoryLimitResponses = (): Decorator =>
       description: 'The category already has a limit; use PUT',
     }),
     ApiUnauthorizedResponse(),
+    ApiForbiddenResponse(),
   );
 
 export const ApiUpdateCategoryLimitResponses = (): Decorator =>
@@ -56,6 +61,7 @@ export const ApiUpdateCategoryLimitResponses = (): Decorator =>
       'Category not found in the household, or it has no open limit',
     ),
     ApiUnauthorizedResponse(),
+    ApiForbiddenResponse(),
   );
 
 export const ApiDeleteCategoryLimitResponses = (): Decorator =>
@@ -71,4 +77,5 @@ export const ApiDeleteCategoryLimitResponses = (): Decorator =>
       'Category not found in the household, or it has no open limit',
     ),
     ApiUnauthorizedResponse(),
+    ApiForbiddenResponse(),
   );

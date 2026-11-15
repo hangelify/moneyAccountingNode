@@ -12,10 +12,12 @@ import { BulkCreateCategoryDto } from './dto/bulk-create-category.dto';
 import { UpdateCategoryDto } from './dto/update-category.dto';
 import { CategoryResponseDto } from './dto/category-response.dto';
 import { CategoryBaseResponseDto } from './dto/category-base-response.dto';
+import { writeCategoryLimit } from '../category-limit';
 import { assertUniqueNames } from '../../common/utils/unique-names.util';
 import {
   addCalendarDays,
   chisinauToday,
+  todayIsoDate,
 } from '../../common/utils/calendar-date';
 import {
   RECENT_CATEGORIES_DAYS,
@@ -221,24 +223,39 @@ export class CategoryService {
    * Only deletes category if it belongs to the household
    * Its live sub-categories are soft deleted in the same flush
    */
-  async deleteCategory(id: string, householdId: string): Promise<void> {
-    const category = await this.categoryRepository.findOne(
-      { id, household: { id: householdId }, deleted_at: null },
-      { populate: ['subCategories'] },
-    );
-    if (!category) {
-      throw new NotFoundException(`Category with ID ${id} not found`);
-    }
-    if (category.deleted_at) {
-      throw new BadRequestException(
-        `Category with ID ${id} is already deleted`,
+  async deleteCategory(
+    id: string,
+    householdId: string,
+    now: Date = new Date(),
+  ): Promise<void> {
+    await this.em.fork().transactional(async (tx) => {
+      const category = await tx.findOne(
+        Category,
+        { id, household: { id: householdId }, deleted_at: null },
+        { populate: ['subCategories'] },
       );
-    }
-    const now = new Date();
-    category.deleted_at = now;
-    for (const sc of category.subCategories) {
-      sc.deleted_at ??= now;
-    }
-    await this.em.persist(category).flush();
+      if (!category) {
+        throw new NotFoundException(`Category with ID ${id} not found`);
+      }
+      if (category.deleted_at) {
+        throw new BadRequestException(
+          `Category with ID ${id} is already deleted`,
+        );
+      }
+      // Before deleted_at is set: the lock inside only finds a live category,
+      // and a pending change would be flushed by its first query.
+      await writeCategoryLimit(
+        tx,
+        householdId,
+        id,
+        { kind: 'remove' },
+        { userId: null, today: todayIsoDate(now) },
+      );
+      category.deleted_at = now;
+      for (const sc of category.subCategories) {
+        sc.deleted_at ??= now;
+      }
+      await tx.flush();
+    });
   }
 }

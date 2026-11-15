@@ -13,6 +13,7 @@ import {
   ArrayMaxSize,
   ValidateNested,
   MaxLength,
+  ValidateIf,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiPropertyOptional } from '@nestjs/swagger';
@@ -26,6 +27,9 @@ import {
 } from '../tasks/schemas/parsed-bill.schema';
 import { MAX_BILL_DESCRIPTION_LENGTH, MAX_BILL_ITEMS } from './create-bill.dto';
 import { ConfirmBillItemDto, NewMarketDto } from './confirm-bill.dto';
+
+const LINE_SHORTCUT =
+  'Manual bill with one line only; edits that line. Not together with items.';
 
 export class UpdateBillDto {
   @ApiPropertyOptional({
@@ -110,4 +114,30 @@ export class UpdateBillDto {
   @Type(() => ConfirmBillItemDto)
   @IsOptional()
   items?: ConfirmBillItemDto[];
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description: `${LINE_SHORTCUT} Moves the line to this category; a sub-category of another category is dropped.`,
+  })
+  @IsUUID()
+  @IsOptional()
+  category_id?: string;
+
+  @ApiPropertyOptional({
+    format: 'uuid',
+    nullable: true,
+    description: `${LINE_SHORTCUT} Sets the sub-category and with it the category; null drops the sub-category.`,
+  })
+  @ValidateIf((o: UpdateBillDto) => o.sub_category_id !== null)
+  @IsUUID()
+  @IsOptional()
+  sub_category_id?: string | null;
+
+  @ApiPropertyOptional({
+    example: 'coffee',
+    description: `${LINE_SHORTCUT} The line name.`,
+  })
+  @IsString()
+  @Length(1, 255)
+  @IsOptional()
+  note?: string;
 }

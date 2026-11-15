@@ -21,6 +21,7 @@ import { BillStatus } from '../../types/bill-status.enum';
 import { Currency } from '../../types/currency.enum';
 import { ExchangeRateService } from '../exchange-rate';
 import { MarketService } from '../market';
+import { warmBillRates } from './bill-rates';
 import { assignLineCategory, toBillResponse } from './bill-lines';
 import {
   BILL_ITEM_TOLERANCE,
@@ -95,7 +96,13 @@ export class ManualBillBatchService {
       throw err;
     }
 
-    await this.warmRates(household.currency, bills);
+    await warmBillRates(
+      this.exchangeRates,
+      this.log,
+      household.currency,
+      bills,
+      'a manual batch',
+    );
     return {
       created: true,
       body: await this.toResponse(householdId, dto.client_batch_id, bills),
@@ -252,31 +259,6 @@ export class ManualBillBatchService {
     });
     await em.flush();
     return bills;
-  }
-
-  /**
-   * Saves the rates of the batch's days once it has committed. Never throws:
-   * the bills stand even if the rate API is down.
-   */
-  private async warmRates(
-    householdCurrency: Currency,
-    bills: Bill[],
-  ): Promise<void> {
-    const days = [
-      ...new Set(
-        bills
-          .filter((b) => b.currency !== householdCurrency)
-          .map((b) => b.bill_date),
-      ),
-    ];
-    if (!days.length) return;
-    try {
-      await this.exchangeRates.ensureDays(days, { max: days.length });
-    } catch (e) {
-      this.log.warn(
-        `Could not save rates for a manual batch: ${(e as Error).message}`,
-      );
-    }
   }
 
   private async toResponse(

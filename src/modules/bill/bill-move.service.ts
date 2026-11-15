@@ -274,16 +274,7 @@ function countLines(
   lines: RemappedLine[],
 ): MovedBillDto[] {
   const counts = new Map<string, MovedBillDto>(
-    ids.map((id) => [
-      id,
-      {
-        id,
-        lines_total: 0,
-        lines_lost_sub_category: 0,
-        lines_lost_category: 0,
-        already_moved: false,
-      },
-    ]),
+    ids.map((id) => [id, emptyCount(id, false)]),
   );
   for (const line of lines) {
     const c = counts.get(line.bill_id);
@@ -292,16 +283,18 @@ function countLines(
     if (line.lost_sub) c.lines_lost_sub_category++;
     if (line.lost_cat) c.lines_lost_category++;
   }
-  return order.map(
-    (id) =>
-      counts.get(id) ?? {
-        id,
-        lines_total: 0,
-        lines_lost_sub_category: 0,
-        lines_lost_category: 0,
-        already_moved: true,
-      },
-  );
+  return order.map((id) => counts.get(id) ?? emptyCount(id, true));
+}
+
+/** A bill's entry before any of its lines is counted. */
+function emptyCount(id: string, alreadyMoved: boolean): MovedBillDto {
+  return {
+    id,
+    lines_total: 0,
+    lines_lost_sub_category: 0,
+    lines_lost_category: 0,
+    already_moved: alreadyMoved,
+  };
 }
 
 /** The one log entry of a move; moved bills only. */
@@ -324,7 +317,8 @@ function logMove(
     metadata: {
       source_household_id: source,
       target_household_id: dto.target_household_id,
-      bill_ids: dto.bill_ids,
+      bill_ids: bills.map((m) => m.id),
+      requested_ids: dto.bill_ids,
       lost: bills.map((m) => ({
         id: m.id,
         sub: m.lines_lost_sub_category,

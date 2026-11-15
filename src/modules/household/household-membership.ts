@@ -5,7 +5,7 @@ import { HouseholdMember } from '../../entities/household-member.entity';
 /**
  * Role of the user in a household, or null when the household does not
  * exist, is deleted, or the user is not a member. Callers decide how to
- * report null (guard: 403, bill move: 404).
+ * report null (guard and bill move: 403).
  */
 export async function findHouseholdRole(
   households: EntityRepository<Household>,

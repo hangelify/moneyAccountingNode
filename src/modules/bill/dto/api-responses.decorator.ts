@@ -168,14 +168,31 @@ export const ApiMoveBillsResponses = (): MethodDecorator & ClassDecorator =>
       description:
         'Bills moved; bills already in the target are flagged already_moved',
     }),
+    ApiExtraModels(ValidationErrorResponseDto),
     ApiBadRequestResponse({
-      type: ValidationErrorResponseDto,
       description:
-        'The body fails validation (no bill_ids, more than 100, a non-UUID id, or a target equal to the household in the path)',
+        'Either the body fails validation (no bill_ids, more than 100, a non-UUID id): a ValidationErrorResponseDto with message as a list; or the target equals the household in the path: message is the single string "Target household is the source household"',
+      schema: {
+        oneOf: [
+          { $ref: getSchemaPath(ValidationErrorResponseDto) },
+          {
+            type: 'object',
+            properties: {
+              statusCode: { type: 'number', example: 400 },
+              message: {
+                type: 'string',
+                example: 'Target household is the source household',
+              },
+              error: { type: 'string', example: 'Bad Request' },
+            },
+          },
+        ],
+      },
     }),
     ApiUnauthorizedResponse({ description: 'Unauthorized' }),
     ApiForbiddenResponse({
-      description: 'Not a member of the target household, or it does not exist',
+      description:
+        'Not a member of the household in the path or of the target household, or the target household does not exist',
     }),
     ApiNotFoundResponse({
       type: MoveBillsNotFoundResponseDto,

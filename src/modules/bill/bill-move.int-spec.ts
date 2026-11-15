@@ -454,6 +454,7 @@ describe('bill move (PostgreSQL)', () => {
       source_household_id: a,
       target_household_id: b,
       bill_ids: ids,
+      requested_ids: ids,
     });
   });
 
@@ -726,6 +727,16 @@ describe('bill move (PostgreSQL)', () => {
       },
     ]);
     expect((await billRow(fresh)).household_id).toBe(b);
+    const logs = await sql<
+      { metadata: { bill_ids: string[]; requested_ids: string[] } }[]
+    >(
+      `select metadata from logs
+       where context = 'BillMove' and user_id = ? and metadata->'bill_ids' @> ?::jsonb`,
+      [userId, JSON.stringify([fresh])],
+    );
+    expect(logs).toHaveLength(1);
+    expect(logs[0]?.metadata.bill_ids).toEqual([fresh]);
+    expect(logs[0]?.metadata.requested_ids).toEqual([old, fresh]);
   });
 
   it('serializes concurrent moves of the same bills', async () => {

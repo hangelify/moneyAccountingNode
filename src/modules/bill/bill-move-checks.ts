@@ -1,5 +1,6 @@
 import { ConflictException, NotFoundException } from '@nestjs/common';
 import { EntityManager } from '@mikro-orm/core';
+import { isUUID } from 'class-validator';
 import { BillStatus } from '../../types/bill-status.enum';
 import { MoveBillConflictDto, MoveConflictReason } from './dto/move-bills.dto';
 
@@ -131,8 +132,12 @@ export async function execRows<T>(
 
 /**
  * A uuid[] literal: knex would expand a bound array into one placeholder
- * per value. The ids are uuids (validated or read back), so need no quoting.
+ * per value. It is passed as a bound parameter, and every element is checked
+ * to be a uuid (or null) here, so nothing else can reach the literal.
  */
 export function uuids(ids: (string | null)[]): string {
+  for (const id of ids) {
+    if (id !== null && !isUUID(id)) throw new Error(`Not a uuid: ${id}`);
+  }
   return `{${ids.map((id) => id ?? 'NULL').join(',')}}`;
 }

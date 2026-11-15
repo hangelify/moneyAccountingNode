@@ -44,7 +44,7 @@ export function assertJwtSecrets(): void {
   for (const [name, value] of [
     ['JWT_SECRET', access],
     ['JWT_REFRESH_SECRET', refresh],
-  ]) {
+  ] as const) {
     if (Buffer.byteLength(value, 'utf8') < MIN_JWT_SECRET_BYTES) {
       throw new Error(
         `Environment variable ${name} must be at least ${MIN_JWT_SECRET_BYTES} bytes long`,

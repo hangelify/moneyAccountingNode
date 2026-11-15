@@ -17,7 +17,7 @@ describe('MaxBytes', () => {
 
   it('counts UTF-8 bytes, not characters', () => {
     const [error] = errorsFor('ééa');
-    expect(error.constraints).toEqual({
+    expect(error?.constraints).toEqual({
       maxBytes: 'value must be at most 4 bytes long',
     });
   });

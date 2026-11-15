@@ -16,17 +16,17 @@ interface PgClient {
 // specs' realms. Hence plain pg, and the migrations in a child process.
 export default async function globalSetup(): Promise<void> {
   applyTestEnv();
-  const dbName = process.env.DB_NAME!;
+  const dbName = process.env['DB_NAME']!;
 
   // eslint-disable-next-line @typescript-eslint/no-require-imports -- pg грузится только после applyTestEnv(), до него в процессе ничего не импортируется
   const { Client } = require('pg') as {
     Client: new (config: object) => PgClient;
   };
   const admin = new Client({
-    host: process.env.DB_HOST,
-    port: Number(process.env.DB_PORT),
-    user: process.env.DB_USER,
-    password: process.env.DB_PASSWORD,
+    host: process.env['DB_HOST'],
+    port: Number(process.env['DB_PORT']),
+    user: process.env['DB_USER'],
+    password: process.env['DB_PASSWORD'],
     database: 'postgres',
   });
   await admin.connect();

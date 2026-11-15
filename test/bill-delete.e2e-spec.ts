@@ -87,7 +87,7 @@ describe('DELETE /households/:hid/bills/:id (e2e)', () => {
       sub_category: subCategoryId,
       raw_name: 'item',
       product_count: 1,
-      amount: data.amount,
+      amount: data['amount'],
     } as never);
     await em.flush();
     return bill.id;

@@ -81,7 +81,7 @@ describe('DedupePersonalHouseholds migration (PostgreSQL)', () => {
       `select id from households where id = any(?::uuid[]) order by created_at`,
       [`{${ids.join(',')}}`],
     );
-    return rows.map((r) => r.id as string);
+    return rows.map((r) => r['id'] as string);
   };
 
   it('deletes the empty registration household when the migrated one holds the data', async () => {

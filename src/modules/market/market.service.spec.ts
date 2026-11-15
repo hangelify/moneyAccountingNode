@@ -171,9 +171,9 @@ describe('MarketService.listMarkets — bill count + ordering', () => {
 
     const result = await service.listMarkets('household-1');
 
-    expect(result[0].id).toBe('m1');
-    expect(result[0].bill_count).toBe(3);
-    expect(result[1].id).toBe('m2');
-    expect(result[1].bill_count).toBe(0);
+    expect(result[0]?.id).toBe('m1');
+    expect(result[0]?.bill_count).toBe(3);
+    expect(result[1]?.id).toBe('m2');
+    expect(result[1]?.bill_count).toBe(0);
   });
 });

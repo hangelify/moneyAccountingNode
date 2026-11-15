@@ -40,7 +40,7 @@ export class HouseholdService {
     private readonly em: EntityManager,
     @Inject(MAX_ACTIVE_INVITES) private readonly maxActiveInvites: number,
   ) {
-    const url = process.env.FRONTEND_URL;
+    const url = process.env['FRONTEND_URL'];
     if (!url)
       throw new Error('Required environment variable FRONTEND_URL is not set');
     this.frontendUrl = url;

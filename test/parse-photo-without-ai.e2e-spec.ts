@@ -3,6 +3,7 @@ import request from 'supertest';
 import sharp from 'sharp';
 import { createTestApp, registerUser } from './utils/app';
 import { STORAGE_SERVICE } from '../src/modules/storage/storage.service';
+import { defined } from '../src/common/testing/defined';
 
 // No AI provider key at all, as on a dev machine with only manual accounting.
 describe('parse-photo without any AI provider (e2e)', () => {
@@ -11,13 +12,13 @@ describe('parse-photo without any AI provider (e2e)', () => {
   let hid: string;
   const put = jest.fn();
   const saved = {
-    key: process.env.ANTHROPIC_API_KEY,
-    required: process.env.AI_REQUIRED,
+    key: process.env['ANTHROPIC_API_KEY'],
+    required: process.env['AI_REQUIRED'],
   };
 
   beforeAll(async () => {
-    delete process.env.ANTHROPIC_API_KEY;
-    process.env.AI_REQUIRED = 'false';
+    delete process.env['ANTHROPIC_API_KEY'];
+    process.env['AI_REQUIRED'] = 'false';
     app = await createTestApp({
       override: (builder) =>
         builder.overrideProvider(STORAGE_SERVICE).useValue({
@@ -34,10 +35,10 @@ describe('parse-photo without any AI provider (e2e)', () => {
 
   afterAll(async () => {
     await app?.close();
-    if (saved.key === undefined) delete process.env.ANTHROPIC_API_KEY;
-    else process.env.ANTHROPIC_API_KEY = saved.key;
-    if (saved.required === undefined) delete process.env.AI_REQUIRED;
-    else process.env.AI_REQUIRED = saved.required;
+    if (saved.key === undefined) delete process.env['ANTHROPIC_API_KEY'];
+    else process.env['ANTHROPIC_API_KEY'] = saved.key;
+    if (saved.required === undefined) delete process.env['AI_REQUIRED'];
+    else process.env['AI_REQUIRED'] = saved.required;
   });
 
   it('boots and serves manual accounting', async () => {
@@ -79,8 +80,8 @@ describe('parse-photo without any AI provider (e2e)', () => {
       components: { schemas: Record<string, { properties: object }> };
     };
 
-    const responses =
-      doc.paths['/households/{hid}/bills/parse-photo'].post.responses;
+    const responses = defined(doc.paths['/households/{hid}/bills/parse-photo'])
+      .post.responses;
     expect(Object.keys(responses).sort()).toEqual([
       '200',
       '400',
@@ -101,7 +102,9 @@ describe('parse-photo without any AI provider (e2e)', () => {
       },
     });
     expect(
-      Object.keys(doc.components.schemas.AiErrorResponseDto.properties),
+      Object.keys(
+        defined(doc.components.schemas['AiErrorResponseDto']).properties,
+      ),
     ).toEqual(['statusCode', 'error', 'message', 'request_id']);
     for (const status of [
       '400',

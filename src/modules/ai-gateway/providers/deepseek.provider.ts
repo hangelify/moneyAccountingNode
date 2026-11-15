@@ -69,10 +69,11 @@ export class DeepSeekProvider implements LlmProvider {
         req.jsonSchema,
       )}`;
       const systemIndex = messages.findIndex((m) => m.role === 'system');
-      if (systemIndex >= 0) {
+      const system = messages[systemIndex];
+      if (system) {
         messages[systemIndex] = {
           role: 'system',
-          content: messages[systemIndex].content + suffix,
+          content: system.content + suffix,
         };
       } else {
         messages.unshift({
@@ -88,10 +89,10 @@ export class DeepSeekProvider implements LlmProvider {
       temperature: req.temperature ?? 0,
     };
     if (req.maxOutputTokens !== undefined) {
-      body.max_tokens = req.maxOutputTokens;
+      body['max_tokens'] = req.maxOutputTokens;
     }
     if (req.jsonSchema) {
-      body.response_format = { type: 'json_object' };
+      body['response_format'] = { type: 'json_object' };
     }
 
     const { config } = this;

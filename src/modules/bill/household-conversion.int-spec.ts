@@ -28,6 +28,7 @@ import {
 } from './household-conversion';
 import type { BillResponseDto } from './dto/bill-response.dto';
 import type { BillDashboardResponseDto } from './dto/bill-dashboard.dto';
+import { defined } from '../../common/testing/defined';
 
 jest.setTimeout(30_000);
 
@@ -584,7 +585,7 @@ describe('household currency conversion (PostgreSQL)', () => {
         ['Food', 28],
         ['Home', 4],
       ]);
-      expect(tree.categories[0].sub_categories[0]).toMatchObject({
+      expect(tree.categories[0]?.sub_categories[0]).toMatchObject({
         name: 'bread',
         total: 28,
       });
@@ -720,7 +721,7 @@ describe('household currency conversion (PostgreSQL)', () => {
       ]);
       const mdl = res.by_currency[1];
       expect(
-        mdl.period_totals.find((p) => p.period === '2026-03-02')?.total,
+        mdl?.period_totals.find((p) => p.period === '2026-03-02')?.total,
       ).toBe(200);
     });
 
@@ -782,7 +783,7 @@ describe('household currency conversion (PostgreSQL)', () => {
           provider.calls = [];
           const first = await dashboard.getDashboard(hid, feb);
           expect(provider.calls).toEqual(['2026-02-23', '2026-02-24']);
-          expect(householdAmount(first, billIds[1])).toBe(4);
+          expect(householdAmount(first, defined(billIds[1]))).toBe(4);
 
           provider.calls = [];
           await dashboard.getDashboard(hid, feb);
@@ -812,7 +813,7 @@ describe('household currency conversion (PostgreSQL)', () => {
         { currency: Currency.MDL, bill_count: 1, amount: 50 },
       ]);
       expect(total(res, '2024-01-15')).toBe(0);
-      expect(householdAmount(res, billIds[0])).toBeNull();
+      expect(householdAmount(res, defined(billIds[0]))).toBeNull();
     });
 
     it('a rate older than a week is not used: provider down → unconverted', async () => {
@@ -836,8 +837,10 @@ describe('household currency conversion (PostgreSQL)', () => {
       expect(res.in_household_currency.unconverted).toEqual([
         { currency: Currency.MDL, bill_count: 1, amount: 100 },
       ]);
-      expect(householdAmount(res, billIds[0])).toBeNull();
-      expect((await listedBill(billIds[0], hid)).household_amount).toBeNull();
+      expect(householdAmount(res, defined(billIds[0]))).toBeNull();
+      expect(
+        (await listedBill(defined(billIds[0]), hid)).household_amount,
+      ).toBeNull();
     });
 
     it('more than 10 unsaved days → 10 calls; the next request fetches the remaining', async () => {
@@ -859,12 +862,12 @@ describe('household currency conversion (PostgreSQL)', () => {
         expect(provider.calls).toEqual(days.slice(0, 10));
         expect(first.in_household_currency.unconverted).toEqual([]);
         // Not fetched yet: the latest saved day, 01-10, is used.
-        expect(householdAmount(first, billIds[11])).toBe(4);
+        expect(householdAmount(first, defined(billIds[11]))).toBe(4);
 
         provider.calls = [];
         const second = await dashboard.getDashboard(hid, jan);
         expect(provider.calls).toEqual(days.slice(10));
-        expect(householdAmount(second, billIds[11])).toBe(3.7);
+        expect(householdAmount(second, defined(billIds[11]))).toBe(3.7);
 
         provider.calls = [];
         await dashboard.getDashboard(hid, jan);
@@ -899,7 +902,7 @@ describe('household currency conversion (PostgreSQL)', () => {
         provider.calls = [];
         const second = await dashboard.getDashboard(hid, may);
         expect(provider.calls).toEqual(['2024-05-20']);
-        expect(householdAmount(second, billIds[10])).toBe(4);
+        expect(householdAmount(second, defined(billIds[10]))).toBe(4);
       } finally {
         provider.answer = original;
       }
@@ -919,8 +922,8 @@ describe('household currency conversion (PostgreSQL)', () => {
 
       expect(provider.calls).toEqual([]);
       expect(res.in_household_currency.currency).toBe(Currency.USD);
-      expect(householdAmount(res, billIds[0])).toBe(11.11);
-      expect(householdAmount(res, billIds[1])).toBe(11.11);
+      expect(householdAmount(res, defined(billIds[0]))).toBe(11.11);
+      expect(householdAmount(res, defined(billIds[1]))).toBe(11.11);
       expect(total(res, '2026-03-02')).toBe(22.22);
     });
   });

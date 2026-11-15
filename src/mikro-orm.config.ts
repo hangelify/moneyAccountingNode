@@ -9,11 +9,11 @@ import { ReflectMetadataProvider } from '@mikro-orm/decorators/legacy';
 // (rootDir ./src), e.g. dist/entities/user.entity.js.
 export function createMikroOrmConfig() {
   return defineConfig({
-    host: process.env.DB_HOST || 'localhost',
-    port: parseInt(process.env.DB_PORT || '5432', 10),
-    user: process.env.DB_USER || 'postgres',
-    password: process.env.DB_PASSWORD || 'postgres',
-    dbName: process.env.DB_NAME || 'accounting',
+    host: process.env['DB_HOST'] || 'localhost',
+    port: parseInt(process.env['DB_PORT'] || '5432', 10),
+    user: process.env['DB_USER'] || 'postgres',
+    password: process.env['DB_PASSWORD'] || 'postgres',
+    dbName: process.env['DB_NAME'] || 'accounting',
     // v7 changed both defaults; keep the v6 behaviour the entities and the
     // existing data were written against (reflected property types, dates
     // read and written in the server's local timezone).

@@ -78,7 +78,7 @@ describe('BillBatchController', () => {
         canActivate: (ctx: {
           switchToHttp(): { getRequest(): Record<string, unknown> };
         }) => {
-          ctx.switchToHttp().getRequest().user = { id: 'user-1', exp: 0 };
+          ctx.switchToHttp().getRequest()['user'] = { id: 'user-1', exp: 0 };
           return true;
         },
       })
@@ -87,7 +87,7 @@ describe('BillBatchController', () => {
         canActivate: (ctx: {
           switchToHttp(): { getRequest(): Record<string, unknown> };
         }) => {
-          ctx.switchToHttp().getRequest().household = {
+          ctx.switchToHttp().getRequest()['household'] = {
             householdId: HID,
             role: 'owner',
           };

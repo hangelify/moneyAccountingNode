@@ -4,6 +4,7 @@ import type { EntityRepository } from '@mikro-orm/core';
 import type { User } from '../../../entities/user.entity';
 import type { MailMessage, MailSender } from '../../mail/mail-sender';
 import { EmailVerificationService } from './email-verification.service';
+import { defined } from '../../../common/testing/defined';
 
 const NOW = new Date('2026-10-12T10:00:00Z');
 const HOUR = 60 * 60 * 1000;
@@ -32,7 +33,7 @@ function makeService() {
 function tokenFrom(message: MailMessage): string {
   const match = /verify-email\?token=([0-9a-f]+)/.exec(message.text);
   if (!match) throw new Error('no token in the email');
-  return match[1];
+  return defined(match[1], 'token');
 }
 
 const jane = { id: 'u1', email: 'jane@example.com' };
@@ -53,11 +54,11 @@ describe('EmailVerificationService', () => {
       await service.issueAndSend(jane);
 
       expect(sent).toHaveLength(1);
-      expect(sent[0].to).toBe('jane@example.com');
-      expect(sent[0].text).toContain(
+      expect(sent[0]?.to).toBe('jane@example.com');
+      expect(sent[0]?.text).toContain(
         'https://app.example.com/verify-email?token=',
       );
-      const token = tokenFrom(sent[0]);
+      const token = tokenFrom(defined(sent[0]));
       expect(token).toMatch(/^[0-9a-f]{64}$/);
       expect(repo.nativeUpdate).toHaveBeenCalledWith(
         { id: 'u1', email_verified_at: null },
@@ -157,7 +158,7 @@ describe('EmailVerificationService', () => {
             },
           ],
         },
-        issued(tokenFrom(sent[0])),
+        issued(tokenFrom(defined(sent[0]))),
       );
     });
 

@@ -39,7 +39,7 @@ describe('Auth token standards (e2e)', () => {
     overrides: Record<string, unknown>,
   ) => {
     const claims: Record<string, unknown> = { ...payload, ...overrides };
-    delete claims.exp;
+    delete claims['exp'];
     for (const key of Object.keys(claims)) {
       if (claims[key] === undefined) delete claims[key];
     }
@@ -61,9 +61,9 @@ describe('Auth token standards (e2e)', () => {
     const tokens = await login();
     const { header, payload } = decodeComplete(tokens.access_token);
     return jwt().sign(withClaims(payload, overrides), {
-      secret: process.env.JWT_SECRET,
+      secret: process.env['JWT_SECRET'],
       expiresIn: 300,
-      header: { alg: 'HS256', typ: header.typ as string },
+      header: { alg: 'HS256', typ: header['typ'] as string },
       ...options,
     });
   }
@@ -84,7 +84,7 @@ describe('Auth token standards (e2e)', () => {
   describe('token responses are not cached', () => {
     const expectNoStore = (res: request.Response) => {
       expect(res.headers['cache-control']).toBe('no-store');
-      expect(res.headers.pragma).toBe('no-cache');
+      expect(res.headers['pragma']).toBe('no-cache');
     };
 
     it('on register', async () => {
@@ -163,8 +163,8 @@ describe('Auth token standards (e2e)', () => {
     it('name issuer and audience', async () => {
       const tokens = await login();
       const { payload } = decodeComplete(tokens.access_token);
-      expect(payload.iss).toBe(process.env.JWT_ISSUER);
-      expect(payload.aud).toBe(process.env.JWT_AUDIENCE);
+      expect(payload['iss']).toBe(process.env['JWT_ISSUER']);
+      expect(payload['aud']).toBe(process.env['JWT_AUDIENCE']);
     });
 
     it('are explicitly typed: at+jwt for access, a different typ for refresh', async () => {
@@ -172,9 +172,9 @@ describe('Auth token standards (e2e)', () => {
       const access = decodeComplete(tokens.access_token).header;
       const refresh = decodeComplete(tokens.refresh_token).header;
       expect(access).toMatchObject({ alg: 'HS256', typ: 'at+jwt' });
-      expect(refresh.alg).toBe('HS256');
-      expect(refresh.typ).toEqual(expect.any(String));
-      expect(refresh.typ).not.toBe('at+jwt');
+      expect(refresh['alg']).toBe('HS256');
+      expect(refresh['typ']).toEqual(expect.any(String));
+      expect(refresh['typ']).not.toBe('at+jwt');
     });
   });
 
@@ -232,9 +232,9 @@ describe('Auth token standards (e2e)', () => {
       const tokens = await login();
       const { header, payload } = decodeComplete(tokens.refresh_token);
       const token = jwt().sign(withClaims(payload, overrides), {
-        secret: process.env.JWT_REFRESH_SECRET,
+        secret: process.env['JWT_REFRESH_SECRET'],
         expiresIn: 300,
-        header: { alg: 'HS256', typ: header.typ as string },
+        header: { alg: 'HS256', typ: header['typ'] as string },
         ...options,
       });
       // Points the stored row at the re-signed token, so only the token
@@ -244,7 +244,7 @@ describe('Auth token standards (e2e)', () => {
         .em.fork()
         .nativeUpdate(
           RefreshToken,
-          { jti: payload.jti as string },
+          { jti: payload['jti'] as string },
           {
             token_hash: createHash('sha256').update(token).digest('hex'),
           },
@@ -268,7 +268,7 @@ describe('Auth token standards (e2e)', () => {
 
     it('rejects a refresh token signed with HS512', async () => {
       const tokens = await login();
-      const typ = decodeComplete(tokens.refresh_token).header.typ as string;
+      const typ = decodeComplete(tokens.refresh_token).header['typ'] as string;
       await refresh(
         await resignRefresh(
           {},

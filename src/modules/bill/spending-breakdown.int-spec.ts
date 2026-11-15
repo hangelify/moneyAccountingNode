@@ -23,6 +23,7 @@ import {
   type SpendingRow,
 } from './spending-breakdown';
 import { householdConversionJoin, loadRateDays } from './household-conversion';
+import { defined } from '../../common/testing/defined';
 
 // The queries as they were before lines carried their own category (HAN-93):
 // the category came through the sub-category. Kept to prove the switch to
@@ -225,7 +226,7 @@ describe('spending breakdown SQL (PostgreSQL)', () => {
   });
 
   afterAll(async () => {
-    await orm?.close(true);
+    await orm.close(true);
   });
 
   it('builds the March tree per currency', async () => {
@@ -247,16 +248,16 @@ describe('spending breakdown SQL (PostgreSQL)', () => {
     ]);
 
     const [eur] = res.by_currency;
-    expect(eur.categories).toEqual([
+    expect(eur?.categories).toEqual([
       {
-        id: id.food,
+        id: id['food'],
         name: 'Food',
         total: 8.6,
         share: 39.81,
         archived: false,
         sub_categories: [
           {
-            id: id.bread,
+            id: id['bread'],
             name: 'bread',
             total: 4.5,
             share_of_category: 52.33,
@@ -264,7 +265,7 @@ describe('spending breakdown SQL (PostgreSQL)', () => {
             archived: false,
           },
           {
-            id: id.candy,
+            id: id['candy'],
             name: 'candy',
             total: 3,
             share_of_category: 34.88,
@@ -272,7 +273,7 @@ describe('spending breakdown SQL (PostgreSQL)', () => {
             archived: true,
           },
           {
-            id: id.milk,
+            id: id['milk'],
             name: 'milk',
             total: 1.1,
             share_of_category: 12.79,
@@ -282,14 +283,14 @@ describe('spending breakdown SQL (PostgreSQL)', () => {
         ],
       },
       {
-        id: id.home,
+        id: id['home'],
         name: 'Home',
         total: 6,
         share: 27.78,
         archived: false,
         sub_categories: [
           {
-            id: id.soap,
+            id: id['soap'],
             name: 'soap',
             total: 6,
             share_of_category: 100,
@@ -299,14 +300,14 @@ describe('spending breakdown SQL (PostgreSQL)', () => {
         ],
       },
       {
-        id: id.old,
+        id: id['old'],
         name: 'Old',
         total: 5,
         share: 23.15,
         archived: true,
         sub_categories: [
           {
-            id: id.relic,
+            id: id['relic'],
             name: 'relic',
             total: 5,
             share_of_category: 100,
@@ -336,7 +337,7 @@ describe('spending breakdown SQL (PostgreSQL)', () => {
       start: '2026-03-01',
       end: '2026-04-01',
     });
-    expect(res.by_currency[0].total).toBe(21.6);
+    expect(res.by_currency[0]?.total).toBe(21.6);
   });
 
   it('includes the start day and excludes the end day', async () => {
@@ -346,7 +347,7 @@ describe('spending breakdown SQL (PostgreSQL)', () => {
       to: '2026-03-01',
     });
     expect(startOnly.by_currency).toHaveLength(1);
-    expect(startOnly.by_currency[0].total).toBe(7.6);
+    expect(startOnly.by_currency[0]?.total).toBe(7.6);
 
     // [2026-03-02, 2026-03-31): neither the 1st nor the 31st.
     const inner = await service.getSpendingBreakdown(householdId, {
@@ -407,17 +408,17 @@ describe('spending breakdown SQL (PostgreSQL)', () => {
     it('puts them in their category, as a last no-sub-category item', async () => {
       const res = await service.getSpendingBreakdown(householdId, may);
 
-      const [eur] = res.by_currency;
+      const eur = defined(res.by_currency[0]);
       expect(eur.categories).toEqual([
         {
-          id: id.food,
+          id: id['food'],
           name: 'Food',
           total: 6,
           share: 35.29,
           archived: false,
           sub_categories: [
             {
-              id: id.bread,
+              id: id['bread'],
               name: 'bread',
               total: 2,
               share_of_category: 33.33,
@@ -435,7 +436,7 @@ describe('spending breakdown SQL (PostgreSQL)', () => {
           ],
         },
         {
-          id: id.old,
+          id: id['old'],
           name: 'Old',
           total: 4,
           share: 23.53,
@@ -472,19 +473,19 @@ describe('spending breakdown SQL (PostgreSQL)', () => {
 
       const expected = [
         {
-          category_id: id.food,
+          category_id: id['food'],
           category_name: 'Food',
           total_amount: 6,
           percentage: 60,
         },
         {
-          category_id: id.old,
+          category_id: id['old'],
           category_name: 'Old',
           total_amount: 4,
           percentage: 40,
         },
       ];
-      expect(res.by_currency[0].category_stats).toEqual(expected);
+      expect(res.by_currency[0]?.category_stats).toEqual(expected);
       expect(res.in_household_currency.category_stats).toEqual(expected);
     });
   });

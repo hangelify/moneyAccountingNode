@@ -25,6 +25,7 @@ import type { BillAiOrchestrator } from './bill-ai.orchestrator';
 import { ParsedAndCategorizedBillSchema } from './tasks/schemas/parsed-and-categorized-bill.schema';
 import type { ParsedBillResponseDto } from './dto/parsed-bill-response.dto';
 import { Currency } from '../../types/currency.enum';
+import { defined } from '../../common/testing/defined';
 
 jest.setTimeout(30_000);
 
@@ -43,11 +44,11 @@ describe('draft from AI output (PostgreSQL)', () => {
       imports: [
         MikroOrmModule.forRoot({
           driver: PostgreSqlDriver,
-          host: process.env.DB_HOST || 'localhost',
-          port: parseInt(process.env.DB_PORT || '5432', 10),
-          user: process.env.DB_USER || 'postgres',
-          password: process.env.DB_PASSWORD || 'postgres',
-          dbName: process.env.DB_NAME || 'accounting',
+          host: process.env['DB_HOST'] || 'localhost',
+          port: parseInt(process.env['DB_PORT'] || '5432', 10),
+          user: process.env['DB_USER'] || 'postgres',
+          password: process.env['DB_PASSWORD'] || 'postgres',
+          dbName: process.env['DB_NAME'] || 'accounting',
           entities: ['./dist/**/*.entity.js'],
           entitiesTs: ['./src/**/*.entity.ts'],
           allowGlobalContext: true,
@@ -173,11 +174,11 @@ describe('draft from AI output (PostgreSQL)', () => {
     expect(bill.currency).toBeNull();
     expect(Number(bill.amount)).toBe(12.5);
     expect(items).toHaveLength(1);
-    expect(items[0].raw_name).toBe('x'.repeat(255));
-    expect(items[0].product_count).toBe(1);
-    expect(items[0].unit).toBeNull();
-    expect(items[0].price_per_unit).toBeNull();
-    expect(items[0].sub_category).toBeNull();
+    expect(items[0]?.raw_name).toBe('x'.repeat(255));
+    expect(items[0]?.product_count).toBe(1);
+    expect(defined(items[0]).unit).toBeNull();
+    expect(defined(items[0]).price_per_unit).toBeNull();
+    expect(defined(items[0]).sub_category).toBeNull();
   });
 
   it('saves a draft from a DTO that bypassed the schema', async () => {
@@ -359,7 +360,9 @@ describe('draft from AI output (PostgreSQL)', () => {
 
     it('gives each line of the found draft its category', async () => {
       const hash = sha();
-      const [bread, tomatoes] = parsedDto().items;
+      const parsedItems = parsedDto().items;
+      const bread = defined(parsedItems[0]);
+      const tomatoes = defined(parsedItems[1]);
       await crud(orm.em.fork()).createDraftFromParsed(
         householdId,
         userId,
@@ -513,11 +516,15 @@ describe('draft from AI output (PostgreSQL)', () => {
       );
 
       expect(second).toEqual({ id: first.id, duplicate: true });
-      const [{ count }] = (await orm.em
-        .getConnection()
-        .execute(`SELECT count(*) FROM bills WHERE image_sha256 = ?`, [
-          hash,
-        ])) as { count: string }[];
+      const { count } = defined(
+        (
+          (await orm.em
+            .getConnection()
+            .execute(`SELECT count(*) FROM bills WHERE image_sha256 = ?`, [
+              hash,
+            ])) as { count: string }[]
+        )[0],
+      );
       expect(Number(count)).toBe(1);
     });
   });
@@ -525,7 +532,7 @@ describe('draft from AI output (PostgreSQL)', () => {
   describe('reviewing drafts', () => {
     it('keeps two items of one sub-category as separate lines', async () => {
       const sub = { id: subCategoryId, name: 'Bread', category_name: 'Food' };
-      const item = parsedDto().items[1];
+      const item = defined(parsedDto().items[1]);
       const { id } = await crud(orm.em.fork()).createDraftFromParsed(
         householdId,
         userId,
@@ -686,8 +693,8 @@ describe('draft from AI output (PostgreSQL)', () => {
         });
         expect(page1.data.map((d) => d.market_name_raw)).toEqual(['C', 'B']);
         expect(page2.data.map((d) => d.market_name_raw)).toEqual(['A']);
-        expect(page1.data[0].items).toHaveLength(2);
-        expect(page1.data[0].status).toBe(BillStatus.DRAFT);
+        expect(defined(page1.data[0]).items).toHaveLength(2);
+        expect(page1.data[0]?.status).toBe(BillStatus.DRAFT);
       } finally {
         const conn = orm.em.getConnection();
         await conn.execute(

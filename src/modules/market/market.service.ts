@@ -73,6 +73,10 @@ export class MarketService {
           'all',
           em.getTransactionContext(),
         )) as { id: string }[]);
+    if (!row) {
+      // The insert hit the unique index, so the select must see that row.
+      throw new Error(`Market "${dto.name}" neither inserted nor found`);
+    }
     return em.findOneOrFail(Market, row.id);
   }
 

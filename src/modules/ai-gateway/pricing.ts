@@ -54,7 +54,7 @@ export function findModelPricing(model: string): ModelPricing | null {
       best = key;
     }
   }
-  return best === undefined ? null : MODEL_PRICING[best];
+  return best === undefined ? null : (MODEL_PRICING[best] ?? null);
 }
 
 export interface CostBreakdown {

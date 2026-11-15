@@ -11,6 +11,7 @@ import { BillParseErrorCode } from '../../../types/bill-parse-error.enum';
 import type { BillBatchEnv } from './bill-batch.env';
 import type { BillPhotoJob, BillPhotoJobItem } from './bill-batch.service';
 import { BillPhotoProcessor } from './bill-photo.processor';
+import { defined } from '../../../common/testing/defined';
 
 describe('BillPhotoProcessor', () => {
   const env: BillBatchEnv = {
@@ -163,8 +164,8 @@ describe('BillPhotoProcessor', () => {
       householdId: 'hh-1',
       userId: 'user-1',
     });
-    expect(batches.markItemProcessing).toHaveBeenCalledWith('item-1');
-    expect(batches.markItemDone).toHaveBeenCalledWith('item-1', 'draft-1');
+    expect(batches['markItemProcessing']).toHaveBeenCalledWith('item-1');
+    expect(batches['markItemDone']).toHaveBeenCalledWith('item-1', 'draft-1');
     expect(events.publish.mock.calls).toEqual([
       itemEvent('item.processing', { status: 'processing' }),
       itemEvent('item.done', { status: 'done', bill_id: 'draft-1' }),
@@ -181,7 +182,7 @@ describe('BillPhotoProcessor', () => {
 
     await processor.process(asJob(fakeJob()), 'tok');
 
-    expect(batches.markItemDone).toHaveBeenCalledWith('item-1', 'draft-old');
+    expect(batches['markItemDone']).toHaveBeenCalledWith('item-1', 'draft-old');
     expect(events.publish).toHaveBeenLastCalledWith(
       ...itemEvent('item.done', { status: 'done', bill_id: 'draft-old' }),
     );
@@ -200,8 +201,11 @@ describe('BillPhotoProcessor', () => {
 
     await processor.process(asJob(fakeJob()), 'tok');
 
-    expect(batches.markItemDone).toHaveBeenCalledWith('item-1', 'draft-first');
-    expect(batches.markItemFailed).not.toHaveBeenCalled();
+    expect(batches['markItemDone']).toHaveBeenCalledWith(
+      'item-1',
+      'draft-first',
+    );
+    expect(batches['markItemFailed']).not.toHaveBeenCalled();
     expect(events.publish).toHaveBeenLastCalledWith(
       ...itemEvent('item.done', { status: 'done', bill_id: 'draft-first' }),
     );
@@ -217,7 +221,7 @@ describe('BillPhotoProcessor', () => {
 
     const message =
       'The photo is not a receipt or no items were recognized on it';
-    expect(batches.markItemFailed).toHaveBeenCalledWith('item-1', {
+    expect(batches['markItemFailed']).toHaveBeenCalledWith('item-1', {
       code: BillParseErrorCode.NOT_A_RECEIPT,
       message,
       aiRequestId: 'req-3',
@@ -243,7 +247,7 @@ describe('BillPhotoProcessor', () => {
 
     const message =
       'The bill was recognized but the draft could not be saved; enter it manually';
-    expect(batches.markItemFailed).toHaveBeenCalledWith('item-1', {
+    expect(batches['markItemFailed']).toHaveBeenCalledWith('item-1', {
       code: BillParseErrorCode.SAVE_FAILED,
       message,
       aiRequestId: 'req-4',
@@ -267,9 +271,9 @@ describe('BillPhotoProcessor', () => {
     );
 
     expect(ingest.ingest).not.toHaveBeenCalled();
-    expect(batches.markItemQueued).toHaveBeenCalledWith('item-1');
+    expect(batches['markItemQueued']).toHaveBeenCalledWith('item-1');
     expect(job.moveToDelayed).toHaveBeenCalledWith(NOW + 7000, 'tok');
-    expect(batches.markItemFailed).not.toHaveBeenCalled();
+    expect(batches['markItemFailed']).not.toHaveBeenCalled();
   });
 
   it('delays the job by retryAfterSec when every AI slot is busy', async () => {
@@ -280,7 +284,7 @@ describe('BillPhotoProcessor', () => {
       DelayedError,
     );
 
-    expect(batches.markItemQueued).toHaveBeenCalledWith('item-1');
+    expect(batches['markItemQueued']).toHaveBeenCalledWith('item-1');
     expect(job.moveToDelayed).toHaveBeenCalledWith(NOW + 3000, 'tok');
   });
 
@@ -297,7 +301,7 @@ describe('BillPhotoProcessor', () => {
     job.attemptsMade = 1;
     await processor.onFailed(asJob(job), err as Error);
 
-    expect(batches.markItemFailed).toHaveBeenCalledWith('item-1', {
+    expect(batches['markItemFailed']).toHaveBeenCalledWith('item-1', {
       code: BillParseErrorCode.AI_FAILED,
       message: 'Daily AI budget reached; retry tomorrow',
     });
@@ -320,7 +324,7 @@ describe('BillPhotoProcessor', () => {
     );
     await processor.onFailed(asJob(fakeJob(3)), gatewayErr);
 
-    expect(batches.markItemFailed).toHaveBeenCalledWith('item-1', {
+    expect(batches['markItemFailed']).toHaveBeenCalledWith('item-1', {
       code: BillParseErrorCode.AI_FAILED,
       message: 'The AI service is unavailable; retry later',
     });
@@ -332,14 +336,14 @@ describe('BillPhotoProcessor', () => {
       new AiGatewayExhaustedError('req-6', new Error('503')),
     );
 
-    expect(batches.markItemFailed).not.toHaveBeenCalled();
+    expect(batches['markItemFailed']).not.toHaveBeenCalled();
     expect(events.publish).not.toHaveBeenCalled();
   });
 
   it('says "Processing failed" for any other final error', async () => {
     await processor.onFailed(asJob(fakeJob(3)), new Error('storage down'));
 
-    expect(batches.markItemFailed).toHaveBeenCalledWith('item-1', {
+    expect(batches['markItemFailed']).toHaveBeenCalledWith('item-1', {
       code: BillParseErrorCode.AI_FAILED,
       message: 'Processing failed; retry later',
     });
@@ -351,14 +355,14 @@ describe('BillPhotoProcessor', () => {
 
     await processor.process(asJob(fakeJob()), 'tok');
 
-    expect(batches.markItemProcessing).not.toHaveBeenCalled();
+    expect(batches['markItemProcessing']).not.toHaveBeenCalled();
     expect(quota.takeMinute).not.toHaveBeenCalled();
     expect(ingest.ingest).not.toHaveBeenCalled();
     expect(events.publish).not.toHaveBeenCalled();
   });
 
   it('skips a job whose item no longer exists', async () => {
-    batches.findItemForJob.mockResolvedValue(null);
+    defined(batches['findItemForJob']).mockResolvedValue(null);
 
     await processor.process(asJob(fakeJob()), 'tok');
 
@@ -373,13 +377,13 @@ describe('BillPhotoProcessor', () => {
 
     expect(quota.takeMinute).not.toHaveBeenCalled();
     expect(ingest.ingest).not.toHaveBeenCalled();
-    expect(batches.markItemFailed).toHaveBeenCalledWith('item-1', {
+    expect(batches['markItemFailed']).toHaveBeenCalledWith('item-1', {
       code: BillParseErrorCode.AI_FAILED,
       message: 'Processing failed; retry later',
     });
     expect(published()).toEqual(['item.failed']);
     expect(
-      (events.publish.mock.calls as [string, { data: object }][])[0][1].data,
+      (events.publish.mock.calls as [string, { data: object }][])[0]?.[1].data,
     ).toMatchObject({ created_by_user_id: null });
   });
 
@@ -391,7 +395,7 @@ describe('BillPhotoProcessor', () => {
       requestId: 'req-1',
       parsed: {},
     });
-    batches.markItemDone.mockResolvedValue({
+    defined(batches['markItemDone']).mockResolvedValue({
       changed: true,
       completion: { total: 3, done: 2, failed: 1 },
     });
@@ -417,7 +421,7 @@ describe('BillPhotoProcessor', () => {
 
   it('publishes batch.completed after a failed last item', async () => {
     ingest.ingest.mockResolvedValue({ kind: 'not_a_receipt', requestId: 'r' });
-    batches.markItemFailed.mockResolvedValue({
+    defined(batches['markItemFailed']).mockResolvedValue({
       changed: true,
       billId: 'failed-bill',
       completion: { total: 1, done: 0, failed: 1 },
@@ -441,7 +445,7 @@ describe('BillPhotoProcessor', () => {
       parsed: {},
     });
     // A finished item never reports completion; see BillBatchService.
-    batches.markItemDone.mockResolvedValue({
+    defined(batches['markItemDone']).mockResolvedValue({
       changed: false,
       completion: null,
     });

@@ -42,7 +42,7 @@ function isAllowedWebOrigin(origin: string, host: string | undefined): boolean {
     return false;
   }
   const frontend = parseOrigin(
-    process.env.FRONTEND_URL || 'http://localhost:5173',
+    process.env['FRONTEND_URL'] || 'http://localhost:5173',
   );
   return parsed.origin === frontend?.origin || parsed.host === host;
 }

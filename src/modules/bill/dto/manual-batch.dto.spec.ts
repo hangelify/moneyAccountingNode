@@ -82,7 +82,7 @@ describe('ManualBatchDto', () => {
 
   it('trims the note and rejects an empty or too long one', () => {
     const dto = build({ rows: [row({ note: ' coffee ' })] });
-    expect(dto.rows[0].note).toBe('coffee');
+    expect(dto.rows[0]?.note).toBe('coffee');
     expect(rowFailures({ note: '   ' })).toEqual(['rows.0.note.isLength']);
     expect(rowFailures({ note: 'x'.repeat(256) })).toEqual([
       'rows.0.note.isLength',
@@ -92,7 +92,7 @@ describe('ManualBatchDto', () => {
 
   it('trims the market name and rejects an empty one', () => {
     const dto = build({ rows: [row({ market_name: ' Kiosk ' })] });
-    expect(dto.rows[0].market_name).toBe('Kiosk');
+    expect(dto.rows[0]?.market_name).toBe('Kiosk');
     expect(rowFailures({ market_name: ' ' })).toEqual([
       'rows.0.market_name.isLength',
     ]);

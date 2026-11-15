@@ -2,6 +2,7 @@ import { BillPhotoService } from './bill-photo.service';
 import type { BillAiOrchestrator } from './bill-ai.orchestrator';
 import type { EntityRepository } from '@mikro-orm/core';
 import type { SubCategory } from '../../entities/sub-category.entity';
+import { defined } from '../../common/testing/defined';
 
 describe('BillPhotoService', () => {
   const USER_ID = 'user-1';
@@ -76,15 +77,15 @@ describe('BillPhotoService', () => {
     );
     expect(res.items).toHaveLength(2);
     expect(res).not.toHaveProperty('raw_extracted_text');
-    expect(res.items[0].sub_category).toEqual({
+    expect(res.items[0]?.sub_category).toEqual({
       id: 'sub-a',
       name: 'bun',
       category_name: 'Bread',
     });
-    expect(res.items[0].category).toEqual({ id: 'cat-a', name: 'Bread' });
-    expect(res.items[0].category_confidence).toBe(0.95);
-    expect(res.items[0].category_reasoning).toBe('bread');
-    expect(res.items[1].sub_category).toEqual({
+    expect(res.items[0]?.category).toEqual({ id: 'cat-a', name: 'Bread' });
+    expect(res.items[0]?.category_confidence).toBe(0.95);
+    expect(res.items[0]?.category_reasoning).toBe('bread');
+    expect(res.items[1]?.sub_category).toEqual({
       id: 'sub-b',
       name: 'milk',
       category_name: 'Dairy',
@@ -120,9 +121,9 @@ describe('BillPhotoService', () => {
       HOUSEHOLD_ID,
       USER_ID,
     );
-    expect(res.items[0].sub_category).toBeNull();
-    expect(res.items[0].category).toBeNull();
-    expect(res.items[0].category_confidence).toBe(0.1);
+    expect(defined(res.items[0]).sub_category).toBeNull();
+    expect(defined(res.items[0]).category).toBeNull();
+    expect(res.items[0]?.category_confidence).toBe(0.1);
   });
 
   it('defensively sets sub_category null when AI returned an unrecognised id (hallucination)', async () => {
@@ -154,7 +155,7 @@ describe('BillPhotoService', () => {
       HOUSEHOLD_ID,
       USER_ID,
     );
-    expect(res.items[0].sub_category).toBeNull();
+    expect(defined(res.items[0]).sub_category).toBeNull();
   });
 
   it('reports a confidence the schema dropped as 0', async () => {
@@ -187,8 +188,8 @@ describe('BillPhotoService', () => {
       HOUSEHOLD_ID,
       USER_ID,
     );
-    expect(res.items[0].category_confidence).toBe(0);
-    expect(res.items[0].category_reasoning).toBeUndefined();
+    expect(res.items[0]?.category_confidence).toBe(0);
+    expect(defined(res.items[0]).category_reasoning).toBeUndefined();
   });
 
   it.each([
@@ -210,7 +211,7 @@ describe('BillPhotoService', () => {
         USER_ID,
       );
       const call = jest.mocked(orchestrator[method]).mock.calls[0];
-      expect(call[2]).toEqual({
+      expect(call?.[2]).toEqual({
         userId: USER_ID,
         householdId: HOUSEHOLD_ID,
       });

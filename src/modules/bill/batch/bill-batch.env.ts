@@ -21,11 +21,11 @@ export interface BillBatchEnv {
 }
 
 function readEnabled(env: Env): boolean {
-  const raw = env.BILL_BATCH_ENABLED?.trim();
+  const raw = env['BILL_BATCH_ENABLED']?.trim();
   if (raw === undefined || raw === '' || raw === 'true') return true;
   if (raw === 'false') return false;
   throw new Error(
-    `Invalid BILL_BATCH_ENABLED='${env.BILL_BATCH_ENABLED}': expected 'true' or 'false'`,
+    `Invalid BILL_BATCH_ENABLED='${env['BILL_BATCH_ENABLED']}': expected 'true' or 'false'`,
   );
 }
 

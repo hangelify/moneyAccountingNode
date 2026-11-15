@@ -55,7 +55,7 @@ export class UserThrottlerGuard extends ThrottlerGuard {
   }
 
   protected override getTracker(req: Record<string, any>): Promise<string> {
-    const id = (req.user as { id?: string } | undefined)?.id;
+    const id = (req['user'] as { id?: string } | undefined)?.id;
     if (!id) {
       throw new Error(
         'UserThrottlerGuard needs an authenticated user; list it after JwtAuthGuard',

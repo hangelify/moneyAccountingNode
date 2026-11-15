@@ -15,6 +15,7 @@ import type {
   InviteListItemDto,
   InviteResponseDto,
 } from '../src/modules/household/dto/household-response.dto';
+import { defined } from '../src/common/testing/defined';
 
 // An invite is bound to the invitee's email, carries its token in the request
 // body, can be revoked by the owner, and is only spent when the invitee
@@ -191,14 +192,14 @@ describe('Household invites (e2e)', () => {
     const res = await pending;
     expect(res.status).toBe(409);
     expect(res.body).toMatchObject({ reason: 'already_member' });
-    expect((await listInvites())[0].status).toBe('pending');
+    expect((await listInvites())[0]?.status).toBe('pending');
   });
 
   it('answers 410 for an expired invite', async () => {
     const jane = await registerUser(app, 'jane');
     const { token } = await invite(jane.email);
     const em = app.get(MikroORM).em.fork();
-    const [created] = await listInvites();
+    const created = defined((await listInvites())[0]);
     await em.nativeUpdate(
       HouseholdInvite,
       { id: created.id },
@@ -206,7 +207,7 @@ describe('Household invites (e2e)', () => {
     );
 
     await accept(jane, token).expect(410);
-    expect((await listInvites())[0].status).toBe('expired');
+    expect((await listInvites())[0]?.status).toBe('expired');
   });
 
   describe('owner endpoints', () => {
@@ -220,34 +221,34 @@ describe('Household invites (e2e)', () => {
         'b@example.com',
         'a@example.com',
       ]);
-      expect(Object.keys(list[0]).sort()).toEqual([
+      expect(Object.keys(defined(list[0])).sort()).toEqual([
         'created_at',
         'expires_at',
         'id',
         'invitee_email',
         'status',
       ]);
-      expect(list[0].status).toBe('pending');
+      expect(list[0]?.status).toBe('pending');
     });
 
     it('revokes an invite: accepting it then answers 410', async () => {
       const jane = await registerUser(app, 'jane');
       const { token } = await invite(jane.email);
-      const [created] = await listInvites();
+      const created = defined((await listInvites())[0]);
 
       await http()
         .delete(`/households/${owner.householdId}/invites/${created.id}`)
         .set('Authorization', auth(owner))
         .expect(204);
 
-      expect((await listInvites())[0].status).toBe('revoked');
+      expect((await listInvites())[0]?.status).toBe('revoked');
       await accept(jane, token).expect(410);
       expect(await memberEmails()).not.toContain(jane.email);
     });
 
     it('revoking twice is idempotent', async () => {
       await invite('a@example.com');
-      const [created] = await listInvites();
+      const created = defined((await listInvites())[0]);
       const path = `/households/${owner.householdId}/invites/${created.id}`;
 
       await http().delete(path).set('Authorization', auth(owner)).expect(204);
@@ -258,7 +259,7 @@ describe('Household invites (e2e)', () => {
       const jane = await registerUser(app, 'jane');
       const { token } = await invite(jane.email);
       await accept(jane, token).expect(204);
-      const [created] = await listInvites();
+      const created = defined((await listInvites())[0]);
 
       await http()
         .delete(`/households/${owner.householdId}/invites/${created.id}`)
@@ -269,20 +270,20 @@ describe('Household invites (e2e)', () => {
     it("answers 404 when revoking another household's invite", async () => {
       const other = await registerUser(app, 'other');
       await invite('a@example.com', other);
-      const [foreign] = await listInvites(other);
+      const foreign = defined((await listInvites(other))[0]);
 
       await http()
         .delete(`/households/${owner.householdId}/invites/${foreign.id}`)
         .set('Authorization', auth(owner))
         .expect(404);
-      expect((await listInvites(other))[0].status).toBe('pending');
+      expect((await listInvites(other))[0]?.status).toBe('pending');
     });
 
     it('refuses list and revoke to a non-owner member (403)', async () => {
       const jane = await registerUser(app, 'jane');
       const { token } = await invite(jane.email);
       await accept(jane, token).expect(204);
-      const [created] = await listInvites();
+      const created = defined((await listInvites())[0]);
       const base = `/households/${owner.householdId}/invites`;
 
       await http().get(base).set('Authorization', auth(jane)).expect(403);
@@ -303,7 +304,7 @@ describe('Household invites (e2e)', () => {
         .send({ email: 'one-too-many@example.com' })
         .expect(409);
 
-      const [newest] = await listInvites();
+      const newest = defined((await listInvites())[0]);
       await http()
         .delete(`/households/${owner.householdId}/invites/${newest.id}`)
         .set('Authorization', auth(owner))

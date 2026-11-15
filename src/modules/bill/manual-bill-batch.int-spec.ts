@@ -19,6 +19,7 @@ import { ManualBillBatchService } from './manual-bill-batch.service';
 import { SpendingBreakdownService } from './spending-breakdown.service';
 import { ManualBatchDto, ManualBatchRowDto } from './dto/manual-batch.dto';
 import { ParsedBillResponseDto } from './dto/parsed-bill-response.dto';
+import { defined } from '../../common/testing/defined';
 
 jest.setTimeout(30_000);
 
@@ -203,7 +204,7 @@ describe('manual expense batch (PostgreSQL)', () => {
       [body.client_batch_id],
     )) as Record<string, unknown>[];
     expect(lines).toHaveLength(10);
-    expect(lines.map((l) => l.client_batch_index)).toEqual([
+    expect(lines.map((l) => l['client_batch_index'])).toEqual([
       0, 1, 2, 3, 4, 5, 6, 7, 8, 9,
     ]);
     expect(lines[0]).toMatchObject({
@@ -230,7 +231,7 @@ describe('manual expense batch (PostgreSQL)', () => {
       Currency.EUR,
       Currency.MDL,
     ]);
-    expect(body.bills[0].household_amount).toBe(2.5);
+    expect(body.bills[0]?.household_amount).toBe(2.5);
   });
 
   it('shows the bills in the list, the dashboard and the breakdown', async () => {
@@ -348,16 +349,20 @@ describe('manual expense batch (PostgreSQL)', () => {
   it('does not bring back a deleted bill on a resend', async () => {
     const dto = batch([row(), row(), row()]);
     const first = await save(dto);
-    await services().crud.softDeleteBill(first.body.bills[0].id, a.id);
+    await services().crud.softDeleteBill(defined(first.body.bills[0]).id, a.id);
 
     const again = await save(dto);
 
     expect(again.body.bills.map((x) => x.id)).toEqual(
       first.body.bills.map((x) => x.id),
     );
-    const [deleted] = (await sql('select deleted_at from bills where id = ?', [
-      first.body.bills[0].id,
-    ])) as { deleted_at: Date | null }[];
+    const deleted = defined(
+      (
+        (await sql('select deleted_at from bills where id = ?', [
+          defined(first.body.bills[0]).id,
+        ])) as { deleted_at: Date | null }[]
+      )[0],
+    );
     expect(deleted.deleted_at).not.toBeNull();
   });
 
@@ -412,7 +417,9 @@ describe('manual expense batch (PostgreSQL)', () => {
     const inB = await save(batch([row({ category_id: b.food })], key), b.id);
 
     expect(inB.created).toBe(true);
-    expect(inB.body.bills[0].id).not.toBe(inA.body.bills[0].id);
+    expect(defined(inB.body.bills[0]).id).not.toBe(
+      defined(inA.body.bills[0]).id,
+    );
   });
 
   it('uses one market for names that differ only in case', async () => {
@@ -422,19 +429,19 @@ describe('manual expense batch (PostgreSQL)', () => {
       batch([row({ market_name: 'Kiosk' }), row({ market_name: 'kiosk' })]),
     );
 
-    expect(body.bills[0].market?.id).toBeDefined();
-    expect(body.bills[1].market?.id).toBe(body.bills[0].market?.id);
+    expect(defined(body.bills[0]).market?.id).toBeDefined();
+    expect(body.bills[1]?.market?.id).toBe(defined(body.bills[0]).market?.id);
     const live = (await sql(
       `select id from markets where household_id = ? and lower(name) = 'kiosk' and deleted_at is null`,
       [a.id],
     )) as { id: string }[];
-    expect(live.map((m) => m.id)).toEqual([body.bills[0].market!.id]);
+    expect(live.map((m) => m.id)).toEqual([defined(body.bills[0]).market!.id]);
   });
 
   it('uses the market named by id', async () => {
     const { body } = await save(batch([row({ market_id: a.market })]));
 
-    expect(body.bills[0].market).toMatchObject({
+    expect(body.bills[0]?.market).toMatchObject({
       id: a.market,
       name: 'Corner shop',
     });
@@ -472,6 +479,6 @@ describe('manual expense batch (PostgreSQL)', () => {
       { excludeBillId: draft.id },
     );
 
-    expect(candidates.map((c) => c.id)).toContain(body.bills[0].id);
+    expect(candidates.map((c) => c.id)).toContain(defined(body.bills[0]).id);
   });
 });

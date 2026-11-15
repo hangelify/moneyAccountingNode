@@ -10,14 +10,15 @@ const DEFAULT_API_URL = 'https://mdl.md/api/v1';
 const DEFAULT_TIMEOUT_MS = 10_000;
 
 export function readExchangeRateConfig(): ExchangeRateConfig {
-  const rawUrl = process.env.EXCHANGE_RATE_API_URL?.trim() || DEFAULT_API_URL;
+  const rawUrl =
+    process.env['EXCHANGE_RATE_API_URL']?.trim() || DEFAULT_API_URL;
   if (!/^https?:\/\//.test(rawUrl)) {
     throw new Error(
       `EXCHANGE_RATE_API_URL must be an http(s) URL, got "${rawUrl}"`,
     );
   }
 
-  const rawTimeout = process.env.EXCHANGE_RATE_TIMEOUT_MS?.trim();
+  const rawTimeout = process.env['EXCHANGE_RATE_TIMEOUT_MS']?.trim();
   const timeoutMs = rawTimeout ? Number(rawTimeout) : DEFAULT_TIMEOUT_MS;
   if (!Number.isInteger(timeoutMs) || timeoutMs < 1) {
     throw new Error(

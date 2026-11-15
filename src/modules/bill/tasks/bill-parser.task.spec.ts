@@ -22,8 +22,8 @@ describe('BillParserTask', () => {
     const user = req.messages.find((m) => m.role === 'user');
     expect(user).toBeDefined();
     if (user && user.role === 'user') {
-      expect(user.images?.[0].data).toBe(buf);
-      expect(user.images?.[0].mediaType).toBe('image/png');
+      expect(user.images?.[0]?.data).toBe(buf);
+      expect(user.images?.[0]?.mediaType).toBe('image/png');
     }
   });
 

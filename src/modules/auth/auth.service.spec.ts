@@ -46,11 +46,11 @@ function makeService(opts?: Partial<Pick<Deps, 'seedForHousehold'>>): {
     });
 
   // env vars used by issueTokensForSession
-  process.env.JWT_SECRET = 'test-secret-at-least-32-chars-long-xxxxxx';
-  process.env.JWT_REFRESH_SECRET =
+  process.env['JWT_SECRET'] = 'test-secret-at-least-32-chars-long-xxxxxx';
+  process.env['JWT_REFRESH_SECRET'] =
     'test-refresh-secret-at-least-32-chars-long-xxxxxx';
-  process.env.JWT_EXPIRES_IN_MS = '900000';
-  process.env.JWT_REFRESH_EXPIRES_IN_MS = '604800000';
+  process.env['JWT_EXPIRES_IN_MS'] = '900000';
+  process.env['JWT_REFRESH_EXPIRES_IN_MS'] = '604800000';
 
   // Repository mocks: findOne returns null (no existing user) for user; create returns the entity passed.
   const createRefreshToken = jest.fn().mockImplementation((data) => data);
@@ -392,13 +392,13 @@ describe('AuthService.validateUser input types', () => {
 
 describe('AuthService REFRESH_REUSE_GRACE_SECONDS validation', () => {
   afterEach(() => {
-    delete process.env.REFRESH_REUSE_GRACE_SECONDS;
+    delete process.env['REFRESH_REUSE_GRACE_SECONDS'];
   });
 
   // An invalid value must stop startup: read lazily, it would only fail on
   // the reuse path and skip the session revocation there.
   it('fails at module init on an invalid value', () => {
-    process.env.REFRESH_REUSE_GRACE_SECONDS = '30s';
+    process.env['REFRESH_REUSE_GRACE_SECONDS'] = '30s';
     const { service } = makeService();
     expect(() => {
       service.onModuleInit();

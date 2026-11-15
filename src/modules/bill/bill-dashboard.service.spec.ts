@@ -90,8 +90,8 @@ describe('BillDashboardService', () => {
       const result = await service.getDashboard(userId, dto);
 
       expect(series(result).period_totals).toHaveLength(28);
-      expect(series(result).period_totals[0].period).toBe('2026-02-01');
-      expect(series(result).period_totals[27].period).toBe('2026-02-28');
+      expect(series(result).period_totals[0]?.period).toBe('2026-02-01');
+      expect(series(result).period_totals[27]?.period).toBe('2026-02-28');
     });
 
     it('returns 31 entries for January', async () => {
@@ -111,7 +111,7 @@ describe('BillDashboardService', () => {
       const result = await service.getDashboard(userId, dto);
 
       expect(series(result).period_totals).toHaveLength(31);
-      expect(series(result).period_totals[30].period).toBe('2026-01-31');
+      expect(series(result).period_totals[30]?.period).toBe('2026-01-31');
     });
   });
 
@@ -134,8 +134,8 @@ describe('BillDashboardService', () => {
       const result = await service.getDashboard(userId, dto);
 
       expect(series(result).period_totals).toHaveLength(3);
-      expect(series(result).period_totals[1].period).toBe('2026-05');
-      expect(series(result).period_totals[1].total).toBe(0);
+      expect(series(result).period_totals[1]?.period).toBe('2026-05');
+      expect(series(result).period_totals[1]?.total).toBe(0);
     });
   });
 
@@ -153,8 +153,8 @@ describe('BillDashboardService', () => {
       const result = await service.getDashboard(userId, dto);
 
       expect(series(result).period_totals).toHaveLength(12);
-      expect(series(result).period_totals[0].period).toBe('2026-01');
-      expect(series(result).period_totals[11].period).toBe('2026-12');
+      expect(series(result).period_totals[0]?.period).toBe('2026-01');
+      expect(series(result).period_totals[11]?.period).toBe('2026-12');
     });
   });
 
@@ -186,8 +186,8 @@ describe('BillDashboardService', () => {
       };
       const result = await service.getDashboard(userId, dto);
 
-      expect(series(result).category_stats[0].percentage).toBeCloseTo(45);
-      expect(series(result).category_stats[1].percentage).toBeCloseTo(55);
+      expect(series(result).category_stats[0]?.percentage).toBeCloseTo(45);
+      expect(series(result).category_stats[1]?.percentage).toBeCloseTo(55);
     });
 
     it('returns [] when a currency has no categorized spending', async () => {
@@ -226,7 +226,7 @@ describe('BillDashboardService', () => {
         year: 2026,
         month: 4,
       });
-      expect(series(result).category_stats[0].percentage).toBe(0);
+      expect(series(result).category_stats[0]?.percentage).toBe(0);
     });
   });
 

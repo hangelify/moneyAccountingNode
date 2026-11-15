@@ -25,9 +25,9 @@ describe('readRetentionConfig', () => {
   });
 
   it('reads positive whole numbers of days', () => {
-    process.env.REFRESH_TOKEN_RETENTION_DAYS = '14';
-    process.env.SESSION_RETENTION_DAYS = '60';
-    process.env.AI_AUDIT_RAW_RETENTION_DAYS = '90';
+    process.env['REFRESH_TOKEN_RETENTION_DAYS'] = '14';
+    process.env['SESSION_RETENTION_DAYS'] = '60';
+    process.env['AI_AUDIT_RAW_RETENTION_DAYS'] = '90';
     expect(readRetentionConfig()).toEqual({
       refreshTokenDays: 14,
       sessionDays: 60,

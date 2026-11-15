@@ -2,6 +2,7 @@ import { BillEventsHub } from './bill-events.hub';
 import type { BillEventsSubscriber } from './bill-events.hub';
 import type { BillEvent } from './bill-events.types';
 import { BillBatchItemStatus } from '../../../types/bill-batch-item-status.enum';
+import { defined } from '../../../common/testing/defined';
 
 class FakeSubscriber implements BillEventsSubscriber {
   patterns: string[] = [];
@@ -107,17 +108,20 @@ describe('BillEventsHub', () => {
   it('opens a new connection after the subscription failed', async () => {
     const opened = [new FakeSubscriber(true), new FakeSubscriber()];
     let next = 0;
-    const retrying = new BillEventsHub(() => opened[next++]);
+    const retrying = new BillEventsHub(() => defined(opened[next++]));
 
     const s1 = retrying.stream('h-a').subscribe();
     await new Promise((r) => setImmediate(r));
-    expect(opened[0].quitCalls).toBe(1);
+    expect(opened[0]?.quitCalls).toBe(1);
 
     const seen: BillEvent[] = [];
     retrying.stream('h-a').subscribe((e) => seen.push(e));
     expect(next).toBe(2);
-    expect(opened[1].patterns).toEqual(['bill-events:*']);
-    opened[1].emit('bill-events:h-a', JSON.stringify(event('batch-a')));
+    expect(opened[1]?.patterns).toEqual(['bill-events:*']);
+    defined(opened[1]).emit(
+      'bill-events:h-a',
+      JSON.stringify(event('batch-a')),
+    );
     expect(seen).toEqual([event('batch-a')]);
     s1.unsubscribe();
   });

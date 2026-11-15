@@ -125,26 +125,21 @@ export class BillBatchService {
     // UserThrottlerGuard already counted the request as the first photo.
     await this.assertQuota(userId, images.length - 1);
 
-    const keys: string[] = [];
+    const stored: { key: string; sha256: string }[] = [];
     for (const image of images) {
       const { key } = await this.storage.put(
         image.buffer,
         image.mediaType,
         householdId,
       );
-      keys.push(key);
+      stored.push({ key, sha256: image.sha256 });
     }
 
-    const { batch, items } = await this.em.fork().transactional((em) =>
-      Promise.resolve(
-        this.insertBatch(
-          em,
-          householdId,
-          userId,
-          images.map((image, i) => ({ key: keys[i], sha256: image.sha256 })),
-        ),
-      ),
-    );
+    const { batch, items } = await this.em
+      .fork()
+      .transactional((em) =>
+        Promise.resolve(this.insertBatch(em, householdId, userId, stored)),
+      );
     await this.enqueue(householdId, batch.id, items);
     return this.getBatch(householdId, batch.id);
   }

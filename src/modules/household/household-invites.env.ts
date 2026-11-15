@@ -4,7 +4,7 @@ const DEFAULT_MAX_ACTIVE_INVITES = 20;
 
 /** Pending, unexpired invites a household may have at once. */
 export function readMaxActiveInvites(): number {
-  const raw = process.env.HOUSEHOLD_MAX_ACTIVE_INVITES?.trim();
+  const raw = process.env['HOUSEHOLD_MAX_ACTIVE_INVITES']?.trim();
   if (!raw) return DEFAULT_MAX_ACTIVE_INVITES;
   const max = Number(raw);
   if (!Number.isInteger(max) || max < 1) {

@@ -40,8 +40,8 @@ describe('BillParseCategorizeTask', () => {
       '22222222-2222-2222-2222-222222222222 | Produce > Tomatoes',
     );
     expect(user?.images).toHaveLength(1);
-    expect(user?.images?.[0].data).toBe(image);
-    expect(user?.images?.[0].mediaType).toBe('image/jpeg');
+    expect(user?.images?.[0]?.data).toBe(image);
+    expect(user?.images?.[0]?.mediaType).toBe('image/jpeg');
   });
 
   it('does not ask the model for the full OCR text', async () => {

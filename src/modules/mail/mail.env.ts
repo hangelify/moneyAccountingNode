@@ -28,13 +28,13 @@ export function readMailConfig(
     throw new Error(`SMTP_PORT must be a port number, got "${rawPort}"`);
   }
 
-  const rawSecure = env.SMTP_SECURE?.trim() || 'false';
+  const rawSecure = env['SMTP_SECURE']?.trim() || 'false';
   if (rawSecure !== 'true' && rawSecure !== 'false') {
     throw new Error(`SMTP_SECURE must be true or false, got "${rawSecure}"`);
   }
 
-  const user = env.SMTP_USER?.trim();
-  const pass = env.SMTP_PASS;
+  const user = env['SMTP_USER']?.trim();
+  const pass = env['SMTP_PASS'];
   if (Boolean(user) !== Boolean(pass)) {
     throw new Error('SMTP_USER and SMTP_PASS must be set together');
   }

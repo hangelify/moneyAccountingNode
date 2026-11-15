@@ -81,7 +81,7 @@ describe('bill list order (PostgreSQL)', () => {
 
   it('orders bills of one day by creation time, then id, newest first', async () => {
     // Inserted oldest first, so the table order is the reverse of the list.
-    const [a, b] = [randomUUID(), randomUUID()].sort();
+    const [a, b] = [randomUUID(), randomUUID()].sort() as [string, string];
     const early = randomUUID();
     const late = randomUUID();
     await insertBill(early, '2026-11-01', '2026-11-01T08:00:00Z');
@@ -124,6 +124,6 @@ describe('bill list order (PostgreSQL)', () => {
 
     const { data } = await crud().listBills(householdId, {});
 
-    expect(data[0].market).toMatchObject({ id: marketId, name: 'Gone' });
+    expect(data[0]?.market).toMatchObject({ id: marketId, name: 'Gone' });
   });
 });

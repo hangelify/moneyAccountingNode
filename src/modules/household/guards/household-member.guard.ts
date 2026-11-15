@@ -33,7 +33,7 @@ export class HouseholdMemberGuard implements CanActivate {
       household?: HouseholdContext;
     }>();
 
-    const hid = request.params?.hid;
+    const hid = request.params?.['hid'];
     if (!hid) {
       throw new BadRequestException('Missing household ID in route params');
     }

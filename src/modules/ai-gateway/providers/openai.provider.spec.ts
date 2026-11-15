@@ -32,14 +32,14 @@ describe('OpenAiProvider', () => {
   });
 
   it('is disabled when OPENAI_API_KEY is missing', () => {
-    delete process.env.OPENAI_API_KEY;
+    delete process.env['OPENAI_API_KEY'];
     const p = new OpenAiProvider(testAiCallConfig());
     expect(p.isConfigured).toBe(false);
   });
 
   it('uses response_format json_schema and encodes images as data URLs', async () => {
-    process.env.OPENAI_API_KEY = 'x';
-    process.env.OPENAI_MODEL = 'gpt-4o';
+    process.env['OPENAI_API_KEY'] = 'x';
+    process.env['OPENAI_MODEL'] = 'gpt-4o';
     mockCreate.mockResolvedValue({
       choices: [{ message: { content: '{"ok":true}' } }],
       usage: { prompt_tokens: 5, completion_tokens: 7 },
@@ -77,8 +77,8 @@ describe('OpenAiProvider', () => {
   });
 
   it('throws InvalidResponseError carrying the paid usage and raw body on non-JSON content', async () => {
-    process.env.OPENAI_API_KEY = 'x';
-    process.env.OPENAI_MODEL = 'gpt-4o';
+    process.env['OPENAI_API_KEY'] = 'x';
+    process.env['OPENAI_MODEL'] = 'gpt-4o';
     mockCreate.mockResolvedValue({
       choices: [{ message: { content: 'not json {' } }],
       usage: { prompt_tokens: 5, completion_tokens: 7 },
@@ -100,8 +100,8 @@ describe('OpenAiProvider', () => {
 
   describe('response handling', () => {
     beforeEach(() => {
-      process.env.OPENAI_API_KEY = 'x';
-      process.env.OPENAI_MODEL = 'gpt-4o';
+      process.env['OPENAI_API_KEY'] = 'x';
+      process.env['OPENAI_MODEL'] = 'gpt-4o';
     });
 
     const jsonReq = {
@@ -190,8 +190,8 @@ describe('OpenAiProvider', () => {
   });
 
   it('classifies 429/5xx as transient, 4xx otherwise as non-transient', () => {
-    process.env.OPENAI_API_KEY = 'x';
-    process.env.OPENAI_MODEL = 'gpt-4o';
+    process.env['OPENAI_API_KEY'] = 'x';
+    process.env['OPENAI_MODEL'] = 'gpt-4o';
     const p = new OpenAiProvider(testAiCallConfig());
     expect(p.isTransient({ status: 429 })).toBe(true);
     expect(p.isTransient({ status: 503 })).toBe(true);

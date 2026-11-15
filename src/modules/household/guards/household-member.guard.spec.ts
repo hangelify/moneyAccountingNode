@@ -84,6 +84,6 @@ describe('HouseholdMemberGuard', () => {
     const result = await guard.canActivate(ctx);
 
     expect(result).toBe(true);
-    expect(request.household).toEqual({ householdId: HID, role: 'owner' });
+    expect(request['household']).toEqual({ householdId: HID, role: 'owner' });
   });
 });

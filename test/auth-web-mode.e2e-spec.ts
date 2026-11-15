@@ -7,8 +7,9 @@ import {
   TestUser,
 } from './utils/app';
 import type { TokenResponseDto } from '../src/modules/auth/dto/token-response.dto';
+import { defined } from '../src/common/testing/defined';
 
-const FRONTEND = process.env.FRONTEND_URL || 'http://localhost:5173';
+const FRONTEND = process.env['FRONTEND_URL'] || 'http://localhost:5173';
 
 const refreshCookie = (res: request.Response): string | undefined =>
   ([] as string[])
@@ -16,7 +17,8 @@ const refreshCookie = (res: request.Response): string | undefined =>
     .find((c) => c.startsWith('refresh_token='));
 
 // "refresh_token=<value>; Path=/auth; ..." -> "refresh_token=<value>"
-const cookiePair = (setCookie: string) => setCookie.split(';')[0];
+const cookiePair = (setCookie: string): string =>
+  defined(setCookie.split(';')[0], 'cookie name=value');
 
 // Web clients keep the refresh token in an HttpOnly cookie guarded by an
 // Origin check; native clients opt into body tokens with X-Client-Type.
@@ -36,9 +38,8 @@ describe('Auth web and mobile client modes (e2e)', () => {
       .set('Origin', FRONTEND)
       .send(credentials())
       .expect(200);
-    const cookie = refreshCookie(res);
-    expect(cookie).toBeDefined();
-    return { body: res.body as TokenResponseDto, cookie: cookiePair(cookie!) };
+    const cookie = defined(refreshCookie(res), 'refresh cookie');
+    return { body: res.body as TokenResponseDto, cookie: cookiePair(cookie) };
   }
 
   const webRefresh = (cookie?: string) => {

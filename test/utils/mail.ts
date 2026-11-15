@@ -4,6 +4,7 @@ import {
   type MailMessage,
   type MailSender,
 } from '../../src/modules/mail/mail-sender';
+import { defined } from '../../src/common/testing/defined';
 
 /** Keeps sent emails in memory so specs can read the links in them. */
 export class InMemoryMailSender implements MailSender {
@@ -43,5 +44,5 @@ export function verificationTokenFor(
     mails[mails.length - 1]?.text ?? '',
   );
   if (!match) throw new Error(`No verification email to ${to}`);
-  return match[1];
+  return defined(match[1], 'token');
 }

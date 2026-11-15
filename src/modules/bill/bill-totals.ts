@@ -7,7 +7,7 @@ export const DEFAULT_BILL_ITEM_TOLERANCE = 0.01;
  * before the bill is flagged with `amount_mismatch`.
  */
 export function readBillItemTolerance(): number {
-  const raw = process.env.BILL_ITEM_TOLERANCE?.trim();
+  const raw = process.env['BILL_ITEM_TOLERANCE']?.trim();
   if (!raw) return DEFAULT_BILL_ITEM_TOLERANCE;
   if (!/^\d+(\.\d{1,2})?$/.test(raw)) {
     throw new Error(

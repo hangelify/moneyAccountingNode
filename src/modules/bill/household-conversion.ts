@@ -141,7 +141,9 @@ export async function loadRateDays(
   )) as { currency: Currency; bill_date: string | null }[];
   const dates = rows.flatMap((r) => (r.bill_date ? [r.bill_date] : []));
   if (dates.length > 0) await rates.ensureDays(dates, { max: 10 });
-  return rows[0].currency;
+  const [first] = rows;
+  if (!first) throw new Error(`Household ${householdId} not found`);
+  return first.currency;
 }
 
 /** A bill's total in its household currency and the rate behind it. */

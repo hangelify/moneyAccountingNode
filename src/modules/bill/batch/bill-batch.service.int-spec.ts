@@ -30,6 +30,7 @@ import {
   QUEUE_FAILED_MESSAGE,
 } from './bill-batch.service';
 import type { BillBatchEnv } from './bill-batch.env';
+import { defined } from '../../../common/testing/defined';
 
 jest.setTimeout(30_000);
 
@@ -59,11 +60,11 @@ describe('BillBatchService (PostgreSQL)', () => {
       imports: [
         MikroOrmModule.forRoot({
           driver: PostgreSqlDriver,
-          host: process.env.DB_HOST || 'localhost',
-          port: parseInt(process.env.DB_PORT || '5432', 10),
-          user: process.env.DB_USER || 'postgres',
-          password: process.env.DB_PASSWORD || 'postgres',
-          dbName: process.env.DB_NAME || 'accounting',
+          host: process.env['DB_HOST'] || 'localhost',
+          port: parseInt(process.env['DB_PORT'] || '5432', 10),
+          user: process.env['DB_USER'] || 'postgres',
+          password: process.env['DB_PASSWORD'] || 'postgres',
+          dbName: process.env['DB_NAME'] || 'accounting',
           entities: ['./dist/**/*.entity.js'],
           entitiesTs: ['./src/**/*.entity.ts'],
           allowGlobalContext: true,
@@ -216,13 +217,13 @@ describe('BillBatchService (PostgreSQL)', () => {
       expect(stored.map((i) => i.id)).toEqual(res.items.map((i) => i.id));
 
       expect(queue.addBulk).toHaveBeenCalledTimes(1);
-      const jobs = (queue.addBulk.mock.calls as unknown[][])[0][0] as {
+      const jobs = defined((queue.addBulk.mock.calls as unknown[][])[0])[0] as {
         data: { itemId: string };
         opts: Record<string, unknown>;
       }[];
       expect(jobs.map((j) => j.data.itemId)).toEqual(stored.map((i) => i.id));
-      expect(jobs[0].opts).toEqual({
-        jobId: stored[0].id,
+      expect(jobs[0]?.opts).toEqual({
+        jobId: defined(stored[0]).id,
         attempts: 3,
         backoff: { type: 'exponential', delay: 5000 },
         removeOnComplete: { age: 86400 },
@@ -257,10 +258,12 @@ describe('BillBatchService (PostgreSQL)', () => {
     });
 
     it('delays the job of a photo repeated in the upload', async () => {
-      const [a, b] = images(2);
+      const pair = images(2);
+      const a = defined(pair[0]);
+      const b = defined(pair[1]);
       await service.createBatch({ householdId, userId, images: [a, b, a, a] });
 
-      const jobs = (queue.addBulk.mock.calls as unknown[][])[0][0] as {
+      const jobs = defined((queue.addBulk.mock.calls as unknown[][])[0])[0] as {
         opts: { delay?: number };
       }[];
       expect(jobs.map((j) => j.opts.delay)).toEqual([
@@ -322,7 +325,8 @@ describe('BillBatchService (PostgreSQL)', () => {
         userId,
         images: images(2),
       });
-      const [first, second] = res.items;
+      const first = defined(res.items[0]);
+      const second = defined(res.items[1]);
 
       const a = await service.markItemFailed(first.id, {
         code: BillParseErrorCode.NOT_A_RECEIPT,
@@ -338,14 +342,14 @@ describe('BillBatchService (PostgreSQL)', () => {
       // The second item still runs.
       expect(a.completion).toBeNull();
       expect(b).toEqual({ changed: false, billId: a.billId, completion: null });
-      const [stored] = await itemsOf(res.batch_id);
+      const stored = defined((await itemsOf(res.batch_id))[0]);
       expect(stored.status).toBe(BillBatchItemStatus.FAILED);
       const bills = await orm.em
         .fork()
         .find(Bill, { image_sha256: stored.image_sha256 });
       expect(bills).toHaveLength(1);
-      expect(bills[0].parse_error_code).toBe(BillParseErrorCode.NOT_A_RECEIPT);
-      expect(bills[0].image_key).toBe(stored.image_key);
+      expect(bills[0]?.parse_error_code).toBe(BillParseErrorCode.NOT_A_RECEIPT);
+      expect(bills[0]?.image_key).toBe(stored.image_key);
 
       // A finished item cannot become done, and the batch is still running.
       expect(await service.markItemDone(first.id, a.billId!)).toEqual({
@@ -354,11 +358,11 @@ describe('BillBatchService (PostgreSQL)', () => {
       });
 
       await service.markItemProcessing(second.id);
-      expect((await itemsOf(res.batch_id))[1].status).toBe(
+      expect((await itemsOf(res.batch_id))[1]?.status).toBe(
         BillBatchItemStatus.PROCESSING,
       );
       await service.markItemQueued(second.id);
-      expect((await itemsOf(res.batch_id))[1].status).toBe(
+      expect((await itemsOf(res.batch_id))[1]?.status).toBe(
         BillBatchItemStatus.QUEUED,
       );
       const draftId = await makeBill(BillStatus.DRAFT);
@@ -397,8 +401,8 @@ describe('BillBatchService (PostgreSQL)', () => {
         { lockMode: LockMode.PESSIMISTIC_WRITE },
       );
       const pending = Promise.all([
-        service.markItemDone(res.items[0].id, d1),
-        service.markItemDone(res.items[1].id, d2),
+        service.markItemDone(defined(res.items[0]).id, d1),
+        service.markItemDone(defined(res.items[1]).id, d2),
       ]);
       await new Promise((r) => setTimeout(r, 300));
       await holder.commit();
@@ -417,7 +421,7 @@ describe('BillBatchService (PostgreSQL)', () => {
         userId,
         images: images(2),
       });
-      const second = (await itemsOf(res.batch_id))[1];
+      const second = defined((await itemsOf(res.batch_id))[1]);
 
       expect(await service.findItemForJob(second.id)).toEqual({
         id: second.id,
@@ -440,7 +444,7 @@ describe('BillBatchService (PostgreSQL)', () => {
       });
       const billId = await makeBill(BillStatus.FAILED, 'ai/images/x.jpg');
       expect(
-        await service.markItemFailed(res.items[0].id, {
+        await service.markItemFailed(defined(res.items[0]).id, {
           code: BillParseErrorCode.SAVE_FAILED,
           message: 'save failed',
           billId,
@@ -479,7 +483,7 @@ describe('BillBatchService (PostgreSQL)', () => {
 
     it('fails a stale item whose job is gone, with a failed bill and events', async () => {
       const res = await batchAged(1, 20 * MIN);
-      const [item] = res.items;
+      const item = defined(res.items[0]);
       await orm.em
         .fork()
         .nativeUpdate(
@@ -492,11 +496,11 @@ describe('BillBatchService (PostgreSQL)', () => {
 
       expect(queue.getJob).toHaveBeenCalledWith(item.id);
       const [stored] = await itemsOf(res.batch_id);
-      expect(stored.status).toBe(BillBatchItemStatus.FAILED);
-      expect(stored.updated_at.getTime()).toBeGreaterThan(Date.now() - MIN);
-      expect(stored.bill?.status).toBe(BillStatus.FAILED);
-      expect(stored.bill?.parse_error_code).toBe(BillParseErrorCode.AI_FAILED);
-      expect(stored.bill?.parse_error_message).toBe(PROCESSING_FAILED_MESSAGE);
+      expect(stored?.status).toBe(BillBatchItemStatus.FAILED);
+      expect(stored?.updated_at.getTime()).toBeGreaterThan(Date.now() - MIN);
+      expect(stored?.bill?.status).toBe(BillStatus.FAILED);
+      expect(stored?.bill?.parse_error_code).toBe(BillParseErrorCode.AI_FAILED);
+      expect(stored?.bill?.parse_error_message).toBe(PROCESSING_FAILED_MESSAGE);
       const events = (
         publisher.publish.mock.calls as [
           string,
@@ -512,7 +516,9 @@ describe('BillBatchService (PostgreSQL)', () => {
     it('fails a stale item whose job already failed or completed', async () => {
       const res = await batchAged(2, 20 * MIN);
       queue.getJob.mockImplementation((id: string) =>
-        Promise.resolve(jobIn(id === res.items[0].id ? 'failed' : 'completed')),
+        Promise.resolve(
+          jobIn(id === defined(res.items[0]).id ? 'failed' : 'completed'),
+        ),
       );
 
       await service.sweepStaleItems();
@@ -531,7 +537,7 @@ describe('BillBatchService (PostgreSQL)', () => {
 
         await service.sweepStaleItems();
 
-        const [stored] = await itemsOf(res.batch_id);
+        const stored = defined((await itemsOf(res.batch_id))[0]);
         expect(stored.status).toBe(BillBatchItemStatus.QUEUED);
         expect(stored.bill).toBeNull();
       },
@@ -542,9 +548,9 @@ describe('BillBatchService (PostgreSQL)', () => {
 
       await service.sweepStaleItems();
 
-      expect(queue.getJob).not.toHaveBeenCalledWith(res.items[0].id);
+      expect(queue.getJob).not.toHaveBeenCalledWith(defined(res.items[0]).id);
       const [stored] = await itemsOf(res.batch_id);
-      expect(stored.status).toBe(BillBatchItemStatus.QUEUED);
+      expect(stored?.status).toBe(BillBatchItemStatus.QUEUED);
     });
   });
 
@@ -586,8 +592,8 @@ describe('BillBatchService (PostgreSQL)', () => {
       expect(quota.reserveDaily).toHaveBeenCalledWith(userId, 0);
       expect(gateway.assertWithinBudget).toHaveBeenCalledWith(userId);
       expect(res.total).toBe(1);
-      expect(res.items[0].status).toBe('queued');
-      const [item] = await itemsOf(res.batch_id);
+      expect(res.items[0]?.status).toBe('queued');
+      const item = defined((await itemsOf(res.batch_id))[0]);
       expect(item.image_key).toBe(key);
       expect(queue.addBulk).toHaveBeenCalledWith([
         expect.objectContaining({ data: { itemId: item.id } }),
@@ -599,7 +605,7 @@ describe('BillBatchService (PostgreSQL)', () => {
       await expect(crud().softDeleteBill(id, householdId)).rejects.toThrow(
         NotFoundException,
       );
-      expect((await itemsOf(res.batch_id))[0].status).toBe(
+      expect((await itemsOf(res.batch_id))[0]?.status).toBe(
         BillBatchItemStatus.QUEUED,
       );
       // A second retry of the same bill is refused.

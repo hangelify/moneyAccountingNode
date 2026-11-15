@@ -25,7 +25,7 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
     super();
   }
 
-  handleRequest<TUser>(
+  override handleRequest<TUser>(
     err: Error | null | undefined,
     user: TUser | false,
     _info: unknown,

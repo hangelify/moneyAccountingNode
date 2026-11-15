@@ -68,8 +68,8 @@ describe('withRetry', () => {
     await jest.advanceTimersByTimeAsync(20);
     await assertion;
     expect(fn).toHaveBeenCalledTimes(1);
-    expect(seen[0].aborted).toBe(true);
-    expect(seen[0].reason).toBeInstanceOf(TimeoutError);
+    expect(seen[0]?.aborted).toBe(true);
+    expect(seen[0]?.reason).toBeInstanceOf(TimeoutError);
   });
 
   it('rejects on timeout even if the call ignores the signal', async () => {
@@ -89,7 +89,7 @@ describe('withRetry', () => {
     const assertion = expect(p).rejects.toBeInstanceOf(DeadlineExceededError);
     parent.abort(new DeadlineExceededError(5));
     await assertion;
-    expect(seen[0].aborted).toBe(true);
+    expect(seen[0]?.aborted).toBe(true);
     expect(fn).toHaveBeenCalledTimes(1);
   });
 

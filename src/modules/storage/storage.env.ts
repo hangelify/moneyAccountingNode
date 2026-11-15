@@ -15,14 +15,14 @@ export interface StorageEnv {
 }
 
 export function readStorageEnv(): StorageEnv {
-  const forcePathStyleRaw = process.env.S3_FORCE_PATH_STYLE ?? 'false';
+  const forcePathStyleRaw = process.env['S3_FORCE_PATH_STYLE'] ?? 'false';
   return {
     region: requireEnv('S3_REGION'),
     bucket: requireEnv('S3_BUCKET'),
     accessKey: requireEnv('S3_ACCESS_KEY'),
     secretKey: requireEnv('S3_SECRET_KEY'),
-    endpoint: process.env.S3_ENDPOINT?.trim() || undefined,
-    publicEndpoint: process.env.S3_PUBLIC_ENDPOINT?.trim() || undefined,
+    endpoint: process.env['S3_ENDPOINT']?.trim() || undefined,
+    publicEndpoint: process.env['S3_PUBLIC_ENDPOINT']?.trim() || undefined,
     forcePathStyle: forcePathStyleRaw === 'true',
   };
 }

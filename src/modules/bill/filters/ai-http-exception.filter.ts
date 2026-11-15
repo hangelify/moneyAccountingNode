@@ -39,8 +39,8 @@ export class AiHttpExceptionFilter implements ExceptionFilter<HttpException> {
       ...fields,
       ...aiErrorBody(
         status,
-        messageOf(fields.message, exception.message),
-        typeof fields.request_id === 'string' ? fields.request_id : null,
+        messageOf(fields['message'], exception.message),
+        typeof fields['request_id'] === 'string' ? fields['request_id'] : null,
       ),
     });
   }

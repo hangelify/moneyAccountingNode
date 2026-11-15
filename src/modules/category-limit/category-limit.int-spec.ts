@@ -378,6 +378,11 @@ describe('category limits (PostgreSQL)', () => {
 
     expect(results.map((r) => r.status)).toEqual(['fulfilled', 'fulfilled']);
     await expectConsistent(cat);
+    const open = (await versionsOf(cat)).find((v) => v.effective_to === null);
+    expect([
+      [MONTHLY, 400],
+      [QUARTERLY, 900],
+    ]).toContainEqual([open?.period_type, open?.amount]);
   });
 
   it('writeCategoryLimit joins the caller transaction: a rollback undoes it', async () => {

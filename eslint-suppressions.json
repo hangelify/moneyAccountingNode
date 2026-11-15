@@ -935,10 +935,7 @@
   },
   "src/modules/bill/dto/money-bounds.dto.spec.ts": {
     "@typescript-eslint/explicit-function-return-type": {
-      "count": 4
-    },
-    "max-params": {
-      "count": 1
+      "count": 3
     }
   },
   "src/modules/bill/dto/receipt-identity.dto.spec.ts": {

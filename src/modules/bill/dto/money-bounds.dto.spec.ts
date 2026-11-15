@@ -78,13 +78,15 @@ const cases: Case[] = [
   ...limitCases,
 ];
 
-describe.each(cases)('%s', (_, Dto, base, patch, property) => {
-  async function errorsFor(v: number) {
-    const errors = await validate(
-      plainToInstance(Dto, { ...base, ...patch(v) }),
-    );
-    return errors.filter((e) => e.property === property);
-  }
+/** The validation errors of `property` when the case's amount is `v`. */
+async function caseErrors(c: Case, v: number): Promise<ValidationError[]> {
+  const [, Dto, base, patch, property] = c;
+  const errors = await validate(plainToInstance(Dto, { ...base, ...patch(v) }));
+  return errors.filter((e) => e.property === property);
+}
+
+describe.each(cases)('%s', (...c: Case) => {
+  const errorsFor = (v: number): Promise<ValidationError[]> => caseErrors(c, v);
 
   it('accepts an amount with two decimal places', async () => {
     expect(await errorsFor(12.34)).toHaveLength(0);
@@ -171,13 +173,7 @@ describe.each([
   },
 );
 
-/** The validation errors of `property` when the case's amount is `v`. */
-async function caseErrors(c: Case, v: number): Promise<ValidationError[]> {
-  const [, Dto, base, patch, property] = c;
-  const errors = await validate(plainToInstance(Dto, { ...base, ...patch(v) }));
-  return errors.filter((e) => e.property === property);
-}
-
+// Limit amounts are strictly positive, unlike bill item amounts above.
 describe.each(limitCases)('%s sign', (...c: Case) => {
   it('accepts the smallest amount', async () => {
     expect(await caseErrors(c, 0.01)).toHaveLength(0);

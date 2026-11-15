@@ -94,6 +94,13 @@ describe('ReplaceBudgetsWithCategoryLimits migration (PostgreSQL)', () => {
       expect(index?.['indexdef']).toMatch(
         /UNIQUE INDEX .* \(category_id\) WHERE \(effective_to IS NULL\)/,
       );
+
+      const lookup = await sql(
+        `select 1 from pg_indexes
+         where tablename = 'category_limits'
+           and indexname = 'category_limits_household_category_from_index'`,
+      );
+      expect(lookup).toHaveLength(1);
     });
 
     it('allows one open version per category', async () => {
@@ -168,8 +175,15 @@ describe('ReplaceBudgetsWithCategoryLimits migration (PostgreSQL)', () => {
       await expect(sql(LEGACY_ROWS_GUARD_SQL)).resolves.toBeDefined();
     });
 
-    it('refuses to drop non-empty legacy tables', async () => {
-      await sql(`insert into budgets (id) values (?)`, [randomUUID()]);
+    it.each([
+      ['budgets', `insert into budgets (id) values (?)`],
+      ['planing_horizons', `insert into planing_horizons (id) values (?)`],
+      [
+        'planing_horizon_categories',
+        `insert into planing_horizon_categories (planing_horizon_id) values (?)`,
+      ],
+    ])('refuses to drop a non-empty %s', async (_table, insert) => {
+      await sql(insert, [randomUUID()]);
 
       const err = await failure(LEGACY_ROWS_GUARD_SQL);
       expect(err.message).toContain('export them before HAN-24 migration');

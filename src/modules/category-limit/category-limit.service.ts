@@ -1,10 +1,10 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, InternalServerErrorException } from '@nestjs/common';
 import { EntityManager, FilterQuery } from '@mikro-orm/core';
 import { CategoryLimit } from '../../entities/category-limit.entity';
+import { decimalToNumber } from '../../common/utils/money.util';
 import { todayIsoDate } from '../../common/utils/calendar-date';
 import {
   CategoryLimitChange,
-  decimalToNumber,
   WriteCategoryLimitOptions,
   writeCategoryLimit,
 } from './category-limit-write';
@@ -118,7 +118,11 @@ export class CategoryLimitService {
         opts,
       );
       // An open version exists after every write the options allow.
-      if (!row) throw new Error('No limit in force after the write');
+      if (!row) {
+        throw new InternalServerErrorException(
+          `No limit in force for category ${categoryId} after the write`,
+        );
+      }
       return toDto(row);
     });
   }

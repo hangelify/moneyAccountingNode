@@ -5,6 +5,7 @@ import { CategoryLimit } from '../../entities/category-limit.entity';
 import { Household } from '../../entities/household.entity';
 import { User } from '../../entities/user.entity';
 import { LimitPeriodType } from '../../types/limit-period-type.enum';
+import { decimalToNumber } from '../../common/utils/money.util';
 import { limitPeriodStart } from '../../common/utils/period-range';
 import {
   LimitChange,
@@ -28,9 +29,6 @@ export interface WriteCategoryLimitOptions {
   /** An open version → `ConflictException` (POST). */
   forbidOpen?: boolean;
 }
-
-/** A decimal column value as a number: MikroORM reads decimals as strings. */
-export const decimalToNumber = (v: unknown): number => Number(v);
 
 const toVersion = (row: CategoryLimit): LimitVersion => ({
   id: row.id,

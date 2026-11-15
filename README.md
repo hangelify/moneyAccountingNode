@@ -1,6 +1,6 @@
 # Family Accounting API
 
-A NestJS REST API for household financial management. Supports multi-user households, budget planning, expense tracking with AI-assisted bill parsing, S3 file storage, and JWT-based authentication.
+A NestJS REST API for household financial management. Supports multi-user households, spending limits, expense tracking with AI-assisted bill parsing, S3 file storage, and JWT-based authentication.
 
 ---
 
@@ -36,8 +36,7 @@ The application is organized into feature modules under `src/modules/`:
 | `auth` | Session-based authentication with JWT: registration, login, logout, access/refresh tokens backed by server-side sessions |
 | `user` | User profile management |
 | `household` | Multi-user households, member invites, household-scoped data access |
-| `budget` | Budget creation and management |
-| `planing-horizon` | Planning horizons linked to budgets and categories |
+| `category-limit` | Versioned per-category spending limits: `GET`/`POST /households/:hid/category-limits`, `PUT`/`DELETE …/:categoryId` |
 | `category` | Expense categories (per-user) |
 | `sub-category` | Sub-categories under categories |
 | `bill` | Bill CRUD, AI-assisted parsing from photos, draft/approval workflow, dashboard stats |
@@ -76,7 +75,7 @@ The schema is split into four logical groups that roughly mirror the feature mod
 |---|---|---|
 | **Identity & Auth** | `User`, `Session`, `RefreshToken`, `Log` | One user, cross-household |
 | **Household** | `Household`, `HouseholdMember`, `HouseholdInvite` | Multi-user membership layer |
-| **Finance** | `Budget`, `PlaningHorizon`, `Category`, `SubCategory`, `Market`, `Bill`, `BillSubCategory` | Household-scoped financial data |
+| **Finance** | `Category`, `CategoryLimit`, `SubCategory`, `Market`, `Bill`, `BillSubCategory` | Household-scoped financial data |
 | **AI Observability** | `AiRequest`, `AiRequestAttempt` | Per-user AI call audit trail |
 
 ---
@@ -100,13 +99,9 @@ HouseholdMember                                   RefreshToken
  ├──────────────────────────────────────────────────────┐
  │                                                      │
  ▼                                                      ▼
-Budget                                             Category ──── SubCategory
- │                                                  ▲               │
- │ has many                                         │               │
- ▼                                                  │               │
-PlaningHorizon ──────────── (pivot table) ──────────┘               │
-                           planing_horizon_categories                │
-                                                                     │
+CategoryLimit ───► Category ──── SubCategory
+ (versions per category)                    │
+                                            │
 Market ◄──── Bill ──────────────────────── BillSubCategory ─────────┘
               (created_by → User)           (line items, amount, AI confidence)
               (household → Household)
@@ -165,11 +160,10 @@ All finance entities belong to a **`Household`**, not an individual user. Any ho
 
 ```
 Household
-  └── Budget (name, description)
-        └── PlaningHorizon (amount, currency, period_type, is_archived)
-              └──[M:N]── Category (name, description)
-                              └── SubCategory (name, description)
-                                       └──[via BillSubCategory]── Bill
+  └── Category (name, description)
+        ├── CategoryLimit[] (period_type, amount, currency, effective_from/to)
+        └── SubCategory (name, description)
+                 └──[via BillSubCategory]── Bill
   └── Market (name, address, city, country)
   └── Bill (amount, bill_date, status, currency)
         ├── created_by → User
@@ -178,11 +172,9 @@ Household
               └── sub_category → SubCategory (optional, AI-assigned)
 ```
 
-**`Budget`** groups planning horizons into a named plan for a household (e.g. "Monthly 2026").
+**`CategoryLimit`** is one version of a category's spending limit (`MONTHLY`, `QUARTERLY`, `SEMI_ANNUAL` or `YEARLY` period), in force on `[effective_from, effective_to)`; a category has at most one open version.
 
-**`PlaningHorizon`** defines a spending target for a given period (`DAILY`, `WEEKLY`, `MONTHLY`, `YEARLY`). It links to one or more `Category` records via the pivot table `planing_horizon_categories`.
-
-**`Category`** belongs to a household and has many `SubCategory` children. Categories are shared across all budgets within the same household.
+**`Category`** belongs to a household and has many `SubCategory` children and, optionally, limit versions.
 
 **`SubCategory`** is the leaf node of the taxonomy (e.g. Category = "Groceries", SubCategory = "Dairy"). It is referenced by `BillSubCategory` for both manual and AI-categorised line items.
 

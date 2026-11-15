@@ -4,8 +4,6 @@ import { plainToInstance } from 'class-transformer';
 import { CreateBillDto } from './create-bill.dto';
 import { ConfirmBillDto } from './confirm-bill.dto';
 import { UpdateBillDto } from './update-bill.dto';
-import { CreatePlaningHorizonDto } from '../../planing-horizon';
-import { UpdatePlaningHorizonDto } from '../../planing-horizon';
 
 const item = (over: object = {}) => ({
   sub_category_id: randomUUID(),
@@ -15,12 +13,6 @@ const item = (over: object = {}) => ({
 });
 
 const billBase = { bill_date: '2026-05-19', total_amount: 1, items: [item()] };
-const horizonBase = {
-  name: 'Q1',
-  amount: 1,
-  currency: 'EUR',
-  period_type: 'monthly',
-};
 
 type Case = [string, new () => object, object, (v: number) => object, string];
 
@@ -59,20 +51,6 @@ const cases: Case[] = [
     {},
     (v) => ({ total_amount: v }),
     'total_amount',
-  ],
-  [
-    'CreatePlaningHorizonDto.amount',
-    CreatePlaningHorizonDto,
-    horizonBase,
-    (v) => ({ amount: v }),
-    'amount',
-  ],
-  [
-    'UpdatePlaningHorizonDto.amount',
-    UpdatePlaningHorizonDto,
-    {},
-    (v) => ({ amount: v }),
-    'amount',
   ],
 ];
 

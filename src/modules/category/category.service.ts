@@ -6,7 +6,6 @@ import {
 import { InjectRepository } from '@mikro-orm/nestjs';
 import { EntityRepository, EntityManager } from '@mikro-orm/core';
 import { Category } from '../../entities/category.entity';
-import { PlaningHorizon } from '../../entities/planing-horizon.entity';
 import { Household } from '../../entities/household.entity';
 import { CreateCategoryDto } from './dto/create-category.dto';
 import { BulkCreateCategoryDto } from './dto/bulk-create-category.dto';
@@ -28,40 +27,18 @@ export class CategoryService {
   constructor(
     @InjectRepository(Category)
     private readonly categoryRepository: EntityRepository<Category>,
-    @InjectRepository(PlaningHorizon)
-    private readonly planingHorizonRepository: EntityRepository<PlaningHorizon>,
     private readonly em: EntityManager,
   ) {}
 
-  /**
-   * Create a new category and link it to a planning horizon
-   * Planning horizon must belong to the household through budget
-   */
+  /** Create a new category in the household. */
   async createCategory(
     householdId: string,
     createCategoryDto: CreateCategoryDto,
   ): Promise<CategoryResponseDto> {
-    // Verify that the planning horizon exists and belongs to the household
-    const planingHorizon = await this.planingHorizonRepository.findOne({
-      id: createCategoryDto.planing_horizon_id,
-      budget: { household: { id: householdId }, deleted_at: null },
-      is_archived: false,
-      deleted_at: null,
-    });
-
-    if (!planingHorizon) {
-      throw new NotFoundException(
-        `Planning horizon with ID ${createCategoryDto.planing_horizon_id} not found or does not belong to this household`,
-      );
-    }
-
     const category = new Category();
     category.name = createCategoryDto.name;
     category.description = createCategoryDto.description;
     category.household = this.em.getReference(Household, householdId);
-
-    // Link category to planning horizon
-    category.planingHorizons.add(planingHorizon);
 
     await this.em.persist(category).flush();
 
@@ -74,28 +51,11 @@ export class CategoryService {
     };
   }
 
-  /**
-   * Bulk create categories for a planning horizon
-   * This is the only way to create categories (as per requirements)
-   */
+  /** Create several categories in the household at once. */
   async bulkCreateCategories(
     householdId: string,
     bulkCreateCategoryDto: BulkCreateCategoryDto,
   ): Promise<CategoryResponseDto[]> {
-    // Verify that the planning horizon exists and belongs to the household
-    const planingHorizon = await this.planingHorizonRepository.findOne({
-      id: bulkCreateCategoryDto.planing_horizon_id,
-      budget: { household: { id: householdId }, deleted_at: null },
-      is_archived: false,
-      deleted_at: null,
-    });
-
-    if (!planingHorizon) {
-      throw new NotFoundException(
-        `Planning horizon with ID ${bulkCreateCategoryDto.planing_horizon_id} not found or does not belong to this household`,
-      );
-    }
-
     assertUniqueNames(bulkCreateCategoryDto.categories.map((c) => c.name));
 
     const categories: Category[] = [];
@@ -105,7 +65,6 @@ export class CategoryService {
       category.name = categoryItem.name;
       category.description = categoryItem.description;
       category.household = this.em.getReference(Household, householdId);
-      category.planingHorizons.add(planingHorizon);
       categories.push(category);
     }
 

@@ -10,8 +10,6 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthModule } from './modules/auth/auth.module';
 import { MailModule } from './modules/mail/mail.module';
-import { BudgetModule } from './modules/budget/budget.module';
-import { PlaningHorizonModule } from './modules/planing-horizon/planing-horizon.module';
 import { CategoryModule } from './modules/category/category.module';
 import { SubCategoryModule } from './modules/sub-category/sub-category.module';
 import { StorageModule } from './modules/storage/storage.module';
@@ -35,8 +33,6 @@ export const APP_THROTTLERS = [{ name: 'default', ttl: 60_000, limit: 100 }];
     ScheduleModule.forRoot(),
     MailModule,
     AuthModule,
-    BudgetModule,
-    PlaningHorizonModule,
     CategoryModule,
     SubCategoryModule,
     StorageModule,

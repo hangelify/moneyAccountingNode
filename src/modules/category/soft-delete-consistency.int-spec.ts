@@ -6,7 +6,6 @@ import { NotFoundException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { Category } from '../../entities/category.entity';
 import { Household } from '../../entities/household.entity';
-import { PlaningHorizon } from '../../entities/planing-horizon.entity';
 import { SubCategory } from '../../entities/sub-category.entity';
 import { User } from '../../entities/user.entity';
 import { CategoryService } from './category.service';
@@ -75,11 +74,7 @@ describe('soft delete of categories and their sub-categories (PostgreSQL)', () =
   });
 
   function categoryService(em: EntityManager) {
-    return new CategoryService(
-      em.getRepository(Category),
-      em.getRepository(PlaningHorizon),
-      em,
-    );
+    return new CategoryService(em.getRepository(Category), em);
   }
 
   function subCategoryService(em: EntityManager) {

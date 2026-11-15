@@ -68,7 +68,7 @@ export class CategoryController {
 
   @Post('bulk')
   @HttpCode(HttpStatus.CREATED)
-  @ApiOperation({ summary: 'Bulk create categories for a planning horizon' })
+  @ApiOperation({ summary: 'Bulk create categories' })
   @ApiBulkCreateCategoryResponses()
   async bulkCreateCategories(
     @CurrentHousehold() ctx: HouseholdContext,

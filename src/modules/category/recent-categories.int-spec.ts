@@ -2,7 +2,6 @@ import { randomUUID } from 'node:crypto';
 import { MikroORM } from '@mikro-orm/postgresql';
 import { createMikroOrmConfig } from '../../mikro-orm.config';
 import { Category } from '../../entities/category.entity';
-import { PlaningHorizon } from '../../entities/planing-horizon.entity';
 import {
   addCalendarDays,
   chisinauToday,
@@ -126,11 +125,7 @@ describe('recently used categories (PostgreSQL)', () => {
 
   function service() {
     const fork = orm.em.fork();
-    return new CategoryService(
-      fork.getRepository(Category),
-      fork.getRepository(PlaningHorizon),
-      fork,
-    );
+    return new CategoryService(fork.getRepository(Category), fork);
   }
 
   it('lists category and sub-category pairs, newest use first', async () => {

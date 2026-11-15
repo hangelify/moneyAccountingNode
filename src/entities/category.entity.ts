@@ -4,13 +4,11 @@ import {
   Property,
   BeforeCreate,
   BeforeUpdate,
-  ManyToMany,
   ManyToOne,
   OneToMany,
   Index,
 } from '@mikro-orm/decorators/legacy';
 import { BaseEntity } from './base.entity';
-import { PlaningHorizon } from './planing-horizon.entity';
 import { SubCategory } from './sub-category.entity';
 import { Household } from './household.entity';
 
@@ -40,12 +38,6 @@ export class Category extends BaseEntity {
 
   @Property({ type: 'timestamptz', nullable: true })
   deleted_at?: Date;
-
-  @ManyToMany(
-    () => PlaningHorizon,
-    (planingHorizon) => planingHorizon.categories,
-  )
-  planingHorizons = new Collection<PlaningHorizon>(this);
 
   @OneToMany(() => SubCategory, (subCategory) => subCategory.category)
   subCategories = new Collection<SubCategory>(this);

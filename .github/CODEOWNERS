@@ -1,0 +1,14 @@
+# Changes to the code checks, their baselines and the agent rules need the
+# owner's review (HAN-122).
+/eslint.config.mjs                              @hangelify
+/eslint-suppressions.json                       @hangelify
+/.dependency-cruiser.cjs                        @hangelify
+/.dependency-cruiser-known-violations.json      @hangelify
+/.jscpd.json                                    @hangelify
+/knip.json                                      @hangelify
+/.squawk.toml                                   @hangelify
+/tsconfig*.json                                 @hangelify
+/.husky/                                        @hangelify
+/.github/                                       @hangelify
+/.claude/                                       @hangelify
+/AGENTS.md                                      @hangelify

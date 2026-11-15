@@ -24,8 +24,8 @@ import { NotAfterTomorrow } from '../../../common/validators/not-after-tomorrow'
 
 export const MAX_MANUAL_BATCH_ROWS = 50;
 /** The length of a bill line's `raw_name`, where the note is kept. */
-export const MAX_MANUAL_NOTE_LENGTH = 255;
-export const MAX_MANUAL_MARKET_NAME_LENGTH = 255;
+const MAX_MANUAL_NOTE_LENGTH = 255;
+const MAX_MANUAL_MARKET_NAME_LENGTH = 255;
 
 const trim = ({ value }: { value: unknown }): unknown =>
   typeof value === 'string' ? value.trim() : value;

@@ -94,4 +94,3 @@ export const ParsedBillSchema = z.object({
   items: z.array(ParsedBillItemSchema),
 });
 export type ParsedBill = z.infer<typeof ParsedBillSchema>;
-export type ParsedBillItem = z.infer<typeof ParsedBillItemSchema>;

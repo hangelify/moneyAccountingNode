@@ -12,7 +12,7 @@ import {
   NotFoundError,
   UniqueConstraintViolationException,
 } from '@mikro-orm/core';
-import { Request, Response } from 'express';
+import type { Request, Response } from 'express';
 import { HttpExceptionWithHeaders } from '../exceptions/http-exception-with-headers';
 
 // Postgres "invalid_text_representation", e.g. a malformed uuid.

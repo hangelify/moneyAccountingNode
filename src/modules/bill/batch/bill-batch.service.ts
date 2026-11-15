@@ -35,7 +35,7 @@ export const QUEUE_FAILED_MESSAGE =
 export const PROCESSING_FAILED_MESSAGE = 'Processing failed; retry later';
 
 /** An unfinished item untouched this long, without a live job, is stuck. */
-export const STALE_ITEM_MS = 15 * 60_000;
+const STALE_ITEM_MS = 15 * 60_000;
 const SWEEP_BATCH_SIZE = 200;
 /** BullMQ states in which the item's job will still run. */
 const LIVE_JOB_STATES = new Set([

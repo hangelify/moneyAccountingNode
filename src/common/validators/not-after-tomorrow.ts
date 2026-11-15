@@ -1,7 +1,7 @@
 import { ValidateBy, ValidationOptions, buildMessage } from 'class-validator';
 import { addCalendarDays, chisinauToday } from '../utils/calendar-date';
 
-export const NOT_AFTER_TOMORROW = 'notAfterTomorrow';
+const NOT_AFTER_TOMORROW = 'notAfterTomorrow';
 
 /**
  * A `YYYY-MM-DD` day no later than tomorrow in Chisinau: today plus one day

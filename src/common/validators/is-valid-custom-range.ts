@@ -2,7 +2,7 @@ import { ValidateBy, ValidationOptions } from 'class-validator';
 import { isCalendarDate } from '../utils/calendar-date';
 import { addYears, MAX_CUSTOM_RANGE_YEARS } from '../utils/period-range';
 
-export const IS_VALID_CUSTOM_RANGE = 'isValidCustomRange';
+const IS_VALID_CUSTOM_RANGE = 'isValidCustomRange';
 
 /**
  * On the inclusive end day of a range: not before the start day named by

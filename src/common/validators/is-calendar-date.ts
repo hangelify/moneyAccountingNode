@@ -1,7 +1,7 @@
 import { ValidateBy, ValidationOptions, buildMessage } from 'class-validator';
 import { isCalendarDate } from '../utils/calendar-date';
 
-export const IS_CALENDAR_DATE = 'isCalendarDate';
+const IS_CALENDAR_DATE = 'isCalendarDate';
 
 /**
  * Plain `YYYY-MM-DD` that exists on the calendar. Unlike `IsDateString`, it

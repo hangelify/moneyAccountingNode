@@ -1,6 +1,6 @@
 import { ValidateBy, ValidationOptions, buildMessage } from 'class-validator';
 
-export const MAX_BYTES = 'maxBytes';
+const MAX_BYTES = 'maxBytes';
 
 /** UTF-8 length limit, for values whose consumer counts bytes (e.g. bcrypt). */
 export function MaxBytes(

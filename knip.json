@@ -1,0 +1,19 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "entry": [
+    "src/main.ts",
+    "src/migrations/*.ts",
+    "scripts/*.ts",
+    "src/**/*.int-spec.ts",
+    "test/**/*.{e2e,int}-spec.ts",
+    "test/setup/*.ts"
+  ],
+  "project": [
+    "src/**/*.ts",
+    "test/**/*.ts",
+    "scripts/**/*.ts"
+  ],
+  "ignoreDependencies": [
+    "@swc-node/register"
+  ]
+}

@@ -5,7 +5,7 @@ import {
   HttpStatus,
   Logger,
 } from '@nestjs/common';
-import { Response } from 'express';
+import type { Response } from 'express';
 import {
   AiGatewayExhaustedError,
   AiImageStorageError,
@@ -16,7 +16,7 @@ import type { FailureKind } from '../../ai-gateway';
 import { aiErrorBody } from './ai-error-body';
 
 /** Providers are usually back within this time after a 429/5xx/timeout. */
-export const AI_UNAVAILABLE_RETRY_AFTER_SEC = 30;
+const AI_UNAVAILABLE_RETRY_AFTER_SEC = 30;
 
 type AiGatewayError =
   | AiGatewayExhaustedError

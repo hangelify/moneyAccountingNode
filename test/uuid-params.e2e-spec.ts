@@ -19,10 +19,17 @@ describe('UUID route params (e2e)', () => {
     await app.close();
   });
 
-  const call = (method: Method, path: string) =>
-    request(app.getHttpServer())
+  // A valid body: body validation runs before the id param pipe.
+  const LIMIT_BODY = { period_type: 'MONTHLY', amount: 10 };
+
+  const call = (method: Method, path: string) => {
+    const req = request(app.getHttpServer())
       [method](path)
       .set('Authorization', `Bearer ${user.accessToken}`);
+    return method === 'put' && path.includes('/category-limits/')
+      ? req.send(LIMIT_BODY)
+      : req;
+  };
 
   it('answers 403, as for a foreign household, when hid is not a UUID', async () => {
     await call('get', '/households/not-a-uuid/bills').expect(403);
@@ -40,6 +47,8 @@ describe('UUID route params (e2e)', () => {
         routes.push([method, `${h}/${base}/abc`]);
       }
     }
+    routes.push(['put', `${h}/category-limits/abc`]);
+    routes.push(['delete', `${h}/category-limits/abc`]);
     routes.push(['delete', `${h}/members/abc`]);
 
     for (const [method, path] of routes) {

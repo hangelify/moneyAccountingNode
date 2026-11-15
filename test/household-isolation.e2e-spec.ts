@@ -86,6 +86,10 @@ describe('Household isolation (e2e)', () => {
       ['post', `${h}/categories/seed-defaults`],
       ['post', `${h}/categories/bulk`],
       ...crud('categories', r.category),
+      ['post', `${h}/category-limits`],
+      ['get', `${h}/category-limits`],
+      ['put', `${h}/category-limits/${r.category}`],
+      ['delete', `${h}/category-limits/${r.category}`],
       ['post', `${h}/sub-categories/bulk`],
       ...crud('sub-categories', r.subCategory),
       ...crud('markets', r.market),
@@ -173,6 +177,16 @@ describe('Household isolation (e2e)', () => {
       },
     );
 
+    it('category-limits: PUT and DELETE of a foreign category id answer 404', async () => {
+      const path = `${own()}/category-limits/${bobs.category}`;
+      await call(alice, 'put', path, {
+        period_type: 'MONTHLY',
+        amount: 10,
+      }).expect(404);
+      await call(alice, 'delete', path).expect(404);
+      await expectBobsDataIntact();
+    });
+
     it("bills: a foreign bill's image answers 404", async () => {
       await call(
         alice,
@@ -233,6 +247,15 @@ describe('Household isolation (e2e)', () => {
         'sub-categories in bulk in a foreign category',
         'sub-categories/bulk',
         () => ({ category_id: bobs.category, sub_categories: [{ name: 'x' }] }),
+      ],
+      [
+        'a category limit for a foreign category',
+        'category-limits',
+        () => ({
+          category_id: bobs.category,
+          period_type: 'MONTHLY',
+          amount: 10,
+        }),
       ],
       [
         'a bill at a foreign market',

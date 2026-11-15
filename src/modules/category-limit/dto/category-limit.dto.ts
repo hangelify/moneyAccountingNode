@@ -1,5 +1,14 @@
-import { IsEnum, IsNumber, IsPositive, IsUUID, Max } from 'class-validator';
-import { ApiProperty } from '@nestjs/swagger';
+import {
+  IsBoolean,
+  IsEnum,
+  IsNumber,
+  IsOptional,
+  IsPositive,
+  IsUUID,
+  Max,
+} from 'class-validator';
+import { Transform } from 'class-transformer';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Currency } from '../../../types/currency.enum';
 import { LimitPeriodType } from '../../../types/limit-period-type.enum';
 import { MAX_MONEY_AMOUNT } from '../../../common/utils/money.util';
@@ -93,4 +102,24 @@ export class CreateCategoryLimitDto extends UpdateCategoryLimitDto {
   })
   @IsUUID()
   category_id!: string;
+}
+
+const parseBooleanQuery = (value: unknown): unknown => {
+  if (value === 'true') return true;
+  if (value === 'false') return false;
+  return value;
+};
+
+/** Query of `GET`: whether closed versions are listed too. */
+export class ListCategoryLimitsQueryDto {
+  @ApiPropertyOptional({
+    type: Boolean,
+    default: false,
+    description:
+      'List every version, including closed and future ones; by default only the versions in force today.',
+  })
+  @Transform(({ value }: { value: unknown }) => parseBooleanQuery(value))
+  @IsOptional()
+  @IsBoolean()
+  include_history?: boolean;
 }

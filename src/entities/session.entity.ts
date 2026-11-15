@@ -1,11 +1,17 @@
 import type { Rel } from '@mikro-orm/core';
-import { Entity, Property, ManyToOne } from '@mikro-orm/decorators/legacy';
+import {
+  Entity,
+  Property,
+  ManyToOne,
+  Index,
+} from '@mikro-orm/decorators/legacy';
 import { BaseEntity } from './base.entity';
 import { User } from './user.entity';
 
 @Entity({ tableName: 'sessions' })
 export class Session extends BaseEntity {
   @ManyToOne(() => User, { nullable: false, deleteRule: 'cascade' })
+  @Index()
   user!: Rel<User>;
 
   @Property({ type: 'varchar', length: 45, nullable: true })
@@ -18,6 +24,7 @@ export class Session extends BaseEntity {
   created_at!: Date;
 
   @Property({ type: 'timestamptz', nullable: false })
+  @Index()
   absolute_expires_at!: Date;
 
   @Property({ type: 'timestamptz', nullable: true })

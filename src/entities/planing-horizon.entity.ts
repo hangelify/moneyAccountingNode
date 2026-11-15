@@ -14,6 +14,7 @@ import { Currency } from '../types/currency.enum';
 import { PeriodType } from '../types/period-type.enum';
 import { Budget } from './budget.entity';
 import { Category } from './category.entity';
+import { PlaningHorizonCategory } from './planing-horizon-category.entity';
 
 @Entity({ tableName: 'planing_horizons' })
 // Case-insensitive unique name among a budget's active planning horizons.
@@ -61,13 +62,12 @@ export class PlaningHorizon extends BaseEntity {
   is_archived!: boolean;
 
   @ManyToOne(() => Budget, { nullable: false })
+  @Index()
   budget!: Rel<Budget>;
 
   @ManyToMany(() => Category, (category) => category.planingHorizons, {
     owner: true,
-    pivotTable: 'planing_horizon_categories',
-    joinColumn: 'planing_horizon_id',
-    inverseJoinColumn: 'category_id',
+    pivotEntity: () => PlaningHorizonCategory,
   })
   categories = new Collection<Category>(this);
 

@@ -118,6 +118,20 @@ jobs:
           DB_PASSWORD: postgres
           DB_NAME: accounting
 
+      # Entities, the committed snapshot and the migrated schema must agree.
+      # migration:fresh rewrites the snapshot when the migrations produce a
+      # different schema, so a changed snapshot is drift too.
+      - name: Check schema drift
+        run: |
+          npm run migration:drift
+          git diff --exit-code -- src/migrations/.snapshot-accounting.json
+        env:
+          DB_HOST: localhost
+          DB_PORT: 5432
+          DB_USER: postgres
+          DB_PASSWORD: postgres
+          DB_NAME: accounting
+
       # Applied migrations must not change; new ones are checked by Squawk
       # for locking or breaking statements. Base: the PR's target branch, or
       # the commit before this push.

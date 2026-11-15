@@ -36,6 +36,7 @@
     "migration:list": "mikro-orm migration:list",
     "migration:pending": "mikro-orm migration:pending",
     "migration:check": "ts-node -r tsconfig-paths/register scripts/check-migrations.ts",
+    "migration:drift": "ts-node -r tsconfig-paths/register scripts/check-schema-drift.ts",
     "migrations:lint": "ts-node -r tsconfig-paths/register scripts/lint-migrations.ts",
     "migration:fresh": "mikro-orm migration:fresh",
     "seed": "mikro-orm seeder:run",

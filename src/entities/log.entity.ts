@@ -55,6 +55,7 @@ export class Log extends BaseEntity {
   metadata?: Record<string, any>;
 
   @ManyToOne(() => User, { nullable: true, deleteRule: 'set null' })
+  @Index()
   user?: Rel<User>;
 
   @Property({ type: 'varchar', length: 45, nullable: true })

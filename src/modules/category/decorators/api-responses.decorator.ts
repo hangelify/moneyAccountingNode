@@ -42,9 +42,7 @@ export const ApiCreateCategoryResponses = () =>
       description: 'Category created successfully',
       type: CategoryResponseDto,
     }),
-    ApiBadRequestResponse(
-      'Bad request - Invalid input or planning horizon not found',
-    ),
+    ApiBadRequestResponse('Bad request - Invalid input'),
     ApiConflictResponse(),
     ApiUnauthorizedResponse(),
   );
@@ -57,7 +55,7 @@ export const ApiBulkCreateCategoryResponses = () =>
       type: [CategoryResponseDto],
     }),
     ApiBadRequestResponse(
-      'Bad request - Invalid input or planning horizon not found, or duplicate names within the request',
+      'Bad request - Invalid input or duplicate names within the request',
     ),
     ApiConflictResponse(),
     ApiUnauthorizedResponse(),

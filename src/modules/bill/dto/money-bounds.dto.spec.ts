@@ -1,11 +1,13 @@
 import { randomUUID } from 'node:crypto';
-import { validate } from 'class-validator';
+import { ValidationError, validate } from 'class-validator';
 import { plainToInstance } from 'class-transformer';
 import { CreateBillDto } from './create-bill.dto';
 import { ConfirmBillDto } from './confirm-bill.dto';
 import { UpdateBillDto } from './update-bill.dto';
-import { CreatePlaningHorizonDto } from '../../planing-horizon';
-import { UpdatePlaningHorizonDto } from '../../planing-horizon';
+import {
+  CreateCategoryLimitDto,
+  UpdateCategoryLimitDto,
+} from '../../category-limit';
 
 const item = (over: object = {}) => ({
   sub_category_id: randomUUID(),
@@ -15,14 +17,27 @@ const item = (over: object = {}) => ({
 });
 
 const billBase = { bill_date: '2026-05-19', total_amount: 1, items: [item()] };
-const horizonBase = {
-  name: 'Q1',
-  amount: 1,
-  currency: 'EUR',
-  period_type: 'monthly',
-};
+const limitBase = { period_type: 'MONTHLY', amount: 1 };
 
 type Case = [string, new () => object, object, (v: number) => object, string];
+
+// Limit amounts are strictly positive; their sign cases are below.
+const limitCases: Case[] = [
+  [
+    'CreateCategoryLimitDto.amount',
+    CreateCategoryLimitDto,
+    { ...limitBase, category_id: randomUUID() },
+    (v) => ({ amount: v }),
+    'amount',
+  ],
+  [
+    'UpdateCategoryLimitDto.amount',
+    UpdateCategoryLimitDto,
+    limitBase,
+    (v) => ({ amount: v }),
+    'amount',
+  ],
+];
 
 const cases: Case[] = [
   [
@@ -60,29 +75,18 @@ const cases: Case[] = [
     (v) => ({ total_amount: v }),
     'total_amount',
   ],
-  [
-    'CreatePlaningHorizonDto.amount',
-    CreatePlaningHorizonDto,
-    horizonBase,
-    (v) => ({ amount: v }),
-    'amount',
-  ],
-  [
-    'UpdatePlaningHorizonDto.amount',
-    UpdatePlaningHorizonDto,
-    {},
-    (v) => ({ amount: v }),
-    'amount',
-  ],
+  ...limitCases,
 ];
 
-describe.each(cases)('%s', (_, Dto, base, patch, property) => {
-  async function errorsFor(v: number) {
-    const errors = await validate(
-      plainToInstance(Dto, { ...base, ...patch(v) }),
-    );
-    return errors.filter((e) => e.property === property);
-  }
+/** The validation errors of `property` when the case's amount is `v`. */
+async function caseErrors(c: Case, v: number): Promise<ValidationError[]> {
+  const [, Dto, base, patch, property] = c;
+  const errors = await validate(plainToInstance(Dto, { ...base, ...patch(v) }));
+  return errors.filter((e) => e.property === property);
+}
+
+describe.each(cases)('%s', (...c: Case) => {
+  const errorsFor = (v: number): Promise<ValidationError[]> => caseErrors(c, v);
 
   it('accepts an amount with two decimal places', async () => {
     expect(await errorsFor(12.34)).toHaveLength(0);
@@ -168,3 +172,22 @@ describe.each([
     });
   },
 );
+
+// Limit amounts are strictly positive, unlike bill item amounts above.
+describe.each(limitCases)('%s sign', (...c: Case) => {
+  it('accepts the smallest amount', async () => {
+    expect(await caseErrors(c, 0.01)).toHaveLength(0);
+  });
+
+  it('rejects a zero amount', async () => {
+    expect(await caseErrors(c, 0)).not.toHaveLength(0);
+  });
+
+  it('rejects a negative amount', async () => {
+    expect(await caseErrors(c, -5)).not.toHaveLength(0);
+  });
+
+  it('rejects an amount just above the maximum', async () => {
+    expect(await caseErrors(c, 1e12 + 1)).not.toHaveLength(0);
+  });
+});

@@ -2397,152 +2397,6 @@
       "comment": null
     },
     {
-      "name": "budgets",
-      "schema": "public",
-      "columns": {
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamptz(6)",
-          "unsigned": false,
-          "autoincrement": false,
-          "primary": false,
-          "nullable": false,
-          "unique": false,
-          "length": 6,
-          "precision": null,
-          "scale": null,
-          "default": "now()",
-          "comment": null,
-          "collation": null,
-          "enumItems": [],
-          "mappedType": "datetime"
-        },
-        "deleted_at": {
-          "name": "deleted_at",
-          "type": "timestamptz(6)",
-          "unsigned": false,
-          "autoincrement": false,
-          "primary": false,
-          "nullable": true,
-          "unique": false,
-          "length": 6,
-          "precision": null,
-          "scale": null,
-          "default": null,
-          "comment": null,
-          "collation": null,
-          "enumItems": [],
-          "mappedType": "datetime"
-        },
-        "description": {
-          "name": "description",
-          "type": "text",
-          "unsigned": false,
-          "autoincrement": false,
-          "primary": false,
-          "nullable": true,
-          "unique": false,
-          "length": null,
-          "precision": null,
-          "scale": null,
-          "default": null,
-          "comment": null,
-          "collation": null,
-          "enumItems": [],
-          "mappedType": "text"
-        },
-        "household_id": {
-          "name": "household_id",
-          "type": "uuid",
-          "unsigned": false,
-          "autoincrement": false,
-          "primary": false,
-          "nullable": false,
-          "unique": false,
-          "length": null,
-          "precision": null,
-          "scale": null,
-          "default": null,
-          "comment": null,
-          "collation": null,
-          "enumItems": [],
-          "mappedType": "uuid"
-        },
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "unsigned": false,
-          "autoincrement": false,
-          "primary": true,
-          "nullable": false,
-          "unique": false,
-          "length": null,
-          "precision": null,
-          "scale": null,
-          "default": "gen_random_uuid()",
-          "comment": null,
-          "collation": null,
-          "enumItems": [],
-          "mappedType": "uuid"
-        },
-        "name": {
-          "name": "name",
-          "type": "varchar(255)",
-          "unsigned": false,
-          "autoincrement": false,
-          "primary": false,
-          "nullable": false,
-          "unique": false,
-          "length": 255,
-          "precision": null,
-          "scale": null,
-          "default": null,
-          "comment": null,
-          "collation": null,
-          "enumItems": [],
-          "mappedType": "string"
-        }
-      },
-      "indexes": [
-        {
-          "columnNames": [],
-          "composite": false,
-          "constraint": false,
-          "keyName": "budgets_household_id_name_lower_unique",
-          "primary": false,
-          "unique": false,
-          "expression": "create unique index \"budgets_household_id_name_lower_unique\" on \"budgets\" (\"household_id\", lower(\"name\")) where \"deleted_at\" is null"
-        },
-        {
-          "columnNames": [
-            "id"
-          ],
-          "composite": false,
-          "constraint": true,
-          "keyName": "budgets_pkey",
-          "primary": true,
-          "unique": true
-        }
-      ],
-      "checks": [],
-      "triggers": [],
-      "foreignKeys": {
-        "budgets_household_id_fkey": {
-          "columnNames": [
-            "household_id"
-          ],
-          "constraintName": "budgets_household_id_fkey",
-          "localTableName": "public.budgets",
-          "referencedColumnNames": [
-            "id"
-          ],
-          "referencedTableName": "public.households",
-          "deleteRule": "cascade"
-        }
-      },
-      "comment": null
-    },
-    {
       "name": "categories",
       "schema": "public",
       "columns": {
@@ -2710,6 +2564,409 @@
             "id"
           ],
           "referencedTableName": "public.households",
+          "deleteRule": "cascade"
+        }
+      },
+      "comment": null
+    },
+    {
+      "name": "category_limits",
+      "schema": "public",
+      "columns": {
+        "amount": {
+          "name": "amount",
+          "type": "numeric(19,2)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": false,
+          "length": null,
+          "precision": 19,
+          "scale": 2,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "decimal"
+        },
+        "category_id": {
+          "name": "category_id",
+          "type": "uuid",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": false,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "uuid"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamptz(6)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": false,
+          "length": 6,
+          "precision": null,
+          "scale": null,
+          "default": "now()",
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "datetime"
+        },
+        "created_by_id": {
+          "name": "created_by_id",
+          "type": "uuid",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "unique": false,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "uuid"
+        },
+        "currency": {
+          "name": "currency",
+          "type": "currency_enum",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": false,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [
+            "EUR",
+            "GBP",
+            "RON",
+            "PLN",
+            "MDL",
+            "CZK",
+            "HUF",
+            "BGN",
+            "HRK",
+            "DKK",
+            "SEK",
+            "NOK",
+            "CHF",
+            "ISK",
+            "RSD",
+            "BAM",
+            "ALL",
+            "MKD",
+            "UAH",
+            "BYN",
+            "RUB",
+            "TRY",
+            "JPY",
+            "CNY",
+            "INR",
+            "KRW",
+            "THB",
+            "SGD",
+            "MYR",
+            "IDR",
+            "PHP",
+            "VND",
+            "HKD",
+            "TWD",
+            "PKR",
+            "BDT",
+            "LKR",
+            "NPR",
+            "MMK",
+            "KHR",
+            "LAK",
+            "MNT",
+            "KZT",
+            "UZS",
+            "AZN",
+            "AMD",
+            "GEL",
+            "ILS",
+            "JOD",
+            "LBP",
+            "SAR",
+            "AED",
+            "QAR",
+            "KWD",
+            "BHD",
+            "OMR",
+            "IRR",
+            "IQD",
+            "ZAR",
+            "EGP",
+            "NGN",
+            "KES",
+            "GHS",
+            "ETB",
+            "UGX",
+            "TZS",
+            "RWF",
+            "XOF",
+            "XAF",
+            "MAD",
+            "TND",
+            "DZD",
+            "LYD",
+            "AOA",
+            "MZN",
+            "ZMW",
+            "BWP",
+            "MUR",
+            "USD",
+            "CAD",
+            "MXN",
+            "BRL",
+            "ARS",
+            "CLP",
+            "COP",
+            "PEN",
+            "VES",
+            "UYU",
+            "PYG",
+            "BOB",
+            "GTQ",
+            "HNL",
+            "NIO",
+            "CRC",
+            "PAB",
+            "DOP",
+            "HTG",
+            "JMD",
+            "BBD",
+            "BZD",
+            "TTD",
+            "XCD",
+            "GYD",
+            "SRD"
+          ],
+          "mappedType": "enum",
+          "nativeEnumName": "currency_enum"
+        },
+        "effective_from": {
+          "name": "effective_from",
+          "type": "date",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": false,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "date"
+        },
+        "effective_to": {
+          "name": "effective_to",
+          "type": "date",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "unique": false,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "date"
+        },
+        "household_id": {
+          "name": "household_id",
+          "type": "uuid",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": false,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "uuid"
+        },
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": true,
+          "nullable": false,
+          "unique": false,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": "gen_random_uuid()",
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "uuid"
+        },
+        "period_type": {
+          "name": "period_type",
+          "type": "limit_period_type",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": false,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [
+            "MONTHLY",
+            "QUARTERLY",
+            "SEMI_ANNUAL",
+            "YEARLY"
+          ],
+          "mappedType": "enum",
+          "nativeEnumName": "limit_period_type"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamptz(6)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": false,
+          "length": 6,
+          "precision": null,
+          "scale": null,
+          "default": "now()",
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "datetime"
+        }
+      },
+      "indexes": [
+        {
+          "columnNames": [],
+          "composite": false,
+          "constraint": false,
+          "keyName": "category_limits_category_open_unique",
+          "primary": false,
+          "unique": false,
+          "expression": "create unique index \"category_limits_category_open_unique\" on \"category_limits\" (\"category_id\") where \"effective_to\" is null"
+        },
+        {
+          "columnNames": [
+            "created_by_id"
+          ],
+          "composite": false,
+          "constraint": false,
+          "keyName": "category_limits_created_by_id_index",
+          "primary": false,
+          "unique": false
+        },
+        {
+          "columnNames": [
+            "household_id",
+            "category_id",
+            "effective_from"
+          ],
+          "composite": true,
+          "constraint": false,
+          "keyName": "category_limits_household_category_from_index",
+          "primary": false,
+          "unique": false
+        },
+        {
+          "columnNames": [
+            "id"
+          ],
+          "composite": false,
+          "constraint": true,
+          "keyName": "category_limits_pkey",
+          "primary": true,
+          "unique": true
+        }
+      ],
+      "checks": [
+        {
+          "name": "category_limits_amount_positive",
+          "expression": "amount > 0",
+          "definition": "check (amount > 0)"
+        },
+        {
+          "name": "category_limits_effective_range",
+          "expression": "effective_to is null or effective_to > effective_from",
+          "definition": "check (effective_to is null or effective_to > effective_from)"
+        }
+      ],
+      "triggers": [],
+      "foreignKeys": {
+        "category_limits_category_id_fkey": {
+          "columnNames": [
+            "category_id"
+          ],
+          "constraintName": "category_limits_category_id_fkey",
+          "localTableName": "public.category_limits",
+          "referencedColumnNames": [
+            "id"
+          ],
+          "referencedTableName": "public.categories",
+          "updateRule": "cascade",
+          "deleteRule": "cascade"
+        },
+        "category_limits_created_by_id_fkey": {
+          "columnNames": [
+            "created_by_id"
+          ],
+          "constraintName": "category_limits_created_by_id_fkey",
+          "localTableName": "public.category_limits",
+          "referencedColumnNames": [
+            "id"
+          ],
+          "referencedTableName": "public.users",
+          "updateRule": "cascade",
+          "deleteRule": "set null"
+        },
+        "category_limits_household_id_fkey": {
+          "columnNames": [
+            "household_id"
+          ],
+          "constraintName": "category_limits_household_id_fkey",
+          "localTableName": "public.category_limits",
+          "referencedColumnNames": [
+            "id"
+          ],
+          "referencedTableName": "public.households",
+          "updateRule": "cascade",
           "deleteRule": "cascade"
         }
       },
@@ -4314,488 +4571,6 @@
       "comment": null
     },
     {
-      "name": "planing_horizon_categories",
-      "schema": "public",
-      "columns": {
-        "category_id": {
-          "name": "category_id",
-          "type": "uuid",
-          "unsigned": false,
-          "autoincrement": false,
-          "primary": true,
-          "nullable": false,
-          "unique": false,
-          "length": null,
-          "precision": null,
-          "scale": null,
-          "default": null,
-          "comment": null,
-          "collation": null,
-          "enumItems": [],
-          "mappedType": "uuid"
-        },
-        "planing_horizon_id": {
-          "name": "planing_horizon_id",
-          "type": "uuid",
-          "unsigned": false,
-          "autoincrement": false,
-          "primary": true,
-          "nullable": false,
-          "unique": false,
-          "length": null,
-          "precision": null,
-          "scale": null,
-          "default": null,
-          "comment": null,
-          "collation": null,
-          "enumItems": [],
-          "mappedType": "uuid"
-        }
-      },
-      "indexes": [
-        {
-          "columnNames": [
-            "category_id"
-          ],
-          "composite": false,
-          "constraint": false,
-          "keyName": "planing_horizon_categories_category_id_index",
-          "primary": false,
-          "unique": false
-        },
-        {
-          "columnNames": [
-            "category_id"
-          ],
-          "composite": false,
-          "constraint": false,
-          "keyName": "planing_horizon_categories_category_id_index",
-          "primary": false,
-          "unique": false
-        },
-        {
-          "columnNames": [
-            "planing_horizon_id",
-            "category_id"
-          ],
-          "composite": true,
-          "constraint": true,
-          "keyName": "planing_horizon_categories_pkey",
-          "primary": true,
-          "unique": true
-        },
-        {
-          "columnNames": [
-            "planing_horizon_id"
-          ],
-          "composite": false,
-          "constraint": false,
-          "keyName": "planing_horizon_categories_planing_horizon_id_index",
-          "primary": false,
-          "unique": false
-        },
-        {
-          "columnNames": [
-            "planing_horizon_id"
-          ],
-          "composite": false,
-          "constraint": false,
-          "keyName": "planing_horizon_categories_planing_horizon_id_index",
-          "primary": false,
-          "unique": false
-        }
-      ],
-      "checks": [],
-      "triggers": [],
-      "foreignKeys": {
-        "planing_horizon_categories_category_id_foreign": {
-          "columnNames": [
-            "category_id"
-          ],
-          "constraintName": "planing_horizon_categories_category_id_foreign",
-          "localTableName": "public.planing_horizon_categories",
-          "referencedColumnNames": [
-            "id"
-          ],
-          "referencedTableName": "public.categories",
-          "updateRule": "cascade",
-          "deleteRule": "cascade"
-        },
-        "planing_horizon_categories_planing_horizon_id_foreign": {
-          "columnNames": [
-            "planing_horizon_id"
-          ],
-          "constraintName": "planing_horizon_categories_planing_horizon_id_foreign",
-          "localTableName": "public.planing_horizon_categories",
-          "referencedColumnNames": [
-            "id"
-          ],
-          "referencedTableName": "public.planing_horizons",
-          "updateRule": "cascade",
-          "deleteRule": "cascade"
-        }
-      },
-      "comment": null
-    },
-    {
-      "name": "planing_horizons",
-      "schema": "public",
-      "columns": {
-        "amount": {
-          "name": "amount",
-          "type": "numeric(19,2)",
-          "unsigned": false,
-          "autoincrement": false,
-          "primary": false,
-          "nullable": false,
-          "unique": false,
-          "length": null,
-          "precision": 19,
-          "scale": 2,
-          "default": null,
-          "comment": null,
-          "collation": null,
-          "enumItems": [],
-          "mappedType": "decimal"
-        },
-        "budget_id": {
-          "name": "budget_id",
-          "type": "uuid",
-          "unsigned": false,
-          "autoincrement": false,
-          "primary": false,
-          "nullable": false,
-          "unique": false,
-          "length": null,
-          "precision": null,
-          "scale": null,
-          "default": null,
-          "comment": null,
-          "collation": null,
-          "enumItems": [],
-          "mappedType": "uuid"
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamptz(6)",
-          "unsigned": false,
-          "autoincrement": false,
-          "primary": false,
-          "nullable": false,
-          "unique": false,
-          "length": 6,
-          "precision": null,
-          "scale": null,
-          "default": "now()",
-          "comment": null,
-          "collation": null,
-          "enumItems": [],
-          "mappedType": "datetime"
-        },
-        "currency": {
-          "name": "currency",
-          "type": "currency_enum",
-          "unsigned": false,
-          "autoincrement": false,
-          "primary": false,
-          "nullable": false,
-          "unique": false,
-          "length": null,
-          "precision": null,
-          "scale": null,
-          "default": null,
-          "comment": null,
-          "collation": null,
-          "enumItems": [
-            "EUR",
-            "GBP",
-            "RON",
-            "PLN",
-            "MDL",
-            "CZK",
-            "HUF",
-            "BGN",
-            "HRK",
-            "DKK",
-            "SEK",
-            "NOK",
-            "CHF",
-            "ISK",
-            "RSD",
-            "BAM",
-            "ALL",
-            "MKD",
-            "UAH",
-            "BYN",
-            "RUB",
-            "TRY",
-            "JPY",
-            "CNY",
-            "INR",
-            "KRW",
-            "THB",
-            "SGD",
-            "MYR",
-            "IDR",
-            "PHP",
-            "VND",
-            "HKD",
-            "TWD",
-            "PKR",
-            "BDT",
-            "LKR",
-            "NPR",
-            "MMK",
-            "KHR",
-            "LAK",
-            "MNT",
-            "KZT",
-            "UZS",
-            "AZN",
-            "AMD",
-            "GEL",
-            "ILS",
-            "JOD",
-            "LBP",
-            "SAR",
-            "AED",
-            "QAR",
-            "KWD",
-            "BHD",
-            "OMR",
-            "IRR",
-            "IQD",
-            "ZAR",
-            "EGP",
-            "NGN",
-            "KES",
-            "GHS",
-            "ETB",
-            "UGX",
-            "TZS",
-            "RWF",
-            "XOF",
-            "XAF",
-            "MAD",
-            "TND",
-            "DZD",
-            "LYD",
-            "AOA",
-            "MZN",
-            "ZMW",
-            "BWP",
-            "MUR",
-            "USD",
-            "CAD",
-            "MXN",
-            "BRL",
-            "ARS",
-            "CLP",
-            "COP",
-            "PEN",
-            "VES",
-            "UYU",
-            "PYG",
-            "BOB",
-            "GTQ",
-            "HNL",
-            "NIO",
-            "CRC",
-            "PAB",
-            "DOP",
-            "HTG",
-            "JMD",
-            "BBD",
-            "BZD",
-            "TTD",
-            "XCD",
-            "GYD",
-            "SRD"
-          ],
-          "mappedType": "enum",
-          "nativeEnumName": "currency_enum"
-        },
-        "deleted_at": {
-          "name": "deleted_at",
-          "type": "timestamptz(6)",
-          "unsigned": false,
-          "autoincrement": false,
-          "primary": false,
-          "nullable": true,
-          "unique": false,
-          "length": 6,
-          "precision": null,
-          "scale": null,
-          "default": null,
-          "comment": null,
-          "collation": null,
-          "enumItems": [],
-          "mappedType": "datetime"
-        },
-        "description": {
-          "name": "description",
-          "type": "text",
-          "unsigned": false,
-          "autoincrement": false,
-          "primary": false,
-          "nullable": true,
-          "unique": false,
-          "length": null,
-          "precision": null,
-          "scale": null,
-          "default": null,
-          "comment": null,
-          "collation": null,
-          "enumItems": [],
-          "mappedType": "text"
-        },
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "unsigned": false,
-          "autoincrement": false,
-          "primary": true,
-          "nullable": false,
-          "unique": false,
-          "length": null,
-          "precision": null,
-          "scale": null,
-          "default": "gen_random_uuid()",
-          "comment": null,
-          "collation": null,
-          "enumItems": [],
-          "mappedType": "uuid"
-        },
-        "is_archived": {
-          "name": "is_archived",
-          "type": "boolean",
-          "unsigned": false,
-          "autoincrement": false,
-          "primary": false,
-          "nullable": false,
-          "unique": false,
-          "length": null,
-          "precision": null,
-          "scale": null,
-          "default": "false",
-          "comment": null,
-          "collation": null,
-          "enumItems": [],
-          "mappedType": "boolean"
-        },
-        "name": {
-          "name": "name",
-          "type": "varchar(255)",
-          "unsigned": false,
-          "autoincrement": false,
-          "primary": false,
-          "nullable": false,
-          "unique": false,
-          "length": 255,
-          "precision": null,
-          "scale": null,
-          "default": null,
-          "comment": null,
-          "collation": null,
-          "enumItems": [],
-          "mappedType": "string"
-        },
-        "period_type": {
-          "name": "period_type",
-          "type": "period_type_enum",
-          "unsigned": false,
-          "autoincrement": false,
-          "primary": false,
-          "nullable": false,
-          "unique": false,
-          "length": null,
-          "precision": null,
-          "scale": null,
-          "default": null,
-          "comment": null,
-          "collation": null,
-          "enumItems": [
-            "DAILY",
-            "WEEKLY",
-            "TWO_WEEKS",
-            "THREE_WEEKS",
-            "MONTHLY",
-            "TWO_MONTHS",
-            "QUARTERLY",
-            "SEMI_ANNUAL",
-            "YEARLY"
-          ],
-          "mappedType": "enum",
-          "nativeEnumName": "period_type_enum"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamptz(6)",
-          "unsigned": false,
-          "autoincrement": false,
-          "primary": false,
-          "nullable": false,
-          "unique": false,
-          "length": 6,
-          "precision": null,
-          "scale": null,
-          "default": "now()",
-          "comment": null,
-          "collation": null,
-          "enumItems": [],
-          "mappedType": "datetime"
-        }
-      },
-      "indexes": [
-        {
-          "columnNames": [
-            "budget_id"
-          ],
-          "composite": false,
-          "constraint": false,
-          "keyName": "planing_horizons_budget_id_index",
-          "primary": false,
-          "unique": false
-        },
-        {
-          "columnNames": [],
-          "composite": false,
-          "constraint": false,
-          "keyName": "planing_horizons_budget_id_name_lower_unique",
-          "primary": false,
-          "unique": false,
-          "expression": "create unique index \"planing_horizons_budget_id_name_lower_unique\" on \"planing_horizons\" (\"budget_id\", lower(\"name\")) where \"deleted_at\" is null and not \"is_archived\""
-        },
-        {
-          "columnNames": [
-            "id"
-          ],
-          "composite": false,
-          "constraint": true,
-          "keyName": "planing_horizons_pkey",
-          "primary": true,
-          "unique": true
-        }
-      ],
-      "checks": [],
-      "triggers": [],
-      "foreignKeys": {
-        "planing_horizons_budget_id_foreign": {
-          "columnNames": [
-            "budget_id"
-          ],
-          "constraintName": "planing_horizons_budget_id_foreign",
-          "localTableName": "public.planing_horizons",
-          "referencedColumnNames": [
-            "id"
-          ],
-          "referencedTableName": "public.budgets",
-          "updateRule": "cascade"
-        }
-      },
-      "comment": null
-    },
-    {
       "name": "refresh_tokens",
       "schema": "public",
       "columns": {
@@ -6054,6 +5829,16 @@
         "RO"
       ]
     },
+    "limit_period_type": {
+      "name": "limit_period_type",
+      "schema": "public",
+      "items": [
+        "MONTHLY",
+        "QUARTERLY",
+        "SEMI_ANNUAL",
+        "YEARLY"
+      ]
+    },
     "log_level_enum": {
       "name": "log_level_enum",
       "schema": "public",
@@ -6073,21 +5858,6 @@
         "API",
         "AUTH",
         "DATABASE"
-      ]
-    },
-    "period_type_enum": {
-      "name": "period_type_enum",
-      "schema": "public",
-      "items": [
-        "DAILY",
-        "WEEKLY",
-        "TWO_WEEKS",
-        "THREE_WEEKS",
-        "MONTHLY",
-        "TWO_MONTHS",
-        "QUARTERLY",
-        "SEMI_ANNUAL",
-        "YEARLY"
       ]
     }
   }

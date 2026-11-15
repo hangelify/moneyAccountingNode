@@ -1,3 +1,4 @@
+import { LimitPeriodType } from '../../types/limit-period-type.enum';
 import { todayIsoDate } from './calendar-date';
 
 export const SPENDING_PERIODS = [
@@ -96,4 +97,29 @@ export function computePeriodRange(
     case '5y':
       return { period, start: monthStart(y, m, -59), end: monthStart(y, m, 1) };
   }
+}
+
+const LIMIT_PERIOD_MONTHS: Record<LimitPeriodType, number> = {
+  [LimitPeriodType.MONTHLY]: 1,
+  [LimitPeriodType.QUARTERLY]: 3,
+  [LimitPeriodType.SEMI_ANNUAL]: 6,
+  [LimitPeriodType.YEARLY]: 12,
+};
+
+/** First day of the limit period (calendar-aligned) containing `date`. */
+export function limitPeriodStart(type: LimitPeriodType, date: string): string {
+  const n = LIMIT_PERIOD_MONTHS[type];
+  const d = parse(date);
+  const startMonth = Math.floor(d.getUTCMonth() / n) * n + 1;
+  return monthStart(d.getUTCFullYear(), startMonth);
+}
+
+/** First day of the limit period after the one containing `date`. */
+export function limitPeriodEnd(type: LimitPeriodType, date: string): string {
+  const start = parse(limitPeriodStart(type, date));
+  return monthStart(
+    start.getUTCFullYear(),
+    start.getUTCMonth() + 1,
+    LIMIT_PERIOD_MONTHS[type],
+  );
 }

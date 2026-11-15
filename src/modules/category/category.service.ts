@@ -1,22 +1,19 @@
-import {
-  Injectable,
-  NotFoundException,
-  BadRequestException,
-} from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@mikro-orm/nestjs';
-import { EntityRepository, EntityManager } from '@mikro-orm/core';
+import { EntityRepository, EntityManager, LockMode } from '@mikro-orm/core';
 import { Category } from '../../entities/category.entity';
-import { PlaningHorizon } from '../../entities/planing-horizon.entity';
 import { Household } from '../../entities/household.entity';
 import { CreateCategoryDto } from './dto/create-category.dto';
 import { BulkCreateCategoryDto } from './dto/bulk-create-category.dto';
 import { UpdateCategoryDto } from './dto/update-category.dto';
 import { CategoryResponseDto } from './dto/category-response.dto';
 import { CategoryBaseResponseDto } from './dto/category-base-response.dto';
+import { writeCategoryLimit } from '../category-limit';
 import { assertUniqueNames } from '../../common/utils/unique-names.util';
 import {
   addCalendarDays,
   chisinauToday,
+  todayIsoDate,
 } from '../../common/utils/calendar-date';
 import {
   RECENT_CATEGORIES_DAYS,
@@ -28,40 +25,18 @@ export class CategoryService {
   constructor(
     @InjectRepository(Category)
     private readonly categoryRepository: EntityRepository<Category>,
-    @InjectRepository(PlaningHorizon)
-    private readonly planingHorizonRepository: EntityRepository<PlaningHorizon>,
     private readonly em: EntityManager,
   ) {}
 
-  /**
-   * Create a new category and link it to a planning horizon
-   * Planning horizon must belong to the household through budget
-   */
+  /** Create a new category in the household. */
   async createCategory(
     householdId: string,
     createCategoryDto: CreateCategoryDto,
   ): Promise<CategoryResponseDto> {
-    // Verify that the planning horizon exists and belongs to the household
-    const planingHorizon = await this.planingHorizonRepository.findOne({
-      id: createCategoryDto.planing_horizon_id,
-      budget: { household: { id: householdId }, deleted_at: null },
-      is_archived: false,
-      deleted_at: null,
-    });
-
-    if (!planingHorizon) {
-      throw new NotFoundException(
-        `Planning horizon with ID ${createCategoryDto.planing_horizon_id} not found or does not belong to this household`,
-      );
-    }
-
     const category = new Category();
     category.name = createCategoryDto.name;
     category.description = createCategoryDto.description;
     category.household = this.em.getReference(Household, householdId);
-
-    // Link category to planning horizon
-    category.planingHorizons.add(planingHorizon);
 
     await this.em.persist(category).flush();
 
@@ -74,28 +49,11 @@ export class CategoryService {
     };
   }
 
-  /**
-   * Bulk create categories for a planning horizon
-   * This is the only way to create categories (as per requirements)
-   */
+  /** Create several categories in the household at once. */
   async bulkCreateCategories(
     householdId: string,
     bulkCreateCategoryDto: BulkCreateCategoryDto,
   ): Promise<CategoryResponseDto[]> {
-    // Verify that the planning horizon exists and belongs to the household
-    const planingHorizon = await this.planingHorizonRepository.findOne({
-      id: bulkCreateCategoryDto.planing_horizon_id,
-      budget: { household: { id: householdId }, deleted_at: null },
-      is_archived: false,
-      deleted_at: null,
-    });
-
-    if (!planingHorizon) {
-      throw new NotFoundException(
-        `Planning horizon with ID ${bulkCreateCategoryDto.planing_horizon_id} not found or does not belong to this household`,
-      );
-    }
-
     assertUniqueNames(bulkCreateCategoryDto.categories.map((c) => c.name));
 
     const categories: Category[] = [];
@@ -105,7 +63,6 @@ export class CategoryService {
       category.name = categoryItem.name;
       category.description = categoryItem.description;
       category.household = this.em.getReference(Household, householdId);
-      category.planingHorizons.add(planingHorizon);
       categories.push(category);
     }
 
@@ -262,24 +219,38 @@ export class CategoryService {
    * Only deletes category if it belongs to the household
    * Its live sub-categories are soft deleted in the same flush
    */
-  async deleteCategory(id: string, householdId: string): Promise<void> {
-    const category = await this.categoryRepository.findOne(
-      { id, household: { id: householdId }, deleted_at: null },
-      { populate: ['subCategories'] },
-    );
-    if (!category) {
-      throw new NotFoundException(`Category with ID ${id} not found`);
-    }
-    if (category.deleted_at) {
-      throw new BadRequestException(
-        `Category with ID ${id} is already deleted`,
+  async deleteCategory(
+    id: string,
+    householdId: string,
+    now: Date = new Date(),
+  ): Promise<void> {
+    await this.em.fork().transactional(async (tx) => {
+      // Lock first, then read sub-categories: one created concurrently is
+      // either committed before the lock is granted (and loaded below) or
+      // blocked until this transaction ends.
+      const category = await tx.findOne(
+        Category,
+        { id, household: { id: householdId }, deleted_at: null },
+        { lockMode: LockMode.PESSIMISTIC_WRITE },
       );
-    }
-    const now = new Date();
-    category.deleted_at = now;
-    for (const sc of category.subCategories) {
-      sc.deleted_at ??= now;
-    }
-    await this.em.persist(category).flush();
+      if (!category) {
+        throw new NotFoundException(`Category with ID ${id} not found`);
+      }
+      await tx.populate(category, ['subCategories'], { refresh: true });
+      // Before deleted_at is set: the lock inside only finds a live category,
+      // and a pending change would be flushed by its first query.
+      await writeCategoryLimit(
+        tx,
+        householdId,
+        id,
+        { kind: 'remove' },
+        { userId: null, today: todayIsoDate(now) },
+      );
+      category.deleted_at = now;
+      for (const sc of category.subCategories) {
+        sc.deleted_at ??= now;
+      }
+      await tx.flush();
+    });
   }
 }

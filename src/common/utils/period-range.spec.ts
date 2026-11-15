@@ -2,8 +2,11 @@ import {
   addDays,
   addYears,
   computePeriodRange,
+  limitPeriodEnd,
+  limitPeriodStart,
   MAX_CUSTOM_RANGE_YEARS,
 } from './period-range';
+import { LimitPeriodType } from '../../types/limit-period-type.enum';
 
 describe('computePeriodRange', () => {
   const anchor = '2026-10-31';
@@ -151,5 +154,23 @@ describe('addYears', () => {
 
   it('clamps Feb 29 to Feb 28 in a common year', () => {
     expect(addYears('2024-02-29', 1)).toBe('2025-02-28');
+  });
+});
+
+describe('limit periods', () => {
+  it.each([
+    ['MONTHLY', '2026-11-15', '2026-11-01', '2026-12-01'],
+    ['MONTHLY', '2026-12-31', '2026-12-01', '2027-01-01'],
+    ['MONTHLY', '2028-02-29', '2028-02-01', '2028-03-01'],
+    ['QUARTERLY', '2026-11-15', '2026-10-01', '2027-01-01'],
+    ['QUARTERLY', '2026-04-01', '2026-04-01', '2026-07-01'],
+    ['QUARTERLY', '2026-03-31', '2026-01-01', '2026-04-01'],
+    ['SEMI_ANNUAL', '2026-06-30', '2026-01-01', '2026-07-01'],
+    ['SEMI_ANNUAL', '2026-07-01', '2026-07-01', '2027-01-01'],
+    ['YEARLY', '2026-01-01', '2026-01-01', '2027-01-01'],
+    ['YEARLY', '2026-12-31', '2026-01-01', '2027-01-01'],
+  ] as const)('%s around %s', (type, date, start, end) => {
+    expect(limitPeriodStart(LimitPeriodType[type], date)).toBe(start);
+    expect(limitPeriodEnd(LimitPeriodType[type], date)).toBe(end);
   });
 });

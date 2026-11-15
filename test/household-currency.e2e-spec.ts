@@ -134,18 +134,7 @@ describe('Household currency (e2e)', () => {
         .expect(201);
       return (res.body as { id: string }).id;
     };
-    const budget = await create('/budgets', { name: 'Budget' });
-    const horizon = await create('/planing-horizons', {
-      name: 'Horizon',
-      amount: 100,
-      currency: 'EUR',
-      period_type: 'MONTHLY',
-      budget_id: budget,
-    });
-    const category = await create('/categories', {
-      name: 'Category',
-      planing_horizon_id: horizon,
-    });
+    const category = await create('/categories', { name: 'Category' });
     const subCategory = await create('/sub-categories', {
       name: 'Sub-category',
       category_id: category,

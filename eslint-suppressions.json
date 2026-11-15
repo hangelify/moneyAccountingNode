@@ -82,11 +82,6 @@
       "count": 2
     }
   },
-  "src/entities/budget.entity.ts": {
-    "@typescript-eslint/explicit-function-return-type": {
-      "count": 1
-    }
-  },
   "src/entities/category.entity.ts": {
     "@typescript-eslint/explicit-function-return-type": {
       "count": 2
@@ -113,11 +108,6 @@
     }
   },
   "src/entities/market.entity.ts": {
-    "@typescript-eslint/explicit-function-return-type": {
-      "count": 2
-    }
-  },
-  "src/entities/planing-horizon.entity.ts": {
     "@typescript-eslint/explicit-function-return-type": {
       "count": 2
     }
@@ -945,10 +935,7 @@
   },
   "src/modules/bill/dto/money-bounds.dto.spec.ts": {
     "@typescript-eslint/explicit-function-return-type": {
-      "count": 4
-    },
-    "max-params": {
-      "count": 1
+      "count": 3
     }
   },
   "src/modules/bill/dto/receipt-identity.dto.spec.ts": {
@@ -1086,19 +1073,6 @@
   "src/modules/bill/tasks/schemas/parsed-bill.schema.ts": {
     "@typescript-eslint/explicit-function-return-type": {
       "count": 2
-    }
-  },
-  "src/modules/budget/budget.service.spec.ts": {
-    "@typescript-eslint/explicit-function-return-type": {
-      "count": 1
-    }
-  },
-  "src/modules/budget/decorators/api-responses.decorator.ts": {
-    "@typescript-eslint/explicit-function-return-type": {
-      "count": 9
-    },
-    "@typescript-eslint/prefer-nullish-coalescing": {
-      "count": 1
     }
   },
   "src/modules/category/category-defaults.service.int-spec.ts": {
@@ -1279,27 +1253,6 @@
   },
   "src/modules/market/market.service.ts": {
     "@typescript-eslint/no-misused-spread": {
-      "count": 1
-    }
-  },
-  "src/modules/planing-horizon/decorators/api-responses.decorator.ts": {
-    "@typescript-eslint/explicit-function-return-type": {
-      "count": 9
-    },
-    "@typescript-eslint/prefer-nullish-coalescing": {
-      "count": 1
-    }
-  },
-  "src/modules/planing-horizon/planing-horizon.service.spec.ts": {
-    "@typescript-eslint/explicit-function-return-type": {
-      "count": 1
-    }
-  },
-  "src/modules/planing-horizon/planing-horizon.service.ts": {
-    "@typescript-eslint/no-unnecessary-type-conversion": {
-      "count": 4
-    },
-    "max-lines-per-function": {
       "count": 1
     }
   },
@@ -1578,7 +1531,7 @@
   },
   "test/name-uniqueness.e2e-spec.ts": {
     "@typescript-eslint/explicit-function-return-type": {
-      "count": 7
+      "count": 5
     }
   },
   "test/parse-photo-limits.e2e-spec.ts": {

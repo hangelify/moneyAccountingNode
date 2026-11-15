@@ -6,7 +6,8 @@ import { Migration20261011160000_DedupePersonalHouseholds } from '../src/migrati
 // Migration20260603130000 gave users who already had a "Personal" household
 // from registration a second one and moved their rows into it. The cleanup
 // deletes only empty duplicates: owner as the sole member, no rows, no invites.
-// Each test runs in a transaction that is rolled back.
+// Each test runs in a transaction that is rolled back. HAN-24 dropped the
+// budgets table the migration still reads; an empty temporary one stands in.
 describe('DedupePersonalHouseholds migration (PostgreSQL)', () => {
   let orm: MikroORM;
   let trx: Awaited<
@@ -27,6 +28,7 @@ describe('DedupePersonalHouseholds migration (PostgreSQL)', () => {
 
   beforeEach(async () => {
     trx = await conn().begin();
+    await sql(`create temp table budgets (household_id uuid)`);
   });
 
   afterEach(async () => {
@@ -70,9 +72,9 @@ describe('DedupePersonalHouseholds migration (PostgreSQL)', () => {
     return id;
   };
 
-  const addBudget = (householdId: string) =>
-    sql(`insert into budgets (name, household_id) values (?, ?)`, [
-      `budget-${randomUUID()}`,
+  const addCategory = (householdId: string) =>
+    sql(`insert into categories (name, household_id) values (?, ?)`, [
+      `category-${randomUUID()}`,
       householdId,
     ]);
 
@@ -88,7 +90,7 @@ describe('DedupePersonalHouseholds migration (PostgreSQL)', () => {
     const user = await createUser();
     const registered = await createHousehold(user, '2026-05-01');
     const migrated = await createHousehold(user, '2026-06-03');
-    await addBudget(migrated);
+    await addCategory(migrated);
 
     await runMigration();
 
@@ -100,7 +102,6 @@ describe('DedupePersonalHouseholds migration (PostgreSQL)', () => {
       'bills',
       `insert into bills (amount, bill_date, household_id) values (1, '2026-01-01', ?)`,
     ],
-    ['budgets', `insert into budgets (name, household_id) values ('b', ?)`],
     [
       'categories',
       `insert into categories (name, household_id) values ('c', ?)`,
@@ -111,7 +112,7 @@ describe('DedupePersonalHouseholds migration (PostgreSQL)', () => {
     const first = await createHousehold(user, '2026-05-01');
     const second = await createHousehold(user, '2026-06-03');
     await sql(insert, [first]);
-    await addBudget(second);
+    await addCategory(second);
 
     await runMigration();
 
@@ -134,7 +135,7 @@ describe('DedupePersonalHouseholds migration (PostgreSQL)', () => {
     const other = await createUser();
     const shared = await createHousehold(user, '2026-05-01');
     const migrated = await createHousehold(user, '2026-06-03');
-    await addBudget(migrated);
+    await addCategory(migrated);
     await sql(
       `insert into household_members (household_id, user_id, role) values (?, ?, 'member')`,
       [shared, other],
@@ -149,7 +150,7 @@ describe('DedupePersonalHouseholds migration (PostgreSQL)', () => {
     const user = await createUser();
     const invited = await createHousehold(user, '2026-05-01');
     const migrated = await createHousehold(user, '2026-06-03');
-    await addBudget(migrated);
+    await addCategory(migrated);
     await sql(
       `insert into household_invites (household_id, invitee_email, invited_by, token_hash, expires_at)
        values (?, 'guest@example.com', ?, ?, now() + interval '1 day')`,
@@ -175,7 +176,7 @@ describe('DedupePersonalHouseholds migration (PostgreSQL)', () => {
     const user = await createUser();
     const registered = await createHousehold(user, '2026-05-01');
     const migrated = await createHousehold(user, '2026-06-03');
-    await addBudget(migrated);
+    await addCategory(migrated);
     await sql(
       `insert into bills (amount, bill_date, household_id, deleted_at) values (1, '2026-01-01', ?, now())`,
       [registered],
@@ -193,7 +194,7 @@ describe('DedupePersonalHouseholds migration (PostgreSQL)', () => {
     const user = await createUser();
     const live = await createHousehold(user, '2026-06-03');
     const deleted = await createHousehold(user, '2026-05-01');
-    await addBudget(deleted);
+    await addCategory(deleted);
     await sql(`update households set deleted_at = now() where id = ?`, [
       deleted,
     ]);
@@ -206,7 +207,7 @@ describe('DedupePersonalHouseholds migration (PostgreSQL)', () => {
   it('keeps Personal households created after the ownership migration ran', async () => {
     const user = await createUser();
     const migrated = await createHousehold(user, '2026-06-03');
-    await addBudget(migrated);
+    await addCategory(migrated);
     const later = await createHousehold(user, '2999-01-01');
 
     await runMigration();
@@ -221,8 +222,8 @@ describe('DedupePersonalHouseholds migration (PostgreSQL)', () => {
     const aliceNew = await createHousehold(alice, '2026-06-03');
     const bobOld = await createHousehold(bob, '2026-05-02');
     const bobNew = await createHousehold(bob, '2026-06-03');
-    await addBudget(aliceNew);
-    await addBudget(bobOld);
+    await addCategory(aliceNew);
+    await addCategory(bobOld);
 
     await runMigration();
 
@@ -236,7 +237,7 @@ describe('DedupePersonalHouseholds migration (PostgreSQL)', () => {
     const user = await createUser();
     const registered = await createHousehold(user, '2026-05-01');
     const migrated = await createHousehold(user, '2026-06-03');
-    await addBudget(migrated);
+    await addCategory(migrated);
 
     await runMigration();
     await runMigration();

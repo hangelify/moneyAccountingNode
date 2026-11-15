@@ -1,4 +1,4 @@
-import { addMoney } from './money.util';
+import { addMoney, decimalToNumber } from './money.util';
 
 describe('addMoney', () => {
   it('adds 0.1 and 0.2 to exactly 0.3', () => {
@@ -13,5 +13,15 @@ describe('addMoney', () => {
 
   it('adds large amounts without losing cents', () => {
     expect(addMoney(999_999_999_999.99, 0.01)).toBe(1_000_000_000_000);
+  });
+});
+
+describe('decimalToNumber', () => {
+  it('reads the string MikroORM returns for a decimal column', () => {
+    expect(decimalToNumber('12.30')).toBe(12.3);
+  });
+
+  it('passes a number through', () => {
+    expect(decimalToNumber(12.3)).toBe(12.3);
   });
 });

@@ -11,8 +11,6 @@ import { BillStatus } from '../src/types/bill-status.enum';
 type Method = 'get' | 'post' | 'put' | 'delete';
 
 interface Resources {
-  budget: string;
-  horizon: string;
   category: string;
   subCategory: string;
   market: string;
@@ -50,17 +48,8 @@ describe('Household isolation (e2e)', () => {
 
   async function createResources(user: TestUser): Promise<Resources> {
     const h = `/households/${user.householdId}`;
-    const budget = await create(user, `${h}/budgets`, { name: 'Budget' });
-    const horizon = await create(user, `${h}/planing-horizons`, {
-      name: 'Horizon',
-      amount: 100,
-      currency: 'EUR',
-      period_type: 'MONTHLY',
-      budget_id: budget,
-    });
     const category = await create(user, `${h}/categories`, {
       name: 'Category',
-      planing_horizon_id: horizon,
     });
     const subCategory = await create(user, `${h}/sub-categories`, {
       name: 'Sub-category',
@@ -73,7 +62,7 @@ describe('Household isolation (e2e)', () => {
       market_id: market,
       items: [{ sub_category_id: subCategory, product_count: 1, amount: 10 }],
     });
-    return { budget, horizon, category, subCategory, market, bill };
+    return { category, subCategory, market, bill };
   }
 
   // Every household-scoped route, with the ids filled in from `r`.
@@ -94,11 +83,13 @@ describe('Household isolation (e2e)', () => {
       ['get', `${h}/invites`],
       ['delete', `${h}/invites/${randomUUID()}`],
       ['delete', `${h}/members/${uid}`],
-      ...crud('budgets', r.budget),
-      ...crud('planing-horizons', r.horizon),
       ['post', `${h}/categories/seed-defaults`],
       ['post', `${h}/categories/bulk`],
       ...crud('categories', r.category),
+      ['post', `${h}/category-limits`],
+      ['get', `${h}/category-limits`],
+      ['put', `${h}/category-limits/${r.category}`],
+      ['delete', `${h}/category-limits/${r.category}`],
       ['post', `${h}/sub-categories/bulk`],
       ...crud('sub-categories', r.subCategory),
       ...crud('markets', r.market),
@@ -128,8 +119,6 @@ describe('Household isolation (e2e)', () => {
   async function expectBobsDataIntact() {
     const h = `/households/${bob.householdId}`;
     const names: [string, string, string][] = [
-      ['budgets', bobs.budget, 'Budget'],
-      ['planing-horizons', bobs.horizon, 'Horizon'],
       ['categories', bobs.category, 'Category'],
       ['sub-categories', bobs.subCategory, 'Sub-category'],
       ['markets', bobs.market, 'Market'],
@@ -173,8 +162,6 @@ describe('Household isolation (e2e)', () => {
     const own = () => `/households/${alice.householdId}`;
 
     it.each([
-      ['budgets', () => bobs.budget, { name: 'x' }],
-      ['planing-horizons', () => bobs.horizon, { name: 'x' }],
       ['categories', () => bobs.category, { name: 'x' }],
       ['sub-categories', () => bobs.subCategory, { name: 'x' }],
       ['markets', () => bobs.market, { name: 'x' }],
@@ -189,6 +176,16 @@ describe('Household isolation (e2e)', () => {
         await expectBobsDataIntact();
       },
     );
+
+    it('category-limits: PUT and DELETE of a foreign category id answer 404', async () => {
+      const path = `${own()}/category-limits/${bobs.category}`;
+      await call(alice, 'put', path, {
+        period_type: 'MONTHLY',
+        amount: 10,
+      }).expect(404);
+      await call(alice, 'delete', path).expect(404);
+      await expectBobsDataIntact();
+    });
 
     it("bills: a foreign bill's image answers 404", async () => {
       await call(
@@ -220,13 +217,10 @@ describe('Household isolation (e2e)', () => {
       expect(ids.length).toBeGreaterThan(0);
     };
 
-    it.each([
-      'budgets',
-      'planing-horizons',
-      'categories',
-      'sub-categories',
-      'bills',
-    ])('%s: the list contains only own records', expectOnlyOwn);
+    it.each(['categories', 'sub-categories', 'bills'])(
+      '%s: the list contains only own records',
+      expectOnlyOwn,
+    );
 
     // BUG (found here, not fixed in P32): GET /markets answers 500 as soon as
     // the household has a market. MarketService counts bills with
@@ -245,30 +239,6 @@ describe('Household isolation (e2e)', () => {
 
     it.each([
       [
-        'a planning horizon on a foreign budget',
-        'planing-horizons',
-        () => ({
-          name: 'x',
-          amount: 1,
-          currency: 'EUR',
-          period_type: 'MONTHLY',
-          budget_id: bobs.budget,
-        }),
-      ],
-      [
-        'a category in a foreign planning horizon',
-        'categories',
-        () => ({ name: 'x', planing_horizon_id: bobs.horizon }),
-      ],
-      [
-        'categories in bulk in a foreign planning horizon',
-        'categories/bulk',
-        () => ({
-          planing_horizon_id: bobs.horizon,
-          categories: [{ name: 'x' }],
-        }),
-      ],
-      [
         'a sub-category in a foreign category',
         'sub-categories',
         () => ({ name: 'x', category_id: bobs.category }),
@@ -277,6 +247,15 @@ describe('Household isolation (e2e)', () => {
         'sub-categories in bulk in a foreign category',
         'sub-categories/bulk',
         () => ({ category_id: bobs.category, sub_categories: [{ name: 'x' }] }),
+      ],
+      [
+        'a category limit for a foreign category',
+        'category-limits',
+        () => ({
+          category_id: bobs.category,
+          period_type: 'MONTHLY',
+          amount: 10,
+        }),
       ],
       [
         'a bill at a foreign market',

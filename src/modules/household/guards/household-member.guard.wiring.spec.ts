@@ -4,11 +4,9 @@ import { ThrottlerModule } from '@nestjs/throttler';
 import { createMikroOrmConfig } from '../../../mikro-orm.config';
 import { AiGatewayModule } from '../../ai-gateway/ai-gateway.module';
 import { BillModule } from '../../bill/bill.module';
-import { BudgetModule } from '../../budget/budget.module';
 import { CategoryModule } from '../../category/category.module';
 import { HouseholdModule } from '../household.module';
 import { MarketModule } from '../../market/market.module';
-import { PlaningHorizonModule } from '../../planing-horizon/planing-horizon.module';
 import { SubCategoryModule } from '../../sub-category/sub-category.module';
 import { HouseholdMemberGuard } from './household-member.guard';
 
@@ -40,11 +38,9 @@ describe('HouseholdMemberGuard wiring', () => {
 
   it.each([
     ['BillModule', BillModule],
-    ['BudgetModule', BudgetModule],
     ['CategoryModule', CategoryModule],
     ['HouseholdModule', HouseholdModule],
     ['MarketModule', MarketModule],
-    ['PlaningHorizonModule', PlaningHorizonModule],
     ['SubCategoryModule', SubCategoryModule],
   ])('%s can construct HouseholdMemberGuard', async (_name, feature) => {
     // compile() builds controller guards, so a missing repository fails here.

@@ -28,7 +28,6 @@ select
   p.created_at,
   p.deleted_at                                                          as household_deleted_at,
   (select count(*) from bills b             where b.household_id = p.id) as bills,
-  (select count(*) from budgets b           where b.household_id = p.id) as budgets,
   (select count(*) from categories c        where c.household_id = p.id) as categories,
   (select count(*) from markets m           where m.household_id = p.id) as markets,
   (select count(*) from household_members m where m.household_id = p.id) as members,

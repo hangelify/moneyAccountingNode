@@ -10,8 +10,6 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthModule } from './modules/auth/auth.module';
 import { MailModule } from './modules/mail/mail.module';
-import { BudgetModule } from './modules/budget/budget.module';
-import { PlaningHorizonModule } from './modules/planing-horizon/planing-horizon.module';
 import { CategoryModule } from './modules/category/category.module';
 import { SubCategoryModule } from './modules/sub-category/sub-category.module';
 import { StorageModule } from './modules/storage/storage.module';
@@ -25,6 +23,7 @@ import { MarketModule } from './modules/market/market.module';
 import { HouseholdModule } from './modules/household/household.module';
 import { RetentionModule } from './modules/retention/retention.module';
 import { ExchangeRateModule } from './modules/exchange-rate/exchange-rate.module';
+import { CategoryLimitModule } from './modules/category-limit/category-limit.module';
 import { HealthModule } from './modules/health/health.module';
 
 export const APP_THROTTLERS = [{ name: 'default', ttl: 60_000, limit: 100 }];
@@ -35,8 +34,6 @@ export const APP_THROTTLERS = [{ name: 'default', ttl: 60_000, limit: 100 }];
     ScheduleModule.forRoot(),
     MailModule,
     AuthModule,
-    BudgetModule,
-    PlaningHorizonModule,
     CategoryModule,
     SubCategoryModule,
     StorageModule,
@@ -51,6 +48,7 @@ export const APP_THROTTLERS = [{ name: 'default', ttl: 60_000, limit: 100 }];
     HouseholdModule,
     RetentionModule,
     ExchangeRateModule,
+    CategoryLimitModule,
     HealthModule,
     ThrottlerModule.forRootAsync({
       useFactory: () => ({

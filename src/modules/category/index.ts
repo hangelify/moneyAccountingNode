@@ -6,5 +6,4 @@
 export type { RecentCategoryDto } from './dto/recent-categories.dto';
 export { DEFAULT_CATEGORY_TREE } from './defaults';
 export { CategoryBaseResponseDto } from './dto/category-base-response.dto';
-export { CategoryResponseDto } from './dto/category-response.dto';
 export { CategoryDefaultsService } from './category-defaults.service';

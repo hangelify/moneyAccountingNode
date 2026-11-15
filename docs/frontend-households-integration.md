@@ -8,7 +8,7 @@ This guide is for frontend developers. It explains what a **household** is, how 
 load the user's households with `GET /households`, and how the selected household
 drives every other screen of the app.
 
-A household is the unit that owns all financial data. Budgets, planning horizons,
+A household is the unit that owns all financial data. Category limits,
 categories, sub-categories, markets and bills all belong to a household, not to a
 user. Every member of a household can read and write that data. One user can belong
 to several households (for example "Personal" and "Family Budget").
@@ -28,9 +28,9 @@ path starts with `/households/{hid}/…`. The `hid` comes from `GET /households`
                                       │ (household switcher) │  + in the URL
                                       └──────────┬───────────┘
                                                  │ every data call uses {hid}
-             ┌──────────────┬──────────────┬─────┴────────┬──────────────┬──────────────┐
-             ▼              ▼              ▼              ▼              ▼              ▼
-         /budgets   /planing-horizons  /categories  /sub-categories   /markets       /bills
+             ┌──────────────┬──────────────┬─────┴────────┬──────────────┐
+             ▼              ▼              ▼              ▼              ▼
+    /category-limits  /categories  /sub-categories   /markets        /bills
 ```
 
 Swagger UI with the live schemas is served at `/api` on the backend.
@@ -188,8 +188,8 @@ Show a household switcher (in the header or side menu) built from the
 `GET /households` list. On switch:
 
 1. Set the new active id (state, URL and `localStorage`).
-2. **Drop all cached household data** of the previous household: budgets, planning
-   horizons, categories, sub-categories, markets, bills, drafts, dashboard. With a
+2. **Drop all cached household data** of the previous household: category limits,
+   categories, sub-categories, markets, bills, drafts, dashboard. With a
    query library, include `hid` in every query key (for example
    `['households', hid, 'bills', params]`), so the cache is split per household for
    free.
@@ -245,7 +245,7 @@ call.
 
 | Action | `owner` | `member` |
 |---|---|---|
-| Read and write all financial data (budgets, bills, …) | ✅ | ✅ |
+| Read and write all financial data (category limits, bills, …) | ✅ | ✅ |
 | View household details and members | ✅ | ✅ |
 | Rename household | ✅ | ❌ `403` |
 | Delete household | ✅ | ❌ `403` |
@@ -400,8 +400,7 @@ from the active `hid`.
 | Area / screen | Base path | Endpoints |
 |---|---|---|
 | Household settings, members, invites | `/households/{hid}` | See [§5](#5-other-household-endpoints) |
-| Budgets | `/households/{hid}/budgets` | `POST`, `GET`, `GET /{id}`, `PUT /{id}`, `DELETE /{id}` |
-| Planning horizons | `/households/{hid}/planing-horizons` | `POST`, `GET`, `GET /{id}`, `PUT /{id}`, `DELETE /{id}` (archives) |
+| Category limits | `/households/{hid}/category-limits` | `GET` (`?include_history=true` lists every version), `POST`, `PUT /{categoryId}`, `DELETE /{categoryId}` (keeps the limit until the end of its current period) |
 | Categories | `/households/{hid}/categories` | `POST /seed-defaults`, `POST /bulk`, `POST`, `GET`, `GET /{id}`, `PUT /{id}`, `DELETE /{id}` |
 | Sub-categories | `/households/{hid}/sub-categories` | `POST /bulk`, `POST`, `GET`, `GET /{id}`, `PUT /{id}`, `DELETE /{id}` |
 | Markets (shops) | `/households/{hid}/markets` | `POST`, `GET`, `GET /{id}`, `PUT /{id}`, `DELETE /{id}` |

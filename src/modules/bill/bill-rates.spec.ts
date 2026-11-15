@@ -14,8 +14,7 @@ describe('warmBillRates', () => {
 
   it('asks once for the unique days of bills in a foreign currency', async () => {
     await warmBillRates(
-      rates,
-      log,
+      { rates, log },
       Currency.EUR,
       [
         { currency: Currency.USD, bill_date: '2026-11-01' },
@@ -31,8 +30,7 @@ describe('warmBillRates', () => {
 
   it('does nothing when every bill is in the household currency', async () => {
     await warmBillRates(
-      rates,
-      log,
+      { rates, log },
       Currency.EUR,
       [{ currency: Currency.EUR, bill_date: '2026-11-01' }],
       'a test',
@@ -44,8 +42,7 @@ describe('warmBillRates', () => {
     ensureDays.mockRejectedValue(new Error('down'));
     await expect(
       warmBillRates(
-        rates,
-        log,
+        { rates, log },
         Currency.EUR,
         [{ currency: Currency.USD, bill_date: '2026-11-01' }],
         'a test',

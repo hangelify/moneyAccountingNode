@@ -97,8 +97,7 @@ export class ManualBillBatchService {
     }
 
     await warmBillRates(
-      this.exchangeRates,
-      this.log,
+      { rates: this.exchangeRates, log: this.log },
       household.currency,
       bills,
       'a manual batch',

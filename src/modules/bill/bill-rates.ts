@@ -8,10 +8,8 @@ import { ExchangeRateService } from '../exchange-rate';
  * currency have no rate to save. Never throws: the bills stand even if the
  * rate API is down.
  */
-// eslint-disable-next-line max-params -- the signature is fixed by the callers: rates, logger, currency, bills, label
 export async function warmBillRates(
-  rates: Pick<ExchangeRateService, 'ensureDays'>,
-  log: Logger,
+  deps: { rates: Pick<ExchangeRateService, 'ensureDays'>; log: Logger },
   householdCurrency: Currency,
   bills: Pick<Bill, 'currency' | 'bill_date'>[],
   what: string,
@@ -25,8 +23,8 @@ export async function warmBillRates(
   ];
   if (!days.length) return;
   try {
-    await rates.ensureDays(days, { max: days.length });
+    await deps.rates.ensureDays(days, { max: days.length });
   } catch (e) {
-    log.warn(`Could not save rates for ${what}: ${(e as Error).message}`);
+    deps.log.warn(`Could not save rates for ${what}: ${(e as Error).message}`);
   }
 }

@@ -14,23 +14,13 @@ import { Currency } from '../../types/currency.enum';
 import { ExchangeRateService } from '../exchange-rate';
 import { findHouseholdRole } from '../household';
 import { MarketService } from '../market';
+import { billsToMove, execRows, LockedBill, uuids } from './bill-move-checks';
 import { warmBillRates } from './bill-rates';
 import {
   MoveBillsDto,
   MoveBillsResponseDto,
   MovedBillDto,
 } from './dto/move-bills.dto';
-
-/** A bill row locked for the move. */
-interface LockedBill {
-  id: string;
-  household_id: string;
-  status: string;
-  image_sha256: string | null;
-  client_batch_id: string | null;
-  client_batch_index: number | null;
-  market_id: string | null;
-}
 
 /** A live market of a moved bill, with the details to recreate it. */
 interface SourceMarket {
@@ -48,11 +38,13 @@ interface RemappedLine {
   lost_cat: boolean;
 }
 
-/** The moved bills and what the warming after the commit needs. */
+/** The moved bills and what the warming after the commit needs, if any. */
 interface MoveResult {
   body: MoveBillsResponseDto;
-  currency: Currency;
-  bills: Pick<Bill, 'currency' | 'bill_date'>[];
+  warm: {
+    currency: Currency;
+    bills: Pick<Bill, 'currency' | 'bill_date'>[];
+  } | null;
 }
 
 /**
@@ -78,12 +70,14 @@ export class BillMoveService {
     const result = await this.em.transactional((em) =>
       this.write(em, sourceHouseholdId, userId, dto),
     );
-    await warmBillRates(
-      { rates: this.exchangeRates, log: this.log },
-      result.currency,
-      result.bills,
-      'a bill move',
-    );
+    if (result.warm) {
+      await warmBillRates(
+        { rates: this.exchangeRates, log: this.log },
+        result.warm.currency,
+        result.warm.bills,
+        'a bill move',
+      );
+    }
     return result.body;
   }
 
@@ -106,31 +100,28 @@ export class BillMoveService {
     }
 
     const locked = await this.lockBills(em, sourceHouseholdId, target, dto);
-    // Bills found in neither household are skipped for now (HAN-23 task 5).
-    const ids = locked
-      .filter((b) => b.household_id === sourceHouseholdId)
-      .map((b) => b.id);
+    const ids = (
+      await billsToMove(em, {
+        source: sourceHouseholdId,
+        target,
+        order: dto.bill_ids,
+        locked,
+      })
+    ).map((b) => b.id);
+    if (!ids.length) {
+      return {
+        body: {
+          target_household_id: target,
+          bills: countLines(dto.bill_ids, [], []),
+        },
+        warm: null,
+      };
+    }
+
     const lines = await this.moveBills(em, target, ids);
     const moved = countLines(dto.bill_ids, ids, lines);
 
-    em.create(Log, {
-      level: LogLevel.INFO,
-      source: LogSource.API,
-      context: 'BillMove',
-      message: `Moved ${String(ids.length)} bill(s) to household ${target}`,
-      metadata: {
-        source_household_id: sourceHouseholdId,
-        target_household_id: target,
-        bill_ids: dto.bill_ids,
-        lost: moved.map((m) => ({
-          id: m.id,
-          sub: m.lines_lost_sub_category,
-          cat: m.lines_lost_category,
-        })),
-      },
-      user: em.getReference(User, userId),
-      created_at: new Date(),
-    });
+    logMove(em, { source: sourceHouseholdId, userId, dto, moved });
     await em.flush();
 
     const household = await em.findOneOrFail(
@@ -145,8 +136,7 @@ export class BillMoveService {
     );
     return {
       body: { target_household_id: target, bills: moved },
-      currency: household.currency,
-      bills,
+      warm: { currency: household.currency, bills },
     };
   }
 
@@ -161,7 +151,7 @@ export class BillMoveService {
   ): Promise<RemappedLine[]> {
     const marketOf = await this.targetMarkets(em, target, ids);
     const lines = await this.remapLines(em, target, ids);
-    await this.exec(
+    await execRows(
       em,
       `UPDATE bills b
        SET    household_id = ?, market_id = v.market_id, updated_at = now()
@@ -170,7 +160,7 @@ export class BillMoveService {
       [target, uuids(ids), uuids(ids.map((id) => marketOf.get(id) ?? null))],
     );
     // Dismissals pair bills of one household; the moved ones' pairs no longer do.
-    await this.exec(
+    await execRows(
       em,
       `DELETE FROM bill_duplicate_dismissals
        WHERE  bill_id = ANY(?::uuid[]) OR other_bill_id = ANY(?::uuid[])`,
@@ -187,7 +177,7 @@ export class BillMoveService {
     dto: MoveBillsDto,
   ): Promise<LockedBill[]> {
     // id order, as markDuplicate locks, so concurrent moves cannot deadlock.
-    return this.exec<LockedBill>(
+    return execRows<LockedBill>(
       em,
       `SELECT id, household_id, status, image_sha256, client_batch_id, client_batch_index, market_id
        FROM   bills
@@ -208,7 +198,7 @@ export class BillMoveService {
     target: string,
     ids: string[],
   ): Promise<Map<string, string>> {
-    const rows = await this.exec<SourceMarket>(
+    const rows = await execRows<SourceMarket>(
       em,
       `SELECT b.id AS bill_id, m.name, m.city, m.country, m.address
        FROM   bills b
@@ -250,9 +240,10 @@ export class BillMoveService {
     target: string,
     ids: string[],
   ): Promise<RemappedLine[]> {
-    const lost = `(prev.sub_category_id IS NOT NULL AND tsc.id IS NULL AND tc.id IS NOT NULL)
-               OR (prev.category_id IS NOT NULL AND tc.id IS NULL)`;
-    return this.exec<RemappedLine>(
+    const lostSub = `(prev.sub_category_id IS NOT NULL AND tsc.id IS NULL AND tc.id IS NOT NULL)`;
+    const lostCat = `(prev.category_id IS NOT NULL AND tc.id IS NULL)`;
+    const lost = `${lostSub} OR ${lostCat}`;
+    return execRows<RemappedLine>(
       em,
       `UPDATE bill_sub_categories bsc
        SET    category_id         = tc.id,
@@ -267,25 +258,16 @@ export class BillMoveService {
        LEFT JOIN sub_categories tsc ON tsc.category_id = tc.id AND tsc.deleted_at IS NULL
                                    AND lower(tsc.name) = lower(ssc.name)
        WHERE  bsc.id = prev.id AND prev.bill_id = ANY(?::uuid[])
-       RETURNING bsc.bill_id,
-                 (prev.sub_category_id IS NOT NULL AND tsc.id IS NULL AND tc.id IS NOT NULL) AS lost_sub,
-                 (prev.category_id IS NOT NULL AND tc.id IS NULL) AS lost_cat`,
+       RETURNING bsc.bill_id, ${lostSub} AS lost_sub, ${lostCat} AS lost_cat`,
       [target, uuids(ids)],
     );
   }
-
-  private async exec<T>(
-    em: EntityManager,
-    query: string,
-    params: unknown[],
-  ): Promise<T[]> {
-    return (await em
-      .getConnection()
-      .execute(query, params, 'all', em.getTransactionContext())) as T[];
-  }
 }
 
-/** One entry per moved bill, in the order of the request. */
+/**
+ * One entry per requested bill, in the order of the request; a bill not
+ * moved now was in the target already.
+ */
 function countLines(
   order: string[],
   ids: string[],
@@ -310,13 +292,46 @@ function countLines(
     if (line.lost_sub) c.lines_lost_sub_category++;
     if (line.lost_cat) c.lines_lost_category++;
   }
-  return order.flatMap((id) => counts.get(id) ?? []);
+  return order.map(
+    (id) =>
+      counts.get(id) ?? {
+        id,
+        lines_total: 0,
+        lines_lost_sub_category: 0,
+        lines_lost_category: 0,
+        already_moved: true,
+      },
+  );
 }
 
-/**
- * A uuid[] literal: knex would expand a bound array into one placeholder
- * per value. The ids are uuids (validated or read back), so need no quoting.
- */
-function uuids(ids: (string | null)[]): string {
-  return `{${ids.map((id) => id ?? 'NULL').join(',')}}`;
+/** The one log entry of a move; moved bills only. */
+function logMove(
+  em: EntityManager,
+  move: {
+    source: string;
+    userId: string;
+    dto: MoveBillsDto;
+    moved: MovedBillDto[];
+  },
+): void {
+  const { source, userId, dto, moved } = move;
+  const bills = moved.filter((m) => !m.already_moved);
+  em.create(Log, {
+    level: LogLevel.INFO,
+    source: LogSource.API,
+    context: 'BillMove',
+    message: `Moved ${String(bills.length)} bill(s) to household ${dto.target_household_id}`,
+    metadata: {
+      source_household_id: source,
+      target_household_id: dto.target_household_id,
+      bill_ids: dto.bill_ids,
+      lost: bills.map((m) => ({
+        id: m.id,
+        sub: m.lines_lost_sub_category,
+        cat: m.lines_lost_category,
+      })),
+    },
+    user: em.getReference(User, userId),
+    created_at: new Date(),
+  });
 }

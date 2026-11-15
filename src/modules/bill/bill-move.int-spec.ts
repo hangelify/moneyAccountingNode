@@ -1,4 +1,11 @@
 import { randomUUID } from 'node:crypto';
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  HttpException,
+  NotFoundException,
+} from '@nestjs/common';
 import { MikroORM } from '@mikro-orm/postgresql';
 import { createMikroOrmConfig } from '../../mikro-orm.config';
 import { Bill } from '../../entities/bill.entity';
@@ -13,7 +20,7 @@ import { BillCrudService } from './bill-crud.service';
 import { BillDuplicatesService } from './bill-duplicates.service';
 import { BillMoveService } from './bill-move.service';
 import { BillConversionService } from './household-conversion';
-import { MoveBillsResponseDto } from './dto/move-bills.dto';
+import { MoveBillsResponseDto, MoveConflictReason } from './dto/move-bills.dto';
 
 jest.setTimeout(30_000);
 
@@ -35,8 +42,13 @@ interface LineRow {
 describe('bill move (PostgreSQL)', () => {
   let orm: MikroORM;
   const userId = randomUUID();
+  // A member of A only.
+  const outsider = randomUUID();
   const a = randomUUID();
   const b = randomUUID();
+  // A household the user is not in, and a deleted one the user is in.
+  const c = randomUUID();
+  const gone = randomUUID();
   // Household A (EUR).
   const aFood = randomUUID();
   const aBread = randomUUID();
@@ -59,21 +71,33 @@ describe('bill move (PostgreSQL)', () => {
 
   beforeAll(async () => {
     orm = await MikroORM.init(createMikroOrmConfig());
-    await sql(
-      `insert into users (id, first_name, email, password) values (?, 'Bill move', ?, 'x')`,
-      [userId, `bill-move-${userId}@example.com`],
-    );
+    for (const id of [userId, outsider]) {
+      await sql(
+        `insert into users (id, first_name, email, password) values (?, 'Bill move', ?, 'x')`,
+        [id, `bill-move-${id}@example.com`],
+      );
+    }
     for (const [id, currency] of [
       [a, 'EUR'],
       [b, 'MDL'],
+      [c, 'EUR'],
+      [gone, 'EUR'],
     ]) {
       await sql(
         `insert into households (id, name, created_by, currency) values (?, 'Bill move', ?, ?)`,
         [id, userId, currency],
       );
+    }
+    await sql('update households set deleted_at = now() where id = ?', [gone]);
+    for (const [household, user, role] of [
+      [a, userId, 'owner'],
+      [b, userId, 'owner'],
+      [gone, userId, 'owner'],
+      [a, outsider, 'member'],
+    ]) {
       await sql(
-        `insert into household_members (household_id, user_id, role) values (?, ?, 'owner')`,
-        [id, userId],
+        `insert into household_members (household_id, user_id, role) values (?, ?, ?)`,
+        [household, user, role],
       );
     }
     for (const [id, name, household] of [
@@ -110,15 +134,21 @@ describe('bill move (PostgreSQL)', () => {
 
   afterAll(async () => {
     const both = [a, b];
+    const all = [a, b, c, gone];
     await sql(
-      `delete from bill_sub_categories where bill_id in (select id from bills where household_id in (?, ?))`,
-      both,
+      `delete from bill_sub_categories where bill_id in (select id from bills where household_id in (?, ?, ?, ?))`,
+      all,
     );
     await sql(
       'delete from bill_duplicate_dismissals where household_id in (?, ?)',
       both,
     );
-    await sql('delete from bills where household_id in (?, ?)', both);
+    // Duplicates first: they reference their originals.
+    await sql(
+      'delete from bills where household_id in (?, ?, ?, ?) and duplicate_of_id is not null',
+      all,
+    );
+    await sql('delete from bills where household_id in (?, ?, ?, ?)', all);
     await sql('delete from markets where household_id in (?, ?)', both);
     await sql(
       'delete from sub_categories where category_id in (select id from categories where household_id in (?, ?))',
@@ -126,12 +156,12 @@ describe('bill move (PostgreSQL)', () => {
     );
     await sql('delete from categories where household_id in (?, ?)', both);
     await sql(
-      'delete from household_members where household_id in (?, ?)',
-      both,
+      'delete from household_members where household_id in (?, ?, ?, ?)',
+      all,
     );
-    await sql('delete from households where id in (?, ?)', both);
+    await sql('delete from households where id in (?, ?, ?, ?)', all);
     await sql('delete from logs where user_id = ?', [userId]);
-    await sql('delete from users where id = ?', [userId]);
+    await sql('delete from users where id in (?, ?)', [userId, outsider]);
     await orm.close(true);
   });
 
@@ -159,26 +189,44 @@ describe('bill move (PostgreSQL)', () => {
     );
   }
 
-  /** A confirmed EUR bill of A with these lines, in order; returns its id. */
+  /**
+   * A confirmed EUR bill of A (or of `household`) with these lines, in
+   * order; returns its id. A failed bill gets a parse error, a duplicate
+   * needs `duplicateOf`.
+   */
   async function makeBill(
     lines: LineSpec[] = [],
     opts: {
+      household?: string;
       market?: string | null;
       status?: BillStatus;
       imageKey?: string;
+      imageSha?: string;
+      batch?: [string, number];
+      duplicateOf?: string;
+      deleted?: boolean;
     } = {},
   ): Promise<string> {
     const id = randomUUID();
+    const status = opts.status ?? BillStatus.CONFIRMED;
     await sql(
-      `insert into bills (id, household_id, bill_date, amount, status, currency, source, market_id, image_key)
-       values (?, ?, '2026-11-10', 10, ?, 'EUR', ?, ?, ?)`,
+      `insert into bills (id, household_id, bill_date, amount, status, currency, source, market_id,
+                          image_key, image_sha256, client_batch_id, client_batch_index,
+                          duplicate_of_id, parse_error_code, deleted_at)
+       values (?, ?, '2026-11-10', 10, ?, 'EUR', ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         id,
-        a,
-        opts.status ?? BillStatus.CONFIRMED,
+        opts.household ?? a,
+        status,
         BillSource.MANUAL,
         opts.market ?? null,
         opts.imageKey ?? null,
+        opts.imageSha ?? null,
+        opts.batch?.[0] ?? null,
+        opts.batch?.[1] ?? null,
+        opts.duplicateOf ?? null,
+        status === BillStatus.FAILED ? 'not_a_receipt' : null,
+        opts.deleted ? new Date() : null,
       ],
     );
     for (const [i, line] of lines.entries()) {
@@ -430,5 +478,277 @@ describe('bill move (PostgreSQL)', () => {
     await move([id]);
 
     await expect(crud().getDraftImageKey(id, b)).resolves.toBe(key);
+  });
+
+  it('keeps the bill fields it does not remap', async () => {
+    const batch = randomUUID();
+    const id = await makeBill([], {
+      status: BillStatus.DRAFT,
+      imageSha: `keep-${batch}`,
+      batch: [batch, 3],
+    });
+    await sql(
+      `update bills set currency = 'USD', amount = 12.34, source = 'photo' where id = ?`,
+      [id],
+    );
+    const fields =
+      'currency, amount, status, source, image_sha256, client_batch_id, client_batch_index';
+    const read = async (): Promise<unknown> =>
+      (
+        await sql<unknown[]>(`select ${fields} from bills where id = ?`, [id])
+      )[0];
+    const before = await read();
+
+    await move([id]);
+
+    expect(await read()).toEqual(before);
+    expect(before).toEqual({
+      currency: 'USD',
+      amount: '12.34',
+      status: 'draft',
+      source: 'photo',
+      image_sha256: `keep-${batch}`,
+      client_batch_id: batch,
+      client_batch_index: 3,
+    });
+  });
+
+  /** The exception the move was rejected with. */
+  async function rejection(p: Promise<unknown>): Promise<HttpException> {
+    try {
+      await p;
+    } catch (e) {
+      return e as HttpException;
+    }
+    throw new Error('The move was not rejected');
+  }
+
+  it('403 when the user is not a member of the target', async () => {
+    const id = await makeBill();
+
+    const e = await rejection(
+      mover().move(a, outsider, { bill_ids: [id], target_household_id: c }),
+    );
+
+    expect(e).toBeInstanceOf(ForbiddenException);
+    expect((await billRow(id)).household_id).toBe(a);
+  });
+
+  it('403 when the target household is deleted', async () => {
+    const id = await makeBill();
+
+    const e = await rejection(
+      mover().move(a, userId, { bill_ids: [id], target_household_id: gone }),
+    );
+
+    expect(e).toBeInstanceOf(ForbiddenException);
+    expect((await billRow(id)).household_id).toBe(a);
+  });
+
+  it('400 when the target is the source', async () => {
+    const id = await makeBill();
+
+    const e = await rejection(
+      mover().move(a, userId, { bill_ids: [id], target_household_id: a }),
+    );
+
+    expect(e).toBeInstanceOf(BadRequestException);
+  });
+
+  it('404 lists bills found in neither household', async () => {
+    const ok = await makeBill();
+    const foreign = await makeBill([], { household: c });
+    const deleted = await makeBill([], { deleted: true });
+
+    const e = await rejection(move([ok, foreign, deleted]));
+
+    expect(e).toBeInstanceOf(NotFoundException);
+    expect(e.getResponse()).toEqual({
+      statusCode: 404,
+      message: 'Some bills were not found',
+      bill_ids: [foreign, deleted],
+    });
+    expect((await billRow(ok)).household_id).toBe(a);
+  });
+
+  it('409 lists every conflict and changes nothing', async () => {
+    const metro = randomUUID();
+    const metroName = `Metro ${metro}`;
+    await sql(`insert into markets (id, name, household_id) values (?, ?, ?)`, [
+      metro,
+      metroName,
+      a,
+    ]);
+    const ok = await makeBill([{ category: aFood, sub: aBread }], {
+      market: metro,
+    });
+    const failed = await makeBill([], { status: BillStatus.FAILED });
+    const original = await makeBill();
+    const duplicate = await makeBill([], {
+      status: BillStatus.DUPLICATE,
+      duplicateOf: original,
+    });
+    const draft = await makeBill([], {
+      status: BillStatus.DRAFT,
+      imageSha: 'h1',
+    });
+    await makeBill([], {
+      household: b,
+      status: BillStatus.DRAFT,
+      imageSha: 'h1',
+    });
+    const batch = randomUUID();
+    const batched = await makeBill([], { batch: [batch, 0] });
+    await makeBill([], { household: b, batch: [batch, 0], deleted: true });
+    const marketsInB = async (): Promise<number> =>
+      (
+        await sql<unknown[]>('select id from markets where household_id = ?', [
+          b,
+        ])
+      ).length;
+    const marketsBefore = await marketsInB();
+
+    const e = await rejection(
+      move([ok, failed, duplicate, original, draft, batched]),
+    );
+
+    expect(e).toBeInstanceOf(ConflictException);
+    const body = e.getResponse() as {
+      conflicts: { id: string; reason: string }[];
+    };
+    expect(body).toMatchObject({
+      statusCode: 409,
+      message: 'Some bills cannot be moved',
+    });
+    expect(body.conflicts).toHaveLength(5);
+    expect(body.conflicts).toEqual(
+      expect.arrayContaining([
+        { id: failed, reason: MoveConflictReason.STATUS_NOT_MOVABLE },
+        { id: duplicate, reason: MoveConflictReason.STATUS_NOT_MOVABLE },
+        { id: original, reason: MoveConflictReason.HAS_DUPLICATES },
+        { id: draft, reason: MoveConflictReason.DRAFT_IMAGE_CONFLICT },
+        { id: batched, reason: MoveConflictReason.CLIENT_BATCH_CONFLICT },
+      ]),
+    );
+    for (const id of [ok, failed, duplicate, original, draft, batched]) {
+      expect((await billRow(id)).household_id).toBe(a);
+    }
+    expect((await billRow(ok)).market_id).toBe(metro);
+    const [line] = await linesOf(ok);
+    expect([line?.category_id, line?.sub_category_id]).toEqual([aFood, aBread]);
+    expect(await marketsInB()).toBe(marketsBefore);
+  });
+
+  it('allows a draft whose photo matches a confirmed target bill', async () => {
+    await makeBill([], { household: b, imageSha: 'h2' });
+    const draft = await makeBill([], {
+      status: BillStatus.DRAFT,
+      imageSha: 'h2',
+    });
+
+    await move([draft]);
+
+    expect((await billRow(draft)).household_id).toBe(b);
+  });
+
+  it('ignores deleted duplicates of the moved bill', async () => {
+    const original = await makeBill();
+    const duplicate = await makeBill([], {
+      status: BillStatus.DUPLICATE,
+      duplicateOf: original,
+      deleted: true,
+    });
+
+    await move([original]);
+
+    expect((await billRow(original)).household_id).toBe(b);
+    const [row] = await sql<
+      { household_id: string; duplicate_of_id: string }[]
+    >('select household_id, duplicate_of_id from bills where id = ?', [
+      duplicate,
+    ]);
+    expect(row).toEqual({ household_id: a, duplicate_of_id: original });
+  });
+
+  const logsOf = (ids: string[]): Promise<unknown[]> =>
+    sql<unknown[]>(
+      `select id from logs
+       where context = 'BillMove' and user_id = ? and metadata->'bill_ids' @> ?::jsonb`,
+      [userId, JSON.stringify(ids)],
+    );
+
+  const already = (id: string): Record<string, unknown> => ({
+    id,
+    lines_total: 0,
+    lines_lost_sub_category: 0,
+    lines_lost_category: 0,
+    already_moved: true,
+  });
+
+  it('answers a repeat with already_moved and changes nothing', async () => {
+    const id = await makeBill([{ category: aFood, sub: aMilk }], {
+      market: aLidl,
+    });
+    await move([id]);
+    const state = async (): Promise<unknown> => ({
+      bill: (
+        await sql<unknown[]>(
+          'select household_id, market_id, updated_at from bills where id = ?',
+          [id],
+        )
+      )[0],
+      lines: await linesOf(id),
+    });
+    const before = await state();
+
+    const res = await move([id]);
+
+    expect(res).toEqual({ target_household_id: b, bills: [already(id)] });
+    expect(await state()).toEqual(before);
+    expect(await logsOf([id])).toHaveLength(1);
+  });
+
+  it('moves only the new bills of a mixed repeat', async () => {
+    const old = await makeBill();
+    await move([old]);
+    const fresh = await makeBill([{ category: aFood, sub: aBread }]);
+
+    const res = await move([old, fresh]);
+
+    expect(res.bills).toEqual([
+      already(old),
+      {
+        id: fresh,
+        lines_total: 1,
+        lines_lost_sub_category: 0,
+        lines_lost_category: 0,
+        already_moved: false,
+      },
+    ]);
+    expect((await billRow(fresh)).household_id).toBe(b);
+  });
+
+  it('serializes concurrent moves of the same bills', async () => {
+    const ids = [
+      await makeBill([{ category: aFood, sub: aBread }]),
+      await makeBill([{ category: aTransport, sub: aTaxi }]),
+    ];
+
+    const results = await Promise.all([move(ids), move(ids)]);
+
+    const flags = results.map((r) => r.bills.map((x) => x.already_moved));
+    expect(flags).toEqual(
+      expect.arrayContaining([
+        [false, false],
+        [true, true],
+      ]),
+    );
+    const first = results.find((r) => !r.bills[0]?.already_moved);
+    expect(first?.bills.map((x) => x.lines_lost_sub_category)).toEqual([0, 1]);
+    const lines = await Promise.all(ids.map((id) => linesOf(id)));
+    expect(
+      lines.map((l) => l.map((x) => [x.category_id, x.sub_category_id])),
+    ).toEqual([[[bFood, bBread]], [[bTransport, null]]]);
+    expect(await logsOf(ids)).toHaveLength(1);
   });
 });

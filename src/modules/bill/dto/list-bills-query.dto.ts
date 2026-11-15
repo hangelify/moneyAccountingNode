@@ -14,6 +14,7 @@ import {
 import { Transform, Type } from 'class-transformer';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Currency } from '../../../types/currency.enum';
+import { BillSource } from '../../../types/bill-source.enum';
 import { IsCalendarDate } from '../../../common/validators/is-calendar-date';
 
 export class ListBillsQueryDto {
@@ -66,6 +67,23 @@ export class ListBillsQueryDto {
   @IsOptional()
   @IsEnum(Currency)
   currency?: Currency;
+
+  @ApiPropertyOptional({
+    enum: BillSource,
+    isArray: true,
+    example: ['manual'],
+    description:
+      'Filter by where the bill came from. Repeat the param for multiple values: ?source=manual&source=bank.',
+  })
+  @Transform(({ value }: { value: unknown }) => {
+    const list = Array.isArray(value) ? value : [value];
+    const kept = list.filter((v) => v !== '' && v !== undefined);
+    return kept.length ? kept : undefined;
+  })
+  @IsOptional()
+  @IsArray()
+  @IsEnum(BillSource, { each: true })
+  source?: BillSource[];
 
   @ApiPropertyOptional({
     type: [String],

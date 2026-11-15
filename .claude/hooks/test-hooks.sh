@@ -5,9 +5,11 @@ dir=$(cd "$(dirname "$0")" && pwd)
 root=$(git -C "$dir" rev-parse --show-toplevel)
 fail=0
 
-expect() { # expect <exit> <hook> <name> <json>
+expect() { # [with_ci=1] expect <exit> <hook> <name> <json>
   local want=$1 hook=$2 name=$3 json=$4 got
-  printf '%s' "$json" | "$dir/$hook" >/dev/null 2>&1
+  # The hooks read CI (GitHub Actions sets CI=true): each case sets it itself,
+  # so the result does not depend on where the tests run.
+  printf '%s' "$json" | env -u CI ${with_ci:+CI=true} "$dir/$hook" >/dev/null 2>&1
   got=$?
   if [ "$got" != "$want" ]; then
     echo "FAIL $hook: $name (exit $got, want $want)"
@@ -38,6 +40,7 @@ expect 0 guard-bash.sh 'commit msg mentions' "$(bash_cmd 'git commit -m "docs: C
 expect 0 guard-bash.sh 'heredoc msg'         "$(bash_cmd $'git commit -F - <<\'MSG\'\nnever git push --force\nMSG')"
 expect 0 guard-bash.sh 'push then rm -f'     "$(bash_cmd 'git push origin dev && rm -f tmp.log')"
 expect 0 guard-bash.sh 'plain push'          "$(bash_cmd 'git push -u origin chore/x')"
+with_ci=1 expect 0 guard-bash.sh 'migration:fresh in CI' "$(bash_cmd 'npm run migration:fresh')"
 expect 0 guard-bash.sh 'arch:baseline'       "$(bash_cmd 'npm run arch:baseline')"
 expect 0 guard-bash.sh 'lint:prune'          "$(bash_cmd 'npm run lint:prune')"
 expect 0 guard-bash.sh 'migration:drift'     "$(bash_cmd 'npm run migration:drift')"

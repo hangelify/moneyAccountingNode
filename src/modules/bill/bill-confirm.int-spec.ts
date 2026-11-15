@@ -12,6 +12,7 @@ import { Market } from '../../entities/market.entity';
 import { SubCategory } from '../../entities/sub-category.entity';
 import { User } from '../../entities/user.entity';
 import { BillStatus } from '../../types/bill-status.enum';
+import { BillSource } from '../../types/bill-source.enum';
 import { BillParseErrorCode } from '../../types/bill-parse-error.enum';
 import { MarketService } from '../market';
 import { BillCrudService } from './bill-crud.service';
@@ -668,6 +669,10 @@ describe('confirm and create bill (PostgreSQL)', () => {
         items: priced(5),
       });
       expect(created.amount_mismatch).toBe(false);
+      // A read receipt: a manual bill's only line follows its total (HAN-49).
+      await orm.em
+        .fork()
+        .nativeUpdate(Bill, { id: created.id }, { source: BillSource.PHOTO });
 
       const updated = await crud().updateBill(created.id, householdId, {
         total_amount: 7,

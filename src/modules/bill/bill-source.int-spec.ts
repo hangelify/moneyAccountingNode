@@ -174,4 +174,43 @@ describe('bill source (PostgreSQL)', () => {
 
     expect(await sourceOf(failed)).toBe('photo');
   });
+  it('filters the list by source', async () => {
+    const photo = randomUUID();
+    const bank = randomUUID();
+    for (const [id, source] of [
+      [photo, 'photo'],
+      [bank, 'bank'],
+    ] as const) {
+      await sql(
+        `insert into bills (id, household_id, bill_date, amount, status, currency, source)
+         values (?, ?, '2026-11-04', 5, 'confirmed', 'EUR', ?)`,
+        [id, householdId, source],
+      );
+    }
+    const manual = await crud().createBill(householdId, userId, {
+      bill_date: '2026-11-04',
+      total_amount: 2,
+      items: [{ sub_category_id: subCategoryId, product_count: 1, amount: 2 }],
+    });
+
+    const onlyManual = await crud().listBills(householdId, {
+      source: [BillSource.MANUAL],
+    });
+    expect(onlyManual.data.map((b) => b.id)).toContain(manual.id);
+    for (const row of onlyManual.data) expect(row.source).toBe('manual');
+
+    const onlyPhoto = await crud().listBills(householdId, {
+      source: [BillSource.PHOTO],
+    });
+    expect(onlyPhoto.data.map((b) => b.id)).toContain(photo);
+    for (const row of onlyPhoto.data) expect(row.source).toBe('photo');
+
+    const both = await crud().listBills(householdId, {
+      source: [BillSource.MANUAL, BillSource.BANK],
+    });
+    const ids = both.data.map((b) => b.id);
+    expect(ids).toEqual(expect.arrayContaining([manual.id, bank]));
+    expect(ids).not.toContain(photo);
+    expect(both.meta.total).toBe(both.data.length);
+  });
 });

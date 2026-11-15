@@ -62,6 +62,13 @@ import {
   type LineCategories,
 } from './bill-lines';
 import {
+  applyLineShortcut,
+  checkLineShortcut,
+  hasLineShortcut,
+  sumCents,
+  syncManualTotal,
+} from './manual-bill-edit';
+import {
   BillDetailResponseDto,
   BillItemResponseDto,
   DraftListResponseDto,
@@ -245,6 +252,13 @@ export class BillCrudService {
       conditions.push(`b.currency = ?`);
       params.push(filters.currency);
     }
+    if (filters.source?.length) {
+      // One placeholder per value: knex would expand an array bound to ANY(?).
+      conditions.push(
+        `b.source IN (${filters.source.map(() => '?').join(', ')})`,
+      );
+      params.push(...filters.source);
+    }
     for (const bound of filters.amount_range ?? []) {
       const match = /^(gt|lt)_(\d+(?:\.\d+)?)$/.exec(bound);
       if (!match) continue;
@@ -375,16 +389,7 @@ export class BillCrudService {
     householdId: string,
     dto: UpdateBillDto,
   ): Promise<BillDetailResponseDto> {
-    if (dto.market_id !== undefined && dto.new_market !== undefined) {
-      throw new BadRequestException(
-        'Send either market_id or new_market, not both',
-      );
-    }
-    // Validate before touching the bill: a rejected update keeps its items.
-    if (dto.items) this.checkLineIds(dto.items);
-    const found = dto.items
-      ? await this.findLineCategories(householdId, dto.items)
-      : undefined;
+    const found = await this.checkUpdate(householdId, dto);
 
     const updated = await this.em.transactional(async (em) => {
       const bill = await em.findOne(
@@ -416,9 +421,16 @@ export class BillCrudService {
       if (dto.purchase_time !== undefined)
         bill.purchase_time = dto.purchase_time;
 
+      const centsBefore = sumCents(
+        await em.find(BillSubCategory, { bill: bill.id }),
+      );
       const lines = dto.items
         ? await this.applyItems(em, bill, dto.items, found!)
-        : await em.find(BillSubCategory, { bill: bill.id });
+        : await this.editLines(em, bill, dto, found);
+      syncManualTotal(bill, lines, dto, {
+        tolerance: this.itemTolerance,
+        centsBefore,
+      });
       await em.flush();
       await em.populate(lines, ['sub_category.category', 'category']);
       return { bill, dto: this.toDetailDto(bill, lines) };
@@ -429,6 +441,49 @@ export class BillCrudService {
       ...(await this.conversion.forBills(householdId, [id])).get(id),
       ...(await this.duplicateInfo(householdId, updated.bill)),
     };
+  }
+
+  /**
+   * Validates an update before it touches the bill, so a rejected update
+   * keeps its items; returns the categories its lines or shortcut name.
+   */
+  private async checkUpdate(
+    householdId: string,
+    dto: UpdateBillDto,
+  ): Promise<LineCategories | undefined> {
+    if (dto.market_id !== undefined && dto.new_market !== undefined) {
+      throw new BadRequestException(
+        'Send either market_id or new_market, not both',
+      );
+    }
+    if (dto.items) {
+      if (hasLineShortcut(dto)) {
+        throw new BadRequestException(
+          'Send either items or category_id, sub_category_id and note, not both',
+        );
+      }
+      this.checkLineIds(dto.items);
+      return this.findLineCategories(householdId, dto.items);
+    }
+    if (hasLineShortcut(dto))
+      return this.findLineCategories(householdId, [dto]);
+    return undefined;
+  }
+
+  /** The bill's lines, with the shortcut fields applied to its only one. */
+  private async editLines(
+    em: EntityManager,
+    bill: Bill,
+    dto: UpdateBillDto,
+    found: LineCategories | undefined,
+  ): Promise<BillSubCategory[]> {
+    const lines = await em.find(BillSubCategory, { bill: bill.id });
+    const [only] = lines;
+    if (found && hasLineShortcut(dto)) {
+      checkLineShortcut(bill, lines);
+      if (only) applyLineShortcut(only, dto, found);
+    }
+    return lines;
   }
 
   async softDeleteBill(id: string, householdId: string): Promise<void> {

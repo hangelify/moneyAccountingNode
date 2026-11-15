@@ -42,6 +42,8 @@ import { BillPhotoIngestService } from './bill-photo-ingest.service';
 import { ManualBillBatchService } from './manual-bill-batch.service';
 import { ManualBatchDto } from './dto/manual-batch.dto';
 import { ManualBatchResponseDto } from './dto/manual-batch-response.dto';
+import { BillMoveService } from './bill-move.service';
+import { MoveBillsDto, MoveBillsResponseDto } from './dto/move-bills.dto';
 import { BillCrudService } from './bill-crud.service';
 import { BillDuplicatesService } from './bill-duplicates.service';
 import { BillDashboardService } from './bill-dashboard.service';
@@ -79,6 +81,7 @@ import {
   ApiParsePhotoResponses,
   ApiCreateBillResponses,
   ApiManualBatchResponses,
+  ApiMoveBillsResponses,
   ApiListBillsResponses,
   ApiGetBillResponses,
   ApiUpdateBillResponses,
@@ -118,6 +121,7 @@ export class BillController {
     private readonly photoIngest: BillPhotoIngestService,
     private readonly billCrud: BillCrudService,
     private readonly manualBatch: ManualBillBatchService,
+    private readonly billMove: BillMoveService,
     private readonly billDuplicates: BillDuplicatesService,
     private readonly billDashboard: BillDashboardService,
     private readonly spendingBreakdown: SpendingBreakdownService,
@@ -311,6 +315,21 @@ export class BillController {
     );
     res.status(created ? HttpStatus.CREATED : HttpStatus.OK);
     return body;
+  }
+
+  @Post('move')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary:
+      'Move bills to another household, remapping categories and markets by name',
+  })
+  @ApiMoveBillsResponses()
+  async moveBills(
+    @CurrentUser() user: AuthenticatedUser,
+    @CurrentHousehold() ctx: HouseholdContext,
+    @Body() dto: MoveBillsDto,
+  ): Promise<MoveBillsResponseDto> {
+    return this.billMove.move(ctx.householdId, user.id, dto);
   }
 
   @Get()

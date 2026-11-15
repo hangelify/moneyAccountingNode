@@ -37,6 +37,11 @@ import {
   ManualBatchResponseDto,
   ValidationErrorResponseDto,
 } from './manual-batch-response.dto';
+import {
+  MoveBillsConflictResponseDto,
+  MoveBillsNotFoundResponseDto,
+  MoveBillsResponseDto,
+} from './move-bills.dto';
 
 export function ApiParsePhotoResponses(): MethodDecorator & ClassDecorator {
   return applyDecorators(
@@ -153,6 +158,51 @@ export const ApiManualBatchResponses = () =>
     ApiForbiddenResponse({ description: 'Not a member of the household' }),
     ApiTooManyRequestsResponse({
       description: 'More than 20 batches a minute',
+    }),
+  );
+
+export const ApiMoveBillsResponses = (): MethodDecorator & ClassDecorator =>
+  applyDecorators(
+    ApiOkResponse({
+      type: MoveBillsResponseDto,
+      description:
+        'Bills moved; bills already in the target are flagged already_moved',
+    }),
+    ApiExtraModels(ValidationErrorResponseDto),
+    ApiBadRequestResponse({
+      description:
+        'Either the body fails validation (no bill_ids, more than 100, a non-UUID id): a ValidationErrorResponseDto with message as a list; or the target equals the household in the path: message is the single string "Target household is the source household"',
+      schema: {
+        oneOf: [
+          { $ref: getSchemaPath(ValidationErrorResponseDto) },
+          {
+            type: 'object',
+            properties: {
+              statusCode: { type: 'number', example: 400 },
+              message: {
+                type: 'string',
+                example: 'Target household is the source household',
+              },
+              error: { type: 'string', example: 'Bad Request' },
+            },
+          },
+        ],
+      },
+    }),
+    ApiUnauthorizedResponse({ description: 'Unauthorized' }),
+    ApiForbiddenResponse({
+      description:
+        'Not a member of the household in the path or of the target household, or the target household does not exist',
+    }),
+    ApiNotFoundResponse({
+      type: MoveBillsNotFoundResponseDto,
+      description:
+        'Some bill ids are live in neither the household in the path nor the target; bill_ids lists them. Nothing is moved',
+    }),
+    ApiConflictResponse({
+      type: MoveBillsConflictResponseDto,
+      description:
+        'Nothing is moved. conflicts[].reason is one of: status_not_movable, has_duplicates, draft_image_conflict, client_batch_conflict',
     }),
   );
 
@@ -280,7 +330,8 @@ export const ApiMarkDuplicateResponses = () =>
     ApiResponse({ status: 401, description: 'Unauthorized' }),
   );
 
-export const ApiUnmarkDuplicateResponses = () =>
+export const ApiUnmarkDuplicateResponses = (): MethodDecorator &
+  ClassDecorator =>
   applyDecorators(
     ApiResponse({
       status: 200,
@@ -292,7 +343,8 @@ export const ApiUnmarkDuplicateResponses = () =>
     ApiResponse({ status: 401, description: 'Unauthorized' }),
   );
 
-export const ApiDuplicateSuggestionsResponses = () =>
+export const ApiDuplicateSuggestionsResponses = (): MethodDecorator &
+  ClassDecorator =>
   applyDecorators(
     ApiResponse({
       status: 200,
@@ -306,7 +358,8 @@ export const ApiDuplicateSuggestionsResponses = () =>
     ApiResponse({ status: 401, description: 'Unauthorized' }),
   );
 
-export const ApiDismissDuplicateResponses = () =>
+export const ApiDismissDuplicateResponses = (): MethodDecorator &
+  ClassDecorator =>
   applyDecorators(
     ApiResponse({
       status: 204,
@@ -331,7 +384,8 @@ export const ApiDashboardResponses = () =>
     ApiResponse({ status: 401, description: 'Unauthorized' }),
   );
 
-export const ApiSpendingBreakdownResponses = () =>
+export const ApiSpendingBreakdownResponses = (): MethodDecorator &
+  ClassDecorator =>
   applyDecorators(
     ApiResponse({
       status: 200,

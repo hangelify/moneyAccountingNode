@@ -12,6 +12,7 @@ import { Market } from '../../entities/market.entity';
 import { SubCategory } from '../../entities/sub-category.entity';
 import { User } from '../../entities/user.entity';
 import { BillStatus } from '../../types/bill-status.enum';
+import { BillSource } from '../../types/bill-source.enum';
 import { MarketService } from '../market';
 import { BillCrudService } from './bill-crud.service';
 import { ExchangeRateService } from '../exchange-rate';
@@ -120,7 +121,7 @@ describe('update bill (PostgreSQL)', () => {
     );
   }
 
-  /** A bill in `status` with one read line; returns the bill and line ids. */
+  /** A photo bill in `status` with one read line; returns the bill and line ids. */
   async function makeBill(
     status: BillStatus,
     hid: string = householdId,
@@ -130,6 +131,8 @@ describe('update bill (PostgreSQL)', () => {
       household: hid,
       created_by: userId,
       status,
+      // A read receipt: the manual-bill rules (HAN-49) do not apply.
+      source: BillSource.PHOTO,
       bill_date: '2026-05-19',
       amount: 10,
     } as never);

@@ -172,19 +172,20 @@ describe('HouseholdService', () => {
         deleted_at: undefined,
       } as unknown as Household;
       (em.findOne as jest.Mock).mockResolvedValue(household);
+      // One member (the owner), two live households of the owner.
+      (em.count as jest.Mock).mockResolvedValueOnce(1).mockResolvedValueOnce(2);
 
-      await service.softDeleteHousehold(hid);
+      await service.softDeleteHousehold(hid, userId);
 
       expect(household.deleted_at).toBeInstanceOf(Date);
-      expect(em.flush as jest.Mock).toHaveBeenCalled();
     });
 
     it('throws NotFoundException when household not found', async () => {
       const { service, em } = makeService();
       (em.findOne as jest.Mock).mockResolvedValue(null);
-      await expect(service.softDeleteHousehold(hid)).rejects.toBeInstanceOf(
-        NotFoundException,
-      );
+      await expect(
+        service.softDeleteHousehold(hid, userId),
+      ).rejects.toBeInstanceOf(NotFoundException);
     });
   });
 

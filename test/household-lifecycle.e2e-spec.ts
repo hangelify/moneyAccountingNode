@@ -190,4 +190,63 @@ describe('Household lifecycle (e2e)', () => {
       expect((res.body as { reason: string }).reason).toBe('already_member');
     });
   });
+
+  describe('deletion', () => {
+    const del = (user: TestUser, hid: string): request.Test =>
+      http().delete(`/households/${hid}`).set('Authorization', auth(user));
+
+    it('rejects deleting the last household', async () => {
+      const user = await registerUser(app, 'del-last');
+
+      const res = await del(user, user.householdId).expect(409);
+      expect((res.body as { reason: string }).reason).toBe('last_household');
+      expect(await listHouseholds(user)).toHaveLength(1);
+    });
+
+    it('rejects deleting a household with other members', async () => {
+      const owner = await registerUser(app, 'del-shared');
+      const member = await registerUser(app, 'del-shared-member');
+      await createHousehold(owner, { name: 'Spare' });
+      expect((await join(owner, owner.householdId, member)).status).toBe(204);
+
+      const res = await del(owner, owner.householdId).expect(409);
+      expect((res.body as { reason: string }).reason).toBe(
+        'household_has_members',
+      );
+    });
+
+    it('forbids a member from deleting', async () => {
+      const owner = await registerUser(app, 'del-owner');
+      const member = await registerUser(app, 'del-member');
+      expect((await join(owner, owner.householdId, member)).status).toBe(204);
+
+      await del(member, owner.householdId).expect(403);
+    });
+
+    it('deletes a household', async () => {
+      const user = await registerUser(app, 'del-ok');
+      const spare = await createHousehold(user, { name: 'Spare' });
+
+      await del(user, spare.id).expect(204);
+
+      expect((await listHouseholds(user)).map((h) => h.id)).toEqual([
+        user.householdId,
+      ]);
+      await http()
+        .get(`/households/${spare.id}`)
+        .set('Authorization', auth(user))
+        .expect(403);
+    });
+
+    it("counts memberships in others' households", async () => {
+      const a = await registerUser(app, 'del-count-a');
+      const b = await registerUser(app, 'del-count-b');
+      expect((await join(b, b.householdId, a)).status).toBe(204);
+
+      await del(a, a.householdId).expect(204);
+      expect((await listHouseholds(a)).map((h) => h.id)).toEqual([
+        b.householdId,
+      ]);
+    });
+  });
 });

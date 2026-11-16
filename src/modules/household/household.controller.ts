@@ -97,14 +97,19 @@ export class HouseholdController {
   @Delete(':hid')
   @UseGuards(HouseholdMemberGuard)
   @HttpCode(HttpStatus.NO_CONTENT)
-  @ApiOperation({ summary: 'Soft-delete the household (owner only)' })
+  @ApiOperation({ summary: 'Soft-delete the household (owner only, 403)' })
+  @ApiConflictResponse({
+    description:
+      'reason household_has_members: other members must be removed first; reason last_household: the caller would be left without a household',
+  })
   @ApiParam({ name: 'hid', description: 'Household ID' })
   async deleteHousehold(
+    @CurrentUser() user: AuthenticatedUser,
     @CurrentHousehold() ctx: HouseholdContext,
     @Param('hid', ParseUUIDPipe) hid: string,
   ): Promise<void> {
     this.householdService.assertOwner(ctx);
-    return this.householdService.softDeleteHousehold(hid);
+    return this.householdService.softDeleteHousehold(hid, user.id);
   }
 
   @Post(':hid/invites')

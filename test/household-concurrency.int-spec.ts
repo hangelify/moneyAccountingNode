@@ -71,4 +71,21 @@ describe('household concurrency (PostgreSQL)', () => {
     }
     expect(await liveHouseholds(uid)).toBe(5);
   });
+
+  it('keeps one household under concurrent deletes', async () => {
+    const uid = await user();
+    const first = await service.createHousehold(uid, { name: 'One' });
+    const second = await service.createHousehold(uid, { name: 'Two' });
+
+    const results = await Promise.allSettled([
+      service.softDeleteHousehold(first.id, uid),
+      service.softDeleteHousehold(second.id, uid),
+    ]);
+
+    expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+    const rejected = results.filter((r) => r.status === 'rejected');
+    expect(rejected).toHaveLength(1);
+    expect(rejected[0]?.reason).toBeInstanceOf(ConflictException);
+    expect(await liveHouseholds(uid)).toBe(1);
+  });
 });

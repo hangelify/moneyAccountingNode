@@ -136,14 +136,40 @@ export class HouseholdService {
     return this.toDto(household, members.length);
   }
 
-  async softDeleteHousehold(hid: string): Promise<void> {
-    const household = await this.em.findOne(Household, {
-      id: hid,
-      deleted_at: null,
+  /**
+   * Soft-deletes a household of `ownerId`. Refused while anyone else is a
+   * member (HAN-145 will give them a copy) and when it is the owner's last
+   * live household.
+   */
+  async softDeleteHousehold(hid: string, ownerId: string): Promise<void> {
+    await this.em.transactional(async (txEm) => {
+      await lockUserHouseholds(txEm, ownerId);
+      // FOR UPDATE waits for an invite being accepted into this household
+      // (it holds FOR SHARE), so the member count below is final.
+      const household = await txEm.findOne(
+        Household,
+        { id: hid, deleted_at: null },
+        { lockMode: LockMode.PESSIMISTIC_WRITE },
+      );
+      if (!household) throw new NotFoundException(`Household ${hid} not found`);
+
+      const members = await txEm.count(HouseholdMember, {
+        household: { id: hid },
+      });
+      if (members > 1) {
+        throw new ConflictException({
+          message: 'Remove the other members before deleting this household',
+          reason: 'household_has_members',
+        });
+      }
+      if ((await countLiveMemberships(txEm, ownerId)) <= 1) {
+        throw new ConflictException({
+          message: 'The last household cannot be deleted',
+          reason: 'last_household',
+        });
+      }
+      household.deleted_at = new Date();
     });
-    if (!household) throw new NotFoundException(`Household ${hid} not found`);
-    household.deleted_at = new Date();
-    await this.em.persist(household).flush();
   }
 
   // Invites are bound to an email address, so both ends must have proven
@@ -279,6 +305,20 @@ export class HouseholdService {
         throw new GoneException({ reason: 'expired' });
 
       await this.assertBelowHouseholdLimit(txEm, user.id);
+
+      // FOR SHARE: a concurrent delete (FOR UPDATE) either waits for this
+      // join and then sees the new member, or wins and this join is refused.
+      // It does not conflict with the FOR KEY SHARE of bill inserts.
+      const live = (await txEm
+        .getConnection()
+        .execute(
+          'select 1 from "households" where "id" = ? and "deleted_at" is null for share',
+          [lockedInvite.household.id],
+          'all',
+          txEm.getTransactionContext(),
+        )) as unknown[];
+      if (live.length === 0)
+        throw new GoneException({ reason: 'household_deleted' });
 
       // Another invite of this user to the same household may be accepted
       // concurrently: the loser inserts nothing and leaves its invite unspent.

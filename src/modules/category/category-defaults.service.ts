@@ -16,8 +16,16 @@ export class CategoryDefaultsService {
 
   constructor(private readonly em: EntityManager) {}
 
-  async seedForHousehold(householdId: string): Promise<SeedCounts> {
-    const counts = await this.em.fork().transactional(async (em) => {
+  /**
+   * Seeds in `txEm` when given (it must be inside a transaction, which then
+   * commits or rolls back the seed with the caller's writes); otherwise in a
+   * transaction of its own.
+   */
+  async seedForHousehold(
+    householdId: string,
+    txEm?: EntityManager,
+  ): Promise<SeedCounts> {
+    const run = async (em: EntityManager): Promise<SeedCounts> => {
       // Concurrent seeds of one household (registration, a double click)
       // run one at a time: the second one sees the first one's rows.
       await em
@@ -29,7 +37,10 @@ export class CategoryDefaultsService {
           em.getTransactionContext(),
         );
       return this.seed(em, householdId);
-    });
+    };
+    const counts = txEm
+      ? await run(txEm)
+      : await this.em.fork().transactional(run);
     this.log.log(
       `Seeded defaults for household ${householdId}: +${counts.categoriesCreated} categories, +${counts.subCategoriesCreated} subcategories`,
     );

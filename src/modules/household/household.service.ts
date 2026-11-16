@@ -14,31 +14,35 @@ import { Household } from '../../entities/household.entity';
 import { HouseholdMember } from '../../entities/household-member.entity';
 import { HouseholdInvite } from '../../entities/household-invite.entity';
 import { User } from '../../entities/user.entity';
+import type { Currency } from '../../types/currency.enum';
 import type { HouseholdContext } from './guards/household-member.guard';
 import { CreateHouseholdDto } from './dto/create-household.dto';
 import { UpdateHouseholdDto } from './dto/update-household.dto';
+import { UpdateMyHouseholdDto } from './dto/update-my-household.dto';
 import { CreateInviteDto } from './dto/create-invite.dto';
 import {
   HouseholdResponseDto,
   HouseholdDetailResponseDto,
+  HouseholdListItemDto,
   HouseholdMemberDto,
   InviteListItemDto,
   InviteResponseDto,
 } from './dto/household-response.dto';
 import { normalizeEmail } from '../../common/transforms/normalize-email';
-import { MAX_ACTIVE_INVITES } from './household-invites.env';
+import { HOUSEHOLD_LIMITS, type HouseholdLimits } from './household-limits.env';
+import { countLiveMemberships, lockUserHouseholds } from './household-locks';
+import { CategoryDefaultsService } from '../category';
 
 @Injectable()
 export class HouseholdService {
   private readonly frontendUrl: string;
 
   constructor(
-    @InjectRepository(Household)
-    private readonly householdRepo: EntityRepository<Household>,
     @InjectRepository(HouseholdMember)
     private readonly memberRepo: EntityRepository<HouseholdMember>,
     private readonly em: EntityManager,
-    @Inject(MAX_ACTIVE_INVITES) private readonly maxActiveInvites: number,
+    @Inject(HOUSEHOLD_LIMITS) private readonly limits: HouseholdLimits,
+    private readonly categoryDefaults: CategoryDefaultsService,
   ) {
     const url = process.env['FRONTEND_URL'];
     if (!url)
@@ -58,36 +62,79 @@ export class HouseholdService {
     userId: string,
     dto: CreateHouseholdDto,
   ): Promise<HouseholdResponseDto> {
-    const household = new Household();
-    household.name = dto.name;
-    household.created_by = this.em.getReference(User, userId);
-    household.currency =
-      dto.currency ?? (await this.em.findOneOrFail(User, userId)).currency;
-
-    const member = new HouseholdMember();
-    member.household = household;
-    member.user = this.em.getReference(User, userId);
-    member.role = 'owner';
-
-    this.em.persist(household);
-    this.em.persist(member);
-    await this.em.flush();
+    const household = await this.em.transactional(async (txEm) => {
+      await this.assertBelowHouseholdLimit(txEm, userId);
+      return this.insertHousehold(txEm, userId, dto.name, dto.currency);
+    });
 
     return this.toDto(household, 1);
   }
 
-  async listHouseholds(userId: string): Promise<HouseholdResponseDto[]> {
-    const memberships = await this.memberRepo.find(
-      { user: { id: userId }, household: { deleted_at: null } },
-      { populate: ['household', 'household.members'] },
-    );
-    return memberships.map((m) =>
-      this.toDto(m.household, m.household.members.getItems().length),
-    );
+  /**
+   * Inserts a household owned by `userId` (currency: the given one, else
+   * the user's) with its default categories, in `txEm`'s transaction: a
+   * household is never left without its categories.
+   */
+  private async insertHousehold(
+    txEm: EntityManager,
+    userId: string,
+    name: string,
+    currency?: Currency,
+  ): Promise<Household> {
+    const created = new Household();
+    created.name = name;
+    created.created_by = txEm.getReference(User, userId);
+    created.currency =
+      currency ?? (await txEm.findOneOrFail(User, userId)).currency;
+
+    const member = new HouseholdMember();
+    member.household = created;
+    member.user = txEm.getReference(User, userId);
+    member.role = 'owner';
+
+    txEm.persist(created);
+    txEm.persist(member);
+    await txEm.flush();
+    await this.categoryDefaults.seedForHousehold(created.id, txEm);
+    return created;
   }
 
-  async getHousehold(hid: string): Promise<HouseholdDetailResponseDto> {
-    const household = await this.householdRepo.findOne(
+  /**
+   * The user's live households, oldest first, in one query. bill_count
+   * counts confirmed and draft bills, so a client can warn before deleting.
+   */
+  async listHouseholds(userId: string): Promise<HouseholdListItemDto[]> {
+    const rows = (await this.em.getConnection().execute(
+      `select h.id,
+              coalesce(m.display_name, h.name) as name,
+              h.name as original_name,
+              h.currency,
+              h.created_at,
+              (select count(*) from household_members m2
+                where m2.household_id = h.id)::int as member_count,
+              (select count(*) from bills b
+                where b.household_id = h.id
+                  and b.deleted_at is null
+                  and b.status in ('confirmed', 'draft'))::int as bill_count
+         from household_members m
+         join households h on h.id = m.household_id
+        where m.user_id = ? and h.deleted_at is null
+        order by h.created_at asc, h.id asc`,
+      [userId],
+    )) as (Omit<HouseholdListItemDto, 'created_at'> & {
+      created_at: string | Date;
+    })[];
+    // A raw query returns timestamptz as Postgres text; every other
+    // household response serializes a Date (ISO 8601).
+    return rows.map((r) => ({ ...r, created_at: new Date(r.created_at) }));
+  }
+
+  async getHousehold(
+    hid: string,
+    userId: string,
+  ): Promise<HouseholdDetailResponseDto> {
+    const household = await this.em.findOne(
+      Household,
       { id: hid, deleted_at: null },
       { populate: ['members.user'] },
     );
@@ -104,17 +151,22 @@ export class HouseholdService {
         joined_at: m.joined_at,
       }));
 
-    return { ...this.toDto(household, members.length), members };
+    const mine = household.members.getItems().find((m) => m.user.id === userId);
+    return {
+      ...this.toDto(household, members.length, mine?.display_name),
+      members,
+    };
   }
 
   async updateHousehold(
     hid: string,
+    userId: string,
     dto: UpdateHouseholdDto,
   ): Promise<HouseholdResponseDto> {
     if (dto.name === undefined && dto.currency === undefined) {
       throw new BadRequestException('Nothing to update');
     }
-    const household = await this.householdRepo.findOne({
+    const household = await this.em.findOne(Household, {
       id: hid,
       deleted_at: null,
     });
@@ -122,18 +174,76 @@ export class HouseholdService {
     if (dto.name !== undefined) household.name = dto.name;
     if (dto.currency !== undefined) household.currency = dto.currency;
     await this.em.persist(household).flush();
-    const members = await this.memberRepo.find({ household: { id: hid } });
-    return this.toDto(household, members.length);
+    return this.toResponse(household, userId);
   }
 
-  async softDeleteHousehold(hid: string): Promise<void> {
-    const household = await this.householdRepo.findOne({
+  /** Sets (or, with null, clears) the caller's own name for the household. */
+  async updateMyHousehold(
+    hid: string,
+    userId: string,
+    dto: UpdateMyHouseholdDto,
+  ): Promise<HouseholdResponseDto> {
+    const household = await this.em.findOne(Household, {
       id: hid,
       deleted_at: null,
     });
     if (!household) throw new NotFoundException(`Household ${hid} not found`);
-    household.deleted_at = new Date();
-    await this.em.persist(household).flush();
+    // Through the entity, not nativeUpdate: the guard has already loaded
+    // this membership, and the response is built from that loaded copy.
+    const mine = await this.memberRepo.findOneOrFail({
+      household: { id: hid },
+      user: { id: userId },
+    });
+    mine.display_name = dto.display_name;
+    await this.em.flush();
+    return this.toResponse(household, userId);
+  }
+
+  private async toResponse(
+    household: Household,
+    userId: string,
+  ): Promise<HouseholdResponseDto> {
+    const members = await this.memberRepo.find({
+      household: { id: household.id },
+    });
+    const mine = members.find((m) => m.user.id === userId);
+    return this.toDto(household, members.length, mine?.display_name);
+  }
+
+  /**
+   * Soft-deletes a household of `ownerId`. Refused while anyone else is a
+   * member (HAN-145 will give them a copy) and when it is the owner's last
+   * live household.
+   */
+  async softDeleteHousehold(hid: string, ownerId: string): Promise<void> {
+    await this.em.transactional(async (txEm) => {
+      await lockUserHouseholds(txEm, ownerId);
+      // FOR UPDATE waits for an invite being accepted into this household
+      // (it holds FOR SHARE), so the member count below is final.
+      const household = await txEm.findOne(
+        Household,
+        { id: hid, deleted_at: null },
+        { lockMode: LockMode.PESSIMISTIC_WRITE },
+      );
+      if (!household) throw new NotFoundException(`Household ${hid} not found`);
+
+      const members = await txEm.count(HouseholdMember, {
+        household: { id: hid },
+      });
+      if (members > 1) {
+        throw new ConflictException({
+          message: 'Remove the other members before deleting this household',
+          reason: 'household_has_members',
+        });
+      }
+      if ((await countLiveMemberships(txEm, ownerId)) <= 1) {
+        throw new ConflictException({
+          message: 'The last household cannot be deleted',
+          reason: 'last_household',
+        });
+      }
+      household.deleted_at = new Date();
+    });
   }
 
   // Invites are bound to an email address, so both ends must have proven
@@ -169,9 +279,9 @@ export class HouseholdService {
         status: 'pending',
         expires_at: { $gt: new Date() },
       });
-      if (active >= this.maxActiveInvites) {
+      if (active >= this.limits.maxActiveInvites) {
         throw new ConflictException(
-          `A household can have at most ${this.maxActiveInvites} active invites; revoke one first`,
+          `A household can have at most ${this.limits.maxActiveInvites} active invites; revoke one first`,
         );
       }
 
@@ -268,6 +378,22 @@ export class HouseholdService {
       if (lockedInvite.expires_at <= new Date())
         throw new GoneException({ reason: 'expired' });
 
+      await this.assertBelowHouseholdLimit(txEm, user.id);
+
+      // FOR SHARE: a concurrent delete (FOR UPDATE) either waits for this
+      // join and then sees the new member, or wins and this join is refused.
+      // It does not conflict with the FOR KEY SHARE of bill inserts.
+      const live = (await txEm
+        .getConnection()
+        .execute(
+          'select 1 from "households" where "id" = ? and "deleted_at" is null for share',
+          [lockedInvite.household.id],
+          'all',
+          txEm.getTransactionContext(),
+        )) as unknown[];
+      if (live.length === 0)
+        throw new GoneException({ reason: 'household_deleted' });
+
       // Another invite of this user to the same household may be accepted
       // concurrently: the loser inserts nothing and leaves its invite unspent.
       const inserted = await (txEm
@@ -283,6 +409,24 @@ export class HouseholdService {
       lockedInvite.status = 'accepted';
       txEm.persist(lockedInvite);
     });
+  }
+
+  /**
+   * Locks the user's household count for the rest of `txEm`'s transaction
+   * and refuses one more household at the limit.
+   */
+  private async assertBelowHouseholdLimit(
+    txEm: EntityManager,
+    userId: string,
+  ): Promise<void> {
+    await lockUserHouseholds(txEm, userId);
+    const count = await countLiveMemberships(txEm, userId);
+    if (count >= this.limits.maxHouseholds) {
+      throw new ConflictException({
+        message: `A user can belong to at most ${String(this.limits.maxHouseholds)} households`,
+        reason: 'household_limit',
+      });
+    }
   }
 
   private alreadyMember(): ConflictException {
@@ -307,8 +451,12 @@ export class HouseholdService {
       throw new ForbiddenException('Members can only remove themselves');
     }
 
-    if (requester.role === 'owner' && requesterId === targetUserId) {
-      await this.em.transactional(async (txEm) => {
+    await this.em.transactional(async (txEm) => {
+      // Leaving changes the target's household count: same lock as create,
+      // accept and delete, so no user is left without a household.
+      await lockUserHouseholds(txEm, targetUserId);
+
+      if (requester.role === 'owner' && requesterId === targetUserId) {
         const owners = await txEm.find(
           HouseholdMember,
           { household: { id: hid }, role: 'owner' },
@@ -319,33 +467,46 @@ export class HouseholdService {
             'Cannot remove the last owner of a household',
           );
         }
-        await txEm.nativeDelete(HouseholdMember, {
+      } else {
+        const target = await txEm.findOne(HouseholdMember, {
           household: { id: hid },
           user: { id: targetUserId },
         });
+        if (!target)
+          throw new NotFoundException(
+            `User ${targetUserId} is not a member of this household`,
+          );
+      }
+
+      const lastHousehold =
+        (await countLiveMemberships(txEm, targetUserId)) <= 1;
+      if (lastHousehold && requesterId === targetUserId) {
+        throw new ConflictException({
+          message: 'You cannot leave your last household',
+          reason: 'last_household',
+        });
+      }
+
+      await txEm.nativeDelete(HouseholdMember, {
+        household: { id: hid },
+        user: { id: targetUserId },
       });
-      return;
-    }
-
-    const target = await this.memberRepo.findOne({
-      household: { id: hid },
-      user: { id: targetUserId },
-    });
-    if (!target)
-      throw new NotFoundException(
-        `User ${targetUserId} is not a member of this household`,
-      );
-
-    await this.em.nativeDelete(HouseholdMember, {
-      household: { id: hid },
-      user: { id: targetUserId },
+      // Removed by the owner from their last household: they get a fresh
+      // personal one, as at registration.
+      if (lastHousehold)
+        await this.insertHousehold(txEm, targetUserId, 'Personal');
     });
   }
 
-  private toDto(h: Household, memberCount: number): HouseholdResponseDto {
+  private toDto(
+    h: Household,
+    memberCount: number,
+    displayName?: string | null,
+  ): HouseholdResponseDto {
     return {
       id: h.id,
-      name: h.name,
+      name: displayName ?? h.name,
+      original_name: h.name,
       currency: h.currency,
       created_at: h.created_at,
       member_count: memberCount,

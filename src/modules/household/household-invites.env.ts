@@ -1,5 +1,3 @@
-export const MAX_ACTIVE_INVITES = Symbol('MAX_ACTIVE_INVITES');
-
 const DEFAULT_MAX_ACTIVE_INVITES = 20;
 
 /** Pending, unexpired invites a household may have at once. */

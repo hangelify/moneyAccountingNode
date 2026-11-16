@@ -14,6 +14,8 @@ import {
 import {
   ApiTags,
   ApiBearerAuth,
+  ApiConflictResponse,
+  ApiOkResponse,
   ApiOperation,
   ApiParam,
 } from '@nestjs/swagger';
@@ -26,11 +28,13 @@ import type { HouseholdContext } from './guards/household-member.guard';
 import { HouseholdService } from './household.service';
 import { CreateHouseholdDto } from './dto/create-household.dto';
 import { UpdateHouseholdDto } from './dto/update-household.dto';
+import { UpdateMyHouseholdDto } from './dto/update-my-household.dto';
 import { CreateInviteDto } from './dto/create-invite.dto';
 import { AcceptInviteDto } from './dto/accept-invite.dto';
 import {
   HouseholdResponseDto,
   HouseholdDetailResponseDto,
+  HouseholdListItemDto,
   InviteListItemDto,
   InviteResponseDto,
 } from './dto/household-response.dto';
@@ -44,7 +48,14 @@ export class HouseholdController {
 
   @Post()
   @HttpCode(HttpStatus.CREATED)
-  @ApiOperation({ summary: 'Create a new household; caller becomes owner' })
+  @ApiOperation({
+    summary:
+      'Create a new household with the default categories; caller becomes owner',
+  })
+  @ApiConflictResponse({
+    description:
+      'reason household_limit: the caller already belongs to HOUSEHOLD_MAX_HOUSEHOLDS (default 5) live households',
+  })
   async createHousehold(
     @CurrentUser() user: AuthenticatedUser,
     @Body() dto: CreateHouseholdDto,
@@ -53,10 +64,13 @@ export class HouseholdController {
   }
 
   @Get()
-  @ApiOperation({ summary: 'List all households the caller belongs to' })
+  @ApiOperation({
+    summary: 'List the live households the caller belongs to, oldest first',
+  })
+  @ApiOkResponse({ type: [HouseholdListItemDto] })
   async listHouseholds(
     @CurrentUser() user: AuthenticatedUser,
-  ): Promise<HouseholdResponseDto[]> {
+  ): Promise<HouseholdListItemDto[]> {
     return this.householdService.listHouseholds(user.id);
   }
 
@@ -65,9 +79,10 @@ export class HouseholdController {
   @ApiOperation({ summary: 'Get household details and member list' })
   @ApiParam({ name: 'hid', description: 'Household ID' })
   async getHousehold(
+    @CurrentUser() user: AuthenticatedUser,
     @Param('hid', ParseUUIDPipe) hid: string,
   ): Promise<HouseholdDetailResponseDto> {
-    return this.householdService.getHousehold(hid);
+    return this.householdService.getHousehold(hid, user.id);
   }
 
   @Put(':hid')
@@ -78,25 +93,47 @@ export class HouseholdController {
   })
   @ApiParam({ name: 'hid', description: 'Household ID' })
   async updateHousehold(
+    @CurrentUser() user: AuthenticatedUser,
     @CurrentHousehold() ctx: HouseholdContext,
     @Param('hid', ParseUUIDPipe) hid: string,
     @Body() dto: UpdateHouseholdDto,
   ): Promise<HouseholdResponseDto> {
     this.householdService.assertOwner(ctx);
-    return this.householdService.updateHousehold(hid, dto);
+    return this.householdService.updateHousehold(hid, user.id, dto);
+  }
+
+  @Put(':hid/me')
+  @UseGuards(HouseholdMemberGuard)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary:
+      'Set or clear (null) your own name for the household; any member. The original name is unchanged.',
+  })
+  @ApiParam({ name: 'hid', description: 'Household ID' })
+  async updateMyHousehold(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('hid', ParseUUIDPipe) hid: string,
+    @Body() dto: UpdateMyHouseholdDto,
+  ): Promise<HouseholdResponseDto> {
+    return this.householdService.updateMyHousehold(hid, user.id, dto);
   }
 
   @Delete(':hid')
   @UseGuards(HouseholdMemberGuard)
   @HttpCode(HttpStatus.NO_CONTENT)
-  @ApiOperation({ summary: 'Soft-delete the household (owner only)' })
+  @ApiOperation({ summary: 'Soft-delete the household (owner only, 403)' })
+  @ApiConflictResponse({
+    description:
+      'reason household_has_members: other members must be removed first; reason last_household: the caller would be left without a household',
+  })
   @ApiParam({ name: 'hid', description: 'Household ID' })
   async deleteHousehold(
+    @CurrentUser() user: AuthenticatedUser,
     @CurrentHousehold() ctx: HouseholdContext,
     @Param('hid', ParseUUIDPipe) hid: string,
   ): Promise<void> {
     this.householdService.assertOwner(ctx);
-    return this.householdService.softDeleteHousehold(hid);
+    return this.householdService.softDeleteHousehold(hid, user.id);
   }
 
   @Post(':hid/invites')
@@ -153,6 +190,10 @@ export class HouseholdController {
     summary:
       'Accept a household invite. Only the user whose email the invite was issued to can accept it (403 otherwise); 409 if already a member, 410 if the invite is unknown, revoked, expired or used.',
   })
+  @ApiConflictResponse({
+    description:
+      'reason already_member, or household_limit: the caller already belongs to HOUSEHOLD_MAX_HOUSEHOLDS (default 5) live households',
+  })
   async acceptInvite(
     @CurrentUser() user: AuthenticatedUser,
     @Body() dto: AcceptInviteDto,
@@ -165,7 +206,11 @@ export class HouseholdController {
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({
     summary:
-      'Remove a member. Owner can remove anyone; members can only remove themselves.',
+      'Remove a member. Owner can remove anyone; members can only remove themselves. A member removed by the owner from their last household gets a new personal one.',
+  })
+  @ApiConflictResponse({
+    description:
+      'reason last_household: you cannot leave your last household; also when removing the last owner',
   })
   @ApiParam({ name: 'hid', description: 'Household ID' })
   @ApiParam({ name: 'uid', description: 'User ID to remove' })

@@ -415,4 +415,79 @@ describe('Household lifecycle (e2e)', () => {
       expect((await list(user)).map((h) => h.id)).toEqual([user.householdId]);
     });
   });
+
+  describe('review fixes', () => {
+    it('lists created_at in the same format as the card', async () => {
+      const user = await registerUser(app, 'fmt-created');
+      const [listed] = await listHouseholds(user);
+      const card = await http()
+        .get(`/households/${user.householdId}`)
+        .set('Authorization', auth(user))
+        .expect(200);
+
+      expect(listed?.created_at).toBe(
+        (card.body as HouseholdResponseDto).created_at,
+      );
+    });
+
+    const removeMember = (
+      by: TestUser,
+      hid: string,
+      uid: string,
+    ): request.Test =>
+      http()
+        .delete(`/households/${hid}/members/${uid}`)
+        .set('Authorization', auth(by));
+
+    async function userId(user: TestUser): Promise<string> {
+      const rows = await sql<{ id: string }[]>(
+        'select id from users where email = ?',
+        [user.email],
+      );
+      return rows[0]?.id ?? '';
+    }
+
+    /** `member` belongs only to `owner`'s household afterwards. */
+    async function onlyInShared(): Promise<{
+      owner: TestUser;
+      member: TestUser;
+    }> {
+      const owner = await registerUser(app, 'leave-owner');
+      const member = await registerUser(app, 'leave-member');
+      expect((await join(owner, owner.householdId, member)).status).toBe(204);
+      await http()
+        .delete(`/households/${member.householdId}`)
+        .set('Authorization', auth(member))
+        .expect(204);
+      return { owner, member };
+    }
+
+    it('refuses a member leaving their last household', async () => {
+      const { owner, member } = await onlyInShared();
+
+      const res = await removeMember(
+        member,
+        owner.householdId,
+        await userId(member),
+      ).expect(409);
+      expect((res.body as { reason: string }).reason).toBe('last_household');
+      expect(await listHouseholds(member)).toHaveLength(1);
+    });
+
+    it('gives a removed member a personal household when it was their last', async () => {
+      const { owner, member } = await onlyInShared();
+
+      await removeMember(owner, owner.householdId, await userId(member)).expect(
+        204,
+      );
+
+      const left = await listHouseholds(member);
+      expect(left.map((h) => h.name)).toEqual(['Personal']);
+      const cats = await http()
+        .get(`/households/${String(left[0]?.id)}/categories`)
+        .set('Authorization', auth(member))
+        .expect(200);
+      expect(cats.body as unknown[]).toHaveLength(DEFAULT_CATEGORY_TREE.length);
+    });
+  });
 });

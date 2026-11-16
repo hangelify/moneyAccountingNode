@@ -206,7 +206,11 @@ export class HouseholdController {
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({
     summary:
-      'Remove a member. Owner can remove anyone; members can only remove themselves.',
+      'Remove a member. Owner can remove anyone; members can only remove themselves. A member removed by the owner from their last household gets a new personal one.',
+  })
+  @ApiConflictResponse({
+    description:
+      'reason last_household: you cannot leave your last household; also when removing the last owner',
   })
   @ApiParam({ name: 'hid', description: 'Household ID' })
   @ApiParam({ name: 'uid', description: 'User ID to remove' })

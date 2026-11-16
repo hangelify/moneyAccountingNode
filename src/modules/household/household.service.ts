@@ -14,6 +14,7 @@ import { Household } from '../../entities/household.entity';
 import { HouseholdMember } from '../../entities/household-member.entity';
 import { HouseholdInvite } from '../../entities/household-invite.entity';
 import { User } from '../../entities/user.entity';
+import type { Currency } from '../../types/currency.enum';
 import type { HouseholdContext } from './guards/household-member.guard';
 import { CreateHouseholdDto } from './dto/create-household.dto';
 import { UpdateHouseholdDto } from './dto/update-household.dto';
@@ -63,27 +64,39 @@ export class HouseholdService {
   ): Promise<HouseholdResponseDto> {
     const household = await this.em.transactional(async (txEm) => {
       await this.assertBelowHouseholdLimit(txEm, userId);
-      const created = new Household();
-      created.name = dto.name;
-      created.created_by = txEm.getReference(User, userId);
-      created.currency =
-        dto.currency ?? (await txEm.findOneOrFail(User, userId)).currency;
-
-      const member = new HouseholdMember();
-      member.household = created;
-      member.user = txEm.getReference(User, userId);
-      member.role = 'owner';
-
-      txEm.persist(created);
-      txEm.persist(member);
-      await txEm.flush();
-      // A household is never left without its categories: a failed seed
-      // rolls the household back.
-      await this.categoryDefaults.seedForHousehold(created.id, txEm);
-      return created;
+      return this.insertHousehold(txEm, userId, dto.name, dto.currency);
     });
 
     return this.toDto(household, 1);
+  }
+
+  /**
+   * Inserts a household owned by `userId` (currency: the given one, else
+   * the user's) with its default categories, in `txEm`'s transaction: a
+   * household is never left without its categories.
+   */
+  private async insertHousehold(
+    txEm: EntityManager,
+    userId: string,
+    name: string,
+    currency?: Currency,
+  ): Promise<Household> {
+    const created = new Household();
+    created.name = name;
+    created.created_by = txEm.getReference(User, userId);
+    created.currency =
+      currency ?? (await txEm.findOneOrFail(User, userId)).currency;
+
+    const member = new HouseholdMember();
+    member.household = created;
+    member.user = txEm.getReference(User, userId);
+    member.role = 'owner';
+
+    txEm.persist(created);
+    txEm.persist(member);
+    await txEm.flush();
+    await this.categoryDefaults.seedForHousehold(created.id, txEm);
+    return created;
   }
 
   /**
@@ -91,7 +104,7 @@ export class HouseholdService {
    * counts confirmed and draft bills, so a client can warn before deleting.
    */
   async listHouseholds(userId: string): Promise<HouseholdListItemDto[]> {
-    return (await this.em.getConnection().execute(
+    const rows = (await this.em.getConnection().execute(
       `select h.id,
               coalesce(m.display_name, h.name) as name,
               h.name as original_name,
@@ -108,7 +121,12 @@ export class HouseholdService {
         where m.user_id = ? and h.deleted_at is null
         order by h.created_at asc, h.id asc`,
       [userId],
-    )) as HouseholdListItemDto[];
+    )) as (Omit<HouseholdListItemDto, 'created_at'> & {
+      created_at: string | Date;
+    })[];
+    // A raw query returns timestamptz as Postgres text; every other
+    // household response serializes a Date (ISO 8601).
+    return rows.map((r) => ({ ...r, created_at: new Date(r.created_at) }));
   }
 
   async getHousehold(
@@ -433,8 +451,12 @@ export class HouseholdService {
       throw new ForbiddenException('Members can only remove themselves');
     }
 
-    if (requester.role === 'owner' && requesterId === targetUserId) {
-      await this.em.transactional(async (txEm) => {
+    await this.em.transactional(async (txEm) => {
+      // Leaving changes the target's household count: same lock as create,
+      // accept and delete, so no user is left without a household.
+      await lockUserHouseholds(txEm, targetUserId);
+
+      if (requester.role === 'owner' && requesterId === targetUserId) {
         const owners = await txEm.find(
           HouseholdMember,
           { household: { id: hid }, role: 'owner' },
@@ -445,26 +467,34 @@ export class HouseholdService {
             'Cannot remove the last owner of a household',
           );
         }
-        await txEm.nativeDelete(HouseholdMember, {
+      } else {
+        const target = await txEm.findOne(HouseholdMember, {
           household: { id: hid },
           user: { id: targetUserId },
         });
+        if (!target)
+          throw new NotFoundException(
+            `User ${targetUserId} is not a member of this household`,
+          );
+      }
+
+      const lastHousehold =
+        (await countLiveMemberships(txEm, targetUserId)) <= 1;
+      if (lastHousehold && requesterId === targetUserId) {
+        throw new ConflictException({
+          message: 'You cannot leave your last household',
+          reason: 'last_household',
+        });
+      }
+
+      await txEm.nativeDelete(HouseholdMember, {
+        household: { id: hid },
+        user: { id: targetUserId },
       });
-      return;
-    }
-
-    const target = await this.memberRepo.findOne({
-      household: { id: hid },
-      user: { id: targetUserId },
-    });
-    if (!target)
-      throw new NotFoundException(
-        `User ${targetUserId} is not a member of this household`,
-      );
-
-    await this.em.nativeDelete(HouseholdMember, {
-      household: { id: hid },
-      user: { id: targetUserId },
+      // Removed by the owner from their last household: they get a fresh
+      // personal one, as at registration.
+      if (lastHousehold)
+        await this.insertHousehold(txEm, targetUserId, 'Personal');
     });
   }
 

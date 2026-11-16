@@ -15,6 +15,7 @@ import {
   ApiTags,
   ApiBearerAuth,
   ApiConflictResponse,
+  ApiOkResponse,
   ApiOperation,
   ApiParam,
 } from '@nestjs/swagger';
@@ -33,6 +34,7 @@ import { AcceptInviteDto } from './dto/accept-invite.dto';
 import {
   HouseholdResponseDto,
   HouseholdDetailResponseDto,
+  HouseholdListItemDto,
   InviteListItemDto,
   InviteResponseDto,
 } from './dto/household-response.dto';
@@ -62,10 +64,13 @@ export class HouseholdController {
   }
 
   @Get()
-  @ApiOperation({ summary: 'List all households the caller belongs to' })
+  @ApiOperation({
+    summary: 'List the live households the caller belongs to, oldest first',
+  })
+  @ApiOkResponse({ type: [HouseholdListItemDto] })
   async listHouseholds(
     @CurrentUser() user: AuthenticatedUser,
-  ): Promise<HouseholdResponseDto[]> {
+  ): Promise<HouseholdListItemDto[]> {
     return this.householdService.listHouseholds(user.id);
   }
 

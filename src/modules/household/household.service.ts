@@ -22,6 +22,7 @@ import { CreateInviteDto } from './dto/create-invite.dto';
 import {
   HouseholdResponseDto,
   HouseholdDetailResponseDto,
+  HouseholdListItemDto,
   HouseholdMemberDto,
   InviteListItemDto,
   InviteResponseDto,
@@ -86,18 +87,29 @@ export class HouseholdService {
     return this.toDto(household, 1);
   }
 
-  async listHouseholds(userId: string): Promise<HouseholdResponseDto[]> {
-    const memberships = await this.memberRepo.find(
-      { user: { id: userId }, household: { deleted_at: null } },
-      { populate: ['household', 'household.members'] },
-    );
-    return memberships.map((m) =>
-      this.toDto(
-        m.household,
-        m.household.members.getItems().length,
-        m.display_name,
-      ),
-    );
+  /**
+   * The user's live households, oldest first, in one query. bill_count
+   * counts confirmed and draft bills, so a client can warn before deleting.
+   */
+  async listHouseholds(userId: string): Promise<HouseholdListItemDto[]> {
+    return (await this.em.getConnection().execute(
+      `select h.id,
+              coalesce(m.display_name, h.name) as name,
+              h.name as original_name,
+              h.currency,
+              h.created_at,
+              (select count(*) from household_members m2
+                where m2.household_id = h.id)::int as member_count,
+              (select count(*) from bills b
+                where b.household_id = h.id
+                  and b.deleted_at is null
+                  and b.status in ('confirmed', 'draft'))::int as bill_count
+         from household_members m
+         join households h on h.id = m.household_id
+        where m.user_id = ? and h.deleted_at is null
+        order by h.created_at asc, h.id asc`,
+      [userId],
+    )) as HouseholdListItemDto[];
   }
 
   async getHousehold(

@@ -1,4 +1,5 @@
 import type { NestExpressApplication } from '@nestjs/platform-express';
+import { randomUUID } from 'node:crypto';
 import request from 'supertest';
 import { MikroORM } from '@mikro-orm/core';
 import {
@@ -331,6 +332,85 @@ describe('Household lifecycle (e2e)', () => {
         name: 'Моё',
         original_name: 'Семья 2',
       });
+    });
+  });
+
+  describe('household list', () => {
+    interface Listed {
+      id: string;
+      name: string;
+      bill_count: number;
+      member_count: number;
+    }
+    const list = async (user: TestUser): Promise<Listed[]> =>
+      (await listHouseholds(user)) as unknown as Listed[];
+
+    async function bill(
+      hid: string,
+      status: string,
+      extra: { deleted?: boolean; duplicateOf?: string } = {},
+    ): Promise<string> {
+      const id = randomUUID();
+      await sql(
+        `insert into bills (id, household_id, bill_date, amount, status, duplicate_of_id, parse_error_code, deleted_at)
+         values (?, ?, '2026-11-01', 10, ?, ?, ?, ?)`,
+        [
+          id,
+          hid,
+          status,
+          extra.duplicateOf ?? null,
+          status === 'failed' ? 'not_a_receipt' : null,
+          extra.deleted ? new Date() : null,
+        ],
+      );
+      return id;
+    }
+
+    it('counts confirmed and draft bills only', async () => {
+      const user = await registerUser(app, 'list-bills');
+      const empty = await createHousehold(user, { name: 'Empty' });
+      const hid = user.householdId;
+      const original = await bill(hid, 'confirmed');
+      await bill(hid, 'draft');
+      await bill(hid, 'failed');
+      await bill(hid, 'duplicate', { duplicateOf: original });
+      await bill(hid, 'confirmed', { deleted: true });
+
+      const byId = new Map((await list(user)).map((h) => [h.id, h]));
+      expect(byId.get(hid)?.bill_count).toBe(2);
+      expect(byId.get(empty.id)?.bill_count).toBe(0);
+    });
+
+    it('counts members', async () => {
+      const owner = await registerUser(app, 'list-members');
+      const member = await registerUser(app, 'list-member');
+      expect((await join(owner, owner.householdId, member)).status).toBe(204);
+
+      const [mine] = await list(owner);
+      expect(mine?.member_count).toBe(2);
+    });
+
+    it('orders households by creation', async () => {
+      const user = await registerUser(app, 'list-order');
+      await createHousehold(user, { name: 'A' });
+      await createHousehold(user, { name: 'B' });
+
+      expect((await list(user)).map((h) => h.name)).toEqual([
+        'Personal',
+        'A',
+        'B',
+      ]);
+    });
+
+    it('skips deleted households', async () => {
+      const user = await registerUser(app, 'list-deleted');
+      const gone = await createHousehold(user, { name: 'Gone' });
+      await http()
+        .delete(`/households/${gone.id}`)
+        .set('Authorization', auth(user))
+        .expect(204);
+
+      expect((await list(user)).map((h) => h.id)).toEqual([user.householdId]);
     });
   });
 });

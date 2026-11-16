@@ -48,6 +48,15 @@ export class HouseholdResponseDto {
   member_count!: number;
 }
 
+export class HouseholdListItemDto extends HouseholdResponseDto {
+  @ApiProperty({
+    example: 12,
+    description:
+      'Confirmed and draft bills, not deleted: for the confirmation before deleting the household',
+  })
+  bill_count!: number;
+}
+
 export class HouseholdDetailResponseDto extends HouseholdResponseDto {
   @ApiProperty({ type: [HouseholdMemberDto] })
   members!: HouseholdMemberDto[];

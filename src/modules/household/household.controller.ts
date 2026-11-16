@@ -27,6 +27,7 @@ import type { HouseholdContext } from './guards/household-member.guard';
 import { HouseholdService } from './household.service';
 import { CreateHouseholdDto } from './dto/create-household.dto';
 import { UpdateHouseholdDto } from './dto/update-household.dto';
+import { UpdateMyHouseholdDto } from './dto/update-my-household.dto';
 import { CreateInviteDto } from './dto/create-invite.dto';
 import { AcceptInviteDto } from './dto/accept-invite.dto';
 import {
@@ -73,9 +74,10 @@ export class HouseholdController {
   @ApiOperation({ summary: 'Get household details and member list' })
   @ApiParam({ name: 'hid', description: 'Household ID' })
   async getHousehold(
+    @CurrentUser() user: AuthenticatedUser,
     @Param('hid', ParseUUIDPipe) hid: string,
   ): Promise<HouseholdDetailResponseDto> {
-    return this.householdService.getHousehold(hid);
+    return this.householdService.getHousehold(hid, user.id);
   }
 
   @Put(':hid')
@@ -86,12 +88,29 @@ export class HouseholdController {
   })
   @ApiParam({ name: 'hid', description: 'Household ID' })
   async updateHousehold(
+    @CurrentUser() user: AuthenticatedUser,
     @CurrentHousehold() ctx: HouseholdContext,
     @Param('hid', ParseUUIDPipe) hid: string,
     @Body() dto: UpdateHouseholdDto,
   ): Promise<HouseholdResponseDto> {
     this.householdService.assertOwner(ctx);
-    return this.householdService.updateHousehold(hid, dto);
+    return this.householdService.updateHousehold(hid, user.id, dto);
+  }
+
+  @Put(':hid/me')
+  @UseGuards(HouseholdMemberGuard)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary:
+      'Set or clear (null) your own name for the household; any member. The original name is unchanged.',
+  })
+  @ApiParam({ name: 'hid', description: 'Household ID' })
+  async updateMyHousehold(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('hid', ParseUUIDPipe) hid: string,
+    @Body() dto: UpdateMyHouseholdDto,
+  ): Promise<HouseholdResponseDto> {
+    return this.householdService.updateMyHousehold(hid, user.id, dto);
   }
 
   @Delete(':hid')

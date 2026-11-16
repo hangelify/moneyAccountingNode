@@ -3670,6 +3670,23 @@
       "name": "household_members",
       "schema": "public",
       "columns": {
+        "display_name": {
+          "name": "display_name",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "unique": false,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "text"
+        },
         "household_id": {
           "name": "household_id",
           "type": "uuid",

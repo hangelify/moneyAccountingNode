@@ -36,6 +36,10 @@ export class HouseholdMember {
   @Property({ type: 'timestamptz', nullable: false, defaultRaw: 'NOW()' })
   joined_at!: Date;
 
+  /** The member's own name for the household; null shows `household.name`. */
+  @Property({ type: 'text', nullable: true })
+  display_name?: string | null;
+
   @BeforeCreate()
   beforeCreate() {
     this.joined_at = new Date();

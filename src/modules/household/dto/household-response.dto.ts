@@ -25,8 +25,18 @@ export class HouseholdResponseDto {
   @ApiProperty({ format: 'uuid' })
   id!: string;
 
-  @ApiProperty({ example: 'Family Budget' })
+  @ApiProperty({
+    example: 'Family Budget',
+    description:
+      "The caller's own name for the household if they set one, else original_name",
+  })
   name!: string;
+
+  @ApiProperty({
+    example: 'Family Budget',
+    description: 'The name the owner set, the same for every member',
+  })
+  original_name!: string;
 
   @ApiProperty({ enum: Currency, example: Currency.EUR })
   currency!: Currency;

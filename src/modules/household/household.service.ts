@@ -17,6 +17,7 @@ import { User } from '../../entities/user.entity';
 import type { HouseholdContext } from './guards/household-member.guard';
 import { CreateHouseholdDto } from './dto/create-household.dto';
 import { UpdateHouseholdDto } from './dto/update-household.dto';
+import { UpdateMyHouseholdDto } from './dto/update-my-household.dto';
 import { CreateInviteDto } from './dto/create-invite.dto';
 import {
   HouseholdResponseDto,
@@ -91,11 +92,18 @@ export class HouseholdService {
       { populate: ['household', 'household.members'] },
     );
     return memberships.map((m) =>
-      this.toDto(m.household, m.household.members.getItems().length),
+      this.toDto(
+        m.household,
+        m.household.members.getItems().length,
+        m.display_name,
+      ),
     );
   }
 
-  async getHousehold(hid: string): Promise<HouseholdDetailResponseDto> {
+  async getHousehold(
+    hid: string,
+    userId: string,
+  ): Promise<HouseholdDetailResponseDto> {
     const household = await this.em.findOne(
       Household,
       { id: hid, deleted_at: null },
@@ -114,11 +122,16 @@ export class HouseholdService {
         joined_at: m.joined_at,
       }));
 
-    return { ...this.toDto(household, members.length), members };
+    const mine = household.members.getItems().find((m) => m.user.id === userId);
+    return {
+      ...this.toDto(household, members.length, mine?.display_name),
+      members,
+    };
   }
 
   async updateHousehold(
     hid: string,
+    userId: string,
     dto: UpdateHouseholdDto,
   ): Promise<HouseholdResponseDto> {
     if (dto.name === undefined && dto.currency === undefined) {
@@ -132,8 +145,40 @@ export class HouseholdService {
     if (dto.name !== undefined) household.name = dto.name;
     if (dto.currency !== undefined) household.currency = dto.currency;
     await this.em.persist(household).flush();
-    const members = await this.memberRepo.find({ household: { id: hid } });
-    return this.toDto(household, members.length);
+    return this.toResponse(household, userId);
+  }
+
+  /** Sets (or, with null, clears) the caller's own name for the household. */
+  async updateMyHousehold(
+    hid: string,
+    userId: string,
+    dto: UpdateMyHouseholdDto,
+  ): Promise<HouseholdResponseDto> {
+    const household = await this.em.findOne(Household, {
+      id: hid,
+      deleted_at: null,
+    });
+    if (!household) throw new NotFoundException(`Household ${hid} not found`);
+    // Through the entity, not nativeUpdate: the guard has already loaded
+    // this membership, and the response is built from that loaded copy.
+    const mine = await this.memberRepo.findOneOrFail({
+      household: { id: hid },
+      user: { id: userId },
+    });
+    mine.display_name = dto.display_name;
+    await this.em.flush();
+    return this.toResponse(household, userId);
+  }
+
+  private async toResponse(
+    household: Household,
+    userId: string,
+  ): Promise<HouseholdResponseDto> {
+    const members = await this.memberRepo.find({
+      household: { id: household.id },
+    });
+    const mine = members.find((m) => m.user.id === userId);
+    return this.toDto(household, members.length, mine?.display_name);
   }
 
   /**
@@ -412,10 +457,15 @@ export class HouseholdService {
     });
   }
 
-  private toDto(h: Household, memberCount: number): HouseholdResponseDto {
+  private toDto(
+    h: Household,
+    memberCount: number,
+    displayName?: string | null,
+  ): HouseholdResponseDto {
     return {
       id: h.id,
-      name: h.name,
+      name: displayName ?? h.name,
+      original_name: h.name,
       currency: h.currency,
       created_at: h.created_at,
       member_count: memberCount,

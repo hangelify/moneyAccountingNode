@@ -120,7 +120,9 @@ describe('HouseholdService', () => {
       (em.findOne as jest.Mock).mockResolvedValue(household);
       (memberRepo.find as jest.Mock).mockResolvedValue([]);
 
-      const result = await service.updateHousehold(hid, { name: 'New' });
+      const result = await service.updateHousehold(hid, userId, {
+        name: 'New',
+      });
 
       expect(household.name).toBe('New');
       expect(em.flush as jest.Mock).toHaveBeenCalled();
@@ -139,7 +141,7 @@ describe('HouseholdService', () => {
       (em.findOne as jest.Mock).mockResolvedValue(household);
       (memberRepo.find as jest.Mock).mockResolvedValue([]);
 
-      const result = await service.updateHousehold(hid, {
+      const result = await service.updateHousehold(hid, userId, {
         currency: Currency.USD,
       });
 
@@ -150,16 +152,16 @@ describe('HouseholdService', () => {
 
     it('rejects an empty update', async () => {
       const { service } = makeService();
-      await expect(service.updateHousehold(hid, {})).rejects.toBeInstanceOf(
-        BadRequestException,
-      );
+      await expect(
+        service.updateHousehold(hid, userId, {}),
+      ).rejects.toBeInstanceOf(BadRequestException);
     });
 
     it('throws NotFoundException when household not found', async () => {
       const { service, em } = makeService();
       (em.findOne as jest.Mock).mockResolvedValue(null);
       await expect(
-        service.updateHousehold(hid, { name: 'x' }),
+        service.updateHousehold(hid, userId, { name: 'x' }),
       ).rejects.toBeInstanceOf(NotFoundException);
     });
   });

@@ -249,4 +249,88 @@ describe('Household lifecycle (e2e)', () => {
       ]);
     });
   });
+
+  describe('own household name', () => {
+    interface Named {
+      name: string;
+      original_name: string;
+    }
+    const setMine = (user: TestUser, hid: string, body: object): request.Test =>
+      http()
+        .put(`/households/${hid}/me`)
+        .set('Authorization', auth(user))
+        .send(body);
+    async function seenBy(user: TestUser, hid: string): Promise<Named> {
+      const res = await http()
+        .get(`/households/${hid}`)
+        .set('Authorization', auth(user))
+        .expect(200);
+      return res.body as Named;
+    }
+
+    async function shared(): Promise<{
+      owner: TestUser;
+      member: TestUser;
+      hid: string;
+    }> {
+      const owner = await registerUser(app, 'name-owner');
+      const member = await registerUser(app, 'name-member');
+      expect((await join(owner, owner.householdId, member)).status).toBe(204);
+      return { owner, member, hid: owner.householdId };
+    }
+
+    it('lets a member set their own name', async () => {
+      const { owner, member, hid } = await shared();
+
+      const res = await setMine(member, hid, {
+        display_name: '  Дом  ',
+      }).expect(200);
+      expect((res.body as Named).name).toBe('Дом');
+      expect((res.body as Named).original_name).toBe('Personal');
+
+      expect((await seenBy(member, hid)).name).toBe('Дом');
+      const listed = (await listHouseholds(member)).find((h) => h.id === hid);
+      expect((listed as unknown as Named).name).toBe('Дом');
+      expect(await seenBy(owner, hid)).toMatchObject({
+        name: 'Personal',
+        original_name: 'Personal',
+      });
+    });
+
+    it('resets to the original name with null', async () => {
+      const { member, hid } = await shared();
+      await setMine(member, hid, { display_name: 'Дом' }).expect(200);
+
+      const res = await setMine(member, hid, { display_name: null }).expect(
+        200,
+      );
+      expect((res.body as Named).name).toBe('Personal');
+    });
+
+    it('rejects a blank name', async () => {
+      const { member, hid } = await shared();
+      await setMine(member, hid, { display_name: '   ' }).expect(400);
+      await setMine(member, hid, {}).expect(400);
+      await setMine(member, hid, { display_name: 'x'.repeat(256) }).expect(400);
+    });
+
+    it('follows the original rename unless overridden', async () => {
+      const { owner, member, hid } = await shared();
+      const other = await registerUser(app, 'name-other');
+      expect((await join(owner, hid, other)).status).toBe(204);
+      await setMine(other, hid, { display_name: 'Моё' }).expect(200);
+
+      await http()
+        .put(`/households/${hid}`)
+        .set('Authorization', auth(owner))
+        .send({ name: 'Семья 2' })
+        .expect(200);
+
+      expect((await seenBy(member, hid)).name).toBe('Семья 2');
+      expect(await seenBy(other, hid)).toMatchObject({
+        name: 'Моё',
+        original_name: 'Семья 2',
+      });
+    });
+  });
 });

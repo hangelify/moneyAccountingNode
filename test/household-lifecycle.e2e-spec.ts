@@ -9,9 +9,11 @@ import {
   TestUser,
 } from './utils/app';
 import type { HouseholdResponseDto } from '../src/modules/household';
-import type { CategoryBaseResponseDto } from '../src/modules/category';
-import { CategoryDefaultsService } from '../src/modules/category/category-defaults.service';
-import { DEFAULT_CATEGORY_TREE } from '../src/modules/category/defaults';
+import {
+  CategoryDefaultsService,
+  DEFAULT_CATEGORY_TREE,
+  type CategoryBaseResponseDto,
+} from '../src/modules/category';
 
 // HAN-22: creating and deleting households.
 describe('Household lifecycle (e2e)', () => {

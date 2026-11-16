@@ -7,7 +7,7 @@ import {
 import { EntityRepository, EntityManager } from '@mikro-orm/core';
 import { HouseholdService } from './household.service';
 import { Household } from '../../entities/household.entity';
-import type { CategoryDefaultsService } from '../category/category-defaults.service';
+import type { CategoryDefaultsService } from '../category';
 import { HouseholdMember } from '../../entities/household-member.entity';
 import { Currency } from '../../types/currency.enum';
 

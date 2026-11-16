@@ -3,8 +3,8 @@ import { ConflictException } from '@nestjs/common';
 import { MikroORM } from '@mikro-orm/postgresql';
 import { createMikroOrmConfig } from '../src/mikro-orm.config';
 import { HouseholdMember } from '../src/entities/household-member.entity';
-import { HouseholdService } from '../src/modules/household/household.service';
-import { CategoryDefaultsService } from '../src/modules/category/category-defaults.service';
+import { HouseholdService } from '../src/modules/household';
+import { CategoryDefaultsService } from '../src/modules/category';
 
 jest.setTimeout(30_000);
 

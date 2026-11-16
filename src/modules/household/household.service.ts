@@ -30,8 +30,7 @@ import {
 import { normalizeEmail } from '../../common/transforms/normalize-email';
 import { HOUSEHOLD_LIMITS, type HouseholdLimits } from './household-limits.env';
 import { countLiveMemberships, lockUserHouseholds } from './household-locks';
-// Not the '../category' barrel: category.controller imports '../household'.
-import { CategoryDefaultsService } from '../category/category-defaults.service';
+import { CategoryDefaultsService } from '../category';
 
 @Injectable()
 export class HouseholdService {

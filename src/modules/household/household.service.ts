@@ -26,19 +26,20 @@ import {
   InviteResponseDto,
 } from './dto/household-response.dto';
 import { normalizeEmail } from '../../common/transforms/normalize-email';
-import { MAX_ACTIVE_INVITES } from './household-invites.env';
+import { HOUSEHOLD_LIMITS, type HouseholdLimits } from './household-limits.env';
+// Not the '../category' barrel: category.controller imports '../household'.
+import { CategoryDefaultsService } from '../category/category-defaults.service';
 
 @Injectable()
 export class HouseholdService {
   private readonly frontendUrl: string;
 
   constructor(
-    @InjectRepository(Household)
-    private readonly householdRepo: EntityRepository<Household>,
     @InjectRepository(HouseholdMember)
     private readonly memberRepo: EntityRepository<HouseholdMember>,
     private readonly em: EntityManager,
-    @Inject(MAX_ACTIVE_INVITES) private readonly maxActiveInvites: number,
+    @Inject(HOUSEHOLD_LIMITS) private readonly limits: HouseholdLimits,
+    private readonly categoryDefaults: CategoryDefaultsService,
   ) {
     const url = process.env['FRONTEND_URL'];
     if (!url)
@@ -58,20 +59,26 @@ export class HouseholdService {
     userId: string,
     dto: CreateHouseholdDto,
   ): Promise<HouseholdResponseDto> {
-    const household = new Household();
-    household.name = dto.name;
-    household.created_by = this.em.getReference(User, userId);
-    household.currency =
-      dto.currency ?? (await this.em.findOneOrFail(User, userId)).currency;
+    const household = await this.em.transactional(async (txEm) => {
+      const created = new Household();
+      created.name = dto.name;
+      created.created_by = txEm.getReference(User, userId);
+      created.currency =
+        dto.currency ?? (await txEm.findOneOrFail(User, userId)).currency;
 
-    const member = new HouseholdMember();
-    member.household = household;
-    member.user = this.em.getReference(User, userId);
-    member.role = 'owner';
+      const member = new HouseholdMember();
+      member.household = created;
+      member.user = txEm.getReference(User, userId);
+      member.role = 'owner';
 
-    this.em.persist(household);
-    this.em.persist(member);
-    await this.em.flush();
+      txEm.persist(created);
+      txEm.persist(member);
+      await txEm.flush();
+      // A household is never left without its categories: a failed seed
+      // rolls the household back.
+      await this.categoryDefaults.seedForHousehold(created.id, txEm);
+      return created;
+    });
 
     return this.toDto(household, 1);
   }
@@ -87,7 +94,8 @@ export class HouseholdService {
   }
 
   async getHousehold(hid: string): Promise<HouseholdDetailResponseDto> {
-    const household = await this.householdRepo.findOne(
+    const household = await this.em.findOne(
+      Household,
       { id: hid, deleted_at: null },
       { populate: ['members.user'] },
     );
@@ -114,7 +122,7 @@ export class HouseholdService {
     if (dto.name === undefined && dto.currency === undefined) {
       throw new BadRequestException('Nothing to update');
     }
-    const household = await this.householdRepo.findOne({
+    const household = await this.em.findOne(Household, {
       id: hid,
       deleted_at: null,
     });
@@ -127,7 +135,7 @@ export class HouseholdService {
   }
 
   async softDeleteHousehold(hid: string): Promise<void> {
-    const household = await this.householdRepo.findOne({
+    const household = await this.em.findOne(Household, {
       id: hid,
       deleted_at: null,
     });
@@ -169,9 +177,9 @@ export class HouseholdService {
         status: 'pending',
         expires_at: { $gt: new Date() },
       });
-      if (active >= this.maxActiveInvites) {
+      if (active >= this.limits.maxActiveInvites) {
         throw new ConflictException(
-          `A household can have at most ${this.maxActiveInvites} active invites; revoke one first`,
+          `A household can have at most ${this.limits.maxActiveInvites} active invites; revoke one first`,
         );
       }
 

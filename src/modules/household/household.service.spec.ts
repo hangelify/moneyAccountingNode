@@ -7,17 +7,13 @@ import {
 import { EntityRepository, EntityManager } from '@mikro-orm/core';
 import { HouseholdService } from './household.service';
 import { Household } from '../../entities/household.entity';
+import type { CategoryDefaultsService } from '../category/category-defaults.service';
 import { HouseholdMember } from '../../entities/household-member.entity';
 import { Currency } from '../../types/currency.enum';
 
 process.env['FRONTEND_URL'] = 'https://app.example.com';
 
 function makeService() {
-  const householdRepo = {
-    findOne: jest.fn(),
-    findOneOrFail: jest.fn(),
-    find: jest.fn(),
-  } as unknown as EntityRepository<Household>;
   const memberRepo = {
     findOne: jest.fn(),
     find: jest.fn(),
@@ -36,12 +32,22 @@ function makeService() {
         fn(em),
       ),
   } as unknown as EntityManager;
+  const categoryDefaults = {
+    seedForHousehold: jest
+      .fn()
+      .mockResolvedValue({ categoriesCreated: 0, subCategoriesCreated: 0 }),
+  } as unknown as CategoryDefaultsService;
   (em.findOneOrFail as jest.Mock).mockResolvedValue({
     currency: Currency.MDL,
   });
   return {
-    service: new HouseholdService(householdRepo, memberRepo, em, 20),
-    householdRepo,
+    service: new HouseholdService(
+      memberRepo,
+      em,
+      { maxActiveInvites: 20 },
+      categoryDefaults,
+    ),
+    categoryDefaults,
     memberRepo,
     em,
   };
@@ -53,9 +59,14 @@ const hid = 'hh-1';
 describe('HouseholdService', () => {
   describe('createHousehold', () => {
     it('creates household + owner membership and returns DTO', async () => {
-      const { service, em } = makeService();
+      const { service, em, categoryDefaults } = makeService();
       const result = await service.createHousehold(userId, { name: 'Family' });
       expect(em.flush as jest.Mock).toHaveBeenCalled();
+      // Seeded in the creating transaction, so a failed seed rolls it back.
+      expect(categoryDefaults.seedForHousehold).toHaveBeenCalledWith(
+        undefined,
+        em,
+      );
       expect(result.name).toBe('Family');
       expect(result.member_count).toBe(1);
     });
@@ -94,14 +105,14 @@ describe('HouseholdService', () => {
 
   describe('updateHousehold', () => {
     it('updates the name and returns DTO', async () => {
-      const { service, householdRepo, memberRepo, em } = makeService();
+      const { service, memberRepo, em } = makeService();
       const household = {
         id: hid,
         name: 'Old',
         created_at: new Date(),
         deleted_at: null,
       };
-      (householdRepo.findOne as jest.Mock).mockResolvedValue(household);
+      (em.findOne as jest.Mock).mockResolvedValue(household);
       (memberRepo.find as jest.Mock).mockResolvedValue([]);
 
       const result = await service.updateHousehold(hid, { name: 'New' });
@@ -112,7 +123,7 @@ describe('HouseholdService', () => {
     });
 
     it('changes only currency when name is absent', async () => {
-      const { service, householdRepo, memberRepo } = makeService();
+      const { service, memberRepo, em } = makeService();
       const household = {
         id: hid,
         name: 'Old',
@@ -120,7 +131,7 @@ describe('HouseholdService', () => {
         created_at: new Date(),
         deleted_at: null,
       };
-      (householdRepo.findOne as jest.Mock).mockResolvedValue(household);
+      (em.findOne as jest.Mock).mockResolvedValue(household);
       (memberRepo.find as jest.Mock).mockResolvedValue([]);
 
       const result = await service.updateHousehold(hid, {
@@ -140,8 +151,8 @@ describe('HouseholdService', () => {
     });
 
     it('throws NotFoundException when household not found', async () => {
-      const { service, householdRepo } = makeService();
-      (householdRepo.findOne as jest.Mock).mockResolvedValue(null);
+      const { service, em } = makeService();
+      (em.findOne as jest.Mock).mockResolvedValue(null);
       await expect(
         service.updateHousehold(hid, { name: 'x' }),
       ).rejects.toBeInstanceOf(NotFoundException);
@@ -150,12 +161,12 @@ describe('HouseholdService', () => {
 
   describe('softDeleteHousehold', () => {
     it('sets deleted_at on the household', async () => {
-      const { service, householdRepo, em } = makeService();
+      const { service, em } = makeService();
       const household = {
         id: hid,
         deleted_at: undefined,
       } as unknown as Household;
-      (householdRepo.findOne as jest.Mock).mockResolvedValue(household);
+      (em.findOne as jest.Mock).mockResolvedValue(household);
 
       await service.softDeleteHousehold(hid);
 
@@ -164,8 +175,8 @@ describe('HouseholdService', () => {
     });
 
     it('throws NotFoundException when household not found', async () => {
-      const { service, householdRepo } = makeService();
-      (householdRepo.findOne as jest.Mock).mockResolvedValue(null);
+      const { service, em } = makeService();
+      (em.findOne as jest.Mock).mockResolvedValue(null);
       await expect(service.softDeleteHousehold(hid)).rejects.toBeInstanceOf(
         NotFoundException,
       );

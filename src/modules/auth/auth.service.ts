@@ -257,21 +257,15 @@ export class AuthService implements OnModuleInit {
     membership.user = user;
     membership.role = 'owner';
 
-    await this.em.transactional((txEm) => {
+    // One transaction: a user is never left without a household, nor a
+    // household without its categories. A failed seed fails registration.
+    await this.em.transactional(async (txEm) => {
       txEm.persist(user);
       txEm.persist(household);
       txEm.persist(membership);
-      return Promise.resolve();
+      await txEm.flush();
+      await this.categoryDefaults.seedForHousehold(household.id, txEm);
     });
-
-    try {
-      await this.categoryDefaults.seedForHousehold(household.id);
-    } catch (err) {
-      this.logger.error(
-        `Failed to seed default categories for user ${user.id}: ${err instanceof Error ? err.message : String(err)}`,
-      );
-      // Continue — user can invoke POST /households/:hid/categories/seed-defaults to backfill.
-    }
 
     // Never fails registration: the user can ask for another email.
     await this.emailVerification.issueAndSend(user);

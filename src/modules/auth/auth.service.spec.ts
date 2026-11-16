@@ -176,7 +176,7 @@ describe('AuthService.verifyEmail', () => {
 });
 
 describe('AuthService.register seeder hook', () => {
-  it('seeds default categories for the new user after persist', async () => {
+  it('seeds default categories in the registration transaction', async () => {
     const { service, deps } = makeService();
     await service.register(
       {
@@ -188,23 +188,27 @@ describe('AuthService.register seeder hook', () => {
       'jest',
     );
     expect(deps.seedForHousehold).toHaveBeenCalledTimes(1);
-    expect(deps.seedForHousehold).toHaveBeenCalledWith(expect.any(String));
+    expect(deps.seedForHousehold).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.anything(),
+    );
   });
 
-  it('does NOT fail registration when seedForHousehold throws', async () => {
+  it('fails registration when seedForHousehold throws', async () => {
     const { service } = makeService({
       seedForHousehold: jest.fn().mockRejectedValue(new Error('db down')),
     });
-    const tokens = await service.register(
-      {
-        email: 'new-user-2@test',
-        password: 'supersecret-password',
-        first_name: 'Test2',
-      },
-      '1.2.3.4',
-      'jest',
-    );
-    expect(tokens.access_token).toBeDefined();
+    await expect(
+      service.register(
+        {
+          email: 'new-user-2@test',
+          password: 'supersecret-password',
+          first_name: 'Test2',
+        },
+        '1.2.3.4',
+        'jest',
+      ),
+    ).rejects.toThrow('db down');
   });
 });
 

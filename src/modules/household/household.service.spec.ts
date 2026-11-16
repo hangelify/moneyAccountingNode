@@ -26,6 +26,11 @@ function makeService() {
     findOne: jest.fn(),
     findOneOrFail: jest.fn(),
     nativeDelete: jest.fn().mockResolvedValue(1),
+    count: jest.fn().mockResolvedValue(0),
+    getTransactionContext: jest.fn(),
+    getConnection: jest
+      .fn()
+      .mockReturnValue({ execute: jest.fn().mockResolvedValue([]) }),
     transactional: jest
       .fn()
       .mockImplementation((fn: (em: EntityManager) => Promise<unknown>) =>
@@ -44,7 +49,7 @@ function makeService() {
     service: new HouseholdService(
       memberRepo,
       em,
-      { maxActiveInvites: 20 },
+      { maxActiveInvites: 20, maxHouseholds: 5 },
       categoryDefaults,
     ),
     categoryDefaults,

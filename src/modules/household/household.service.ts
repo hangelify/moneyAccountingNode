@@ -27,6 +27,7 @@ import {
 } from './dto/household-response.dto';
 import { normalizeEmail } from '../../common/transforms/normalize-email';
 import { HOUSEHOLD_LIMITS, type HouseholdLimits } from './household-limits.env';
+import { countLiveMemberships, lockUserHouseholds } from './household-locks';
 // Not the '../category' barrel: category.controller imports '../household'.
 import { CategoryDefaultsService } from '../category/category-defaults.service';
 
@@ -60,6 +61,7 @@ export class HouseholdService {
     dto: CreateHouseholdDto,
   ): Promise<HouseholdResponseDto> {
     const household = await this.em.transactional(async (txEm) => {
+      await this.assertBelowHouseholdLimit(txEm, userId);
       const created = new Household();
       created.name = dto.name;
       created.created_by = txEm.getReference(User, userId);
@@ -276,6 +278,8 @@ export class HouseholdService {
       if (lockedInvite.expires_at <= new Date())
         throw new GoneException({ reason: 'expired' });
 
+      await this.assertBelowHouseholdLimit(txEm, user.id);
+
       // Another invite of this user to the same household may be accepted
       // concurrently: the loser inserts nothing and leaves its invite unspent.
       const inserted = await (txEm
@@ -291,6 +295,24 @@ export class HouseholdService {
       lockedInvite.status = 'accepted';
       txEm.persist(lockedInvite);
     });
+  }
+
+  /**
+   * Locks the user's household count for the rest of `txEm`'s transaction
+   * and refuses one more household at the limit.
+   */
+  private async assertBelowHouseholdLimit(
+    txEm: EntityManager,
+    userId: string,
+  ): Promise<void> {
+    await lockUserHouseholds(txEm, userId);
+    const count = await countLiveMemberships(txEm, userId);
+    if (count >= this.limits.maxHouseholds) {
+      throw new ConflictException({
+        message: `A user can belong to at most ${String(this.limits.maxHouseholds)} households`,
+        reason: 'household_limit',
+      });
+    }
   }
 
   private alreadyMember(): ConflictException {

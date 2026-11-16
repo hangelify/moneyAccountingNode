@@ -14,6 +14,7 @@ import {
 import {
   ApiTags,
   ApiBearerAuth,
+  ApiConflictResponse,
   ApiOperation,
   ApiParam,
 } from '@nestjs/swagger';
@@ -44,7 +45,14 @@ export class HouseholdController {
 
   @Post()
   @HttpCode(HttpStatus.CREATED)
-  @ApiOperation({ summary: 'Create a new household; caller becomes owner' })
+  @ApiOperation({
+    summary:
+      'Create a new household with the default categories; caller becomes owner',
+  })
+  @ApiConflictResponse({
+    description:
+      'reason household_limit: the caller already belongs to HOUSEHOLD_MAX_HOUSEHOLDS (default 5) live households',
+  })
   async createHousehold(
     @CurrentUser() user: AuthenticatedUser,
     @Body() dto: CreateHouseholdDto,
@@ -152,6 +160,10 @@ export class HouseholdController {
   @ApiOperation({
     summary:
       'Accept a household invite. Only the user whose email the invite was issued to can accept it (403 otherwise); 409 if already a member, 410 if the invite is unknown, revoked, expired or used.',
+  })
+  @ApiConflictResponse({
+    description:
+      'reason already_member, or household_limit: the caller already belongs to HOUSEHOLD_MAX_HOUSEHOLDS (default 5) live households',
   })
   async acceptInvite(
     @CurrentUser() user: AuthenticatedUser,

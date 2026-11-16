@@ -44,6 +44,32 @@ describe('Household lifecycle (e2e)', () => {
     return res.body as HouseholdResponseDto[];
   }
 
+  /** Invites `invitee` into `hid` (owned by `owner`) and accepts. */
+  async function join(
+    owner: TestUser,
+    hid: string,
+    invitee: TestUser,
+  ): Promise<request.Response> {
+    const res = await http()
+      .post(`/households/${hid}/invites`)
+      .set('Authorization', auth(owner))
+      .send({ email: invitee.email })
+      .expect(201);
+    return http()
+      .post('/households/invites/accept')
+      .set('Authorization', auth(invitee))
+      .send({ token: (res.body as { token: string }).token });
+  }
+
+  /** Brings the user (who has their personal household) to `total`. */
+  async function fillUpTo(user: TestUser, total: number): Promise<string[]> {
+    const ids: string[] = [];
+    for (let i = 1; i < total; i++) {
+      ids.push((await createHousehold(user, { name: `H${String(i)}` })).id);
+    }
+    return ids;
+  }
+
   beforeAll(async () => {
     app = await createTestApp();
   });
@@ -114,6 +140,54 @@ describe('Household lifecycle (e2e)', () => {
       await createHousehold(user, { name: 'Broken' }, 500);
 
       expect(await listHouseholds(user)).toHaveLength(1);
+    });
+  });
+
+  describe('household limit', () => {
+    it('rejects the sixth household', async () => {
+      const user = await registerUser(app, 'limit-create');
+      await fillUpTo(user, 5);
+
+      const res = await http()
+        .post('/households')
+        .set('Authorization', auth(user))
+        .send({ name: 'Sixth' })
+        .expect(409);
+      expect((res.body as { reason: string }).reason).toBe('household_limit');
+      expect(await listHouseholds(user)).toHaveLength(5);
+    });
+
+    it('frees a slot when a household is deleted', async () => {
+      const user = await registerUser(app, 'limit-free');
+      const [first] = await fillUpTo(user, 5);
+
+      await http()
+        .delete(`/households/${String(first)}`)
+        .set('Authorization', auth(user))
+        .expect(204);
+      await createHousehold(user, { name: 'Again' });
+    });
+
+    it('rejects accepting an invite at the household limit', async () => {
+      const owner = await registerUser(app, 'limit-owner');
+      const invitee = await registerUser(app, 'limit-invitee');
+      await fillUpTo(invitee, 5);
+
+      const res = await join(owner, owner.householdId, invitee);
+      expect(res.status).toBe(409);
+      expect((res.body as { reason: string }).reason).toBe('household_limit');
+      expect(await listHouseholds(invitee)).toHaveLength(5);
+    });
+
+    it('answers already_member before the limit', async () => {
+      const owner = await registerUser(app, 'limit-owner2');
+      const invitee = await registerUser(app, 'limit-member');
+      await fillUpTo(invitee, 4);
+      expect((await join(owner, owner.householdId, invitee)).status).toBe(204);
+
+      const res = await join(owner, owner.householdId, invitee);
+      expect(res.status).toBe(409);
+      expect((res.body as { reason: string }).reason).toBe('already_member');
     });
   });
 });

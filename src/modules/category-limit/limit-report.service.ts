@@ -1,4 +1,8 @@
-import { Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  InternalServerErrorException,
+} from '@nestjs/common';
 import { EntityManager } from '@mikro-orm/core';
 import { Currency } from '../../types/currency.enum';
 import { LimitPeriodType } from '../../types/limit-period-type.enum';
@@ -8,46 +12,32 @@ import {
   limitPeriodStart,
 } from '../../common/utils/period-range';
 import { ExchangeRateService } from '../exchange-rate';
-import {
-  currencyFactorLateral,
-  fetchUnconverted,
-  householdConversionJoin,
-  loadRateDays,
-  UnconvertedDto,
-} from '../bill';
+import { fetchUnconverted, loadRateDays, UnconvertedDto } from '../bill';
 import {
   buildLimitReport,
-  CarryStop,
   ChainPeriod,
   chainPeriods,
   ReportCategoryInfo,
-  ReportVersion,
   SpentRow,
 } from './limit-report';
-import type { LimitReportDto } from './dto/limit-report.dto';
-
-// Start of the period of the report's type containing `b.bill_date`. Chosen
-// by the enum in code, never built from input. `::timestamp` keeps the
-// session time zone out of date_trunc.
-const BUCKET: Record<LimitPeriodType, string> = {
-  [LimitPeriodType.MONTHLY]: `date_trunc('month', b.bill_date::timestamp)::date`,
-  [LimitPeriodType.QUARTERLY]: `date_trunc('quarter', b.bill_date::timestamp)::date`,
-  [LimitPeriodType.YEARLY]: `date_trunc('year', b.bill_date::timestamp)::date`,
-  [LimitPeriodType.SEMI_ANNUAL]: `make_date(extract(year from b.bill_date)::int,
-                    CASE WHEN extract(month from b.bill_date) <= 6 THEN 1 ELSE 7 END, 1)`,
-};
-
-interface VersionRow extends ReportVersion {
-  name: string;
-  archived: boolean;
-}
-
-/** What the report reads before any rate is needed. */
-interface Limits {
-  versions: VersionRow[];
-  stops: CarryStop[];
-  limitedCategoryIds: Set<string>;
-}
+import {
+  BaseLimitKey,
+  convertBaseLimits,
+  fetchSpent,
+  readLimits,
+  VersionRow,
+} from './limit-report.queries';
+import {
+  assertLimitAt,
+  CarryStopKey,
+  deleteCarryStop,
+  insertCarryStop,
+} from './carry-stops';
+import type {
+  LimitReportCategoryDto,
+  LimitReportDto,
+} from './dto/limit-report.dto';
+import type { SetCarryOverDto } from './dto/carry-over.dto';
 
 /** What the report reads once the rates are loaded. */
 interface Facts {
@@ -55,28 +45,6 @@ interface Facts {
   spent: SpentRow[];
   unconverted: UnconvertedDto[];
 }
-
-/** A base limit to convert: one chain period of a foreign-currency version. */
-interface BaseLimitKey {
-  key: string;
-  amount: string;
-  currency: Currency;
-  day: string;
-}
-
-/** Runs a read in the transaction of `tx`. */
-const query = <T>(
-  tx: EntityManager,
-  sql: string,
-  params: unknown[],
-): Promise<T[]> =>
-  tx
-    .getConnection()
-    .execute(sql, params, 'all', tx.getTransactionContext()) as Promise<T[]>;
-
-/** Postgres array literal of plain values (no quotes or backslashes). */
-const pgArray = (values: string[]): string =>
-  '{' + values.map((v) => '"' + v + '"').join(',') + '}';
 
 /** Spending against category limits of one period, with carry-over. */
 @Injectable()
@@ -148,6 +116,60 @@ export class LimitReportService {
   }
 
   /**
+   * Marks (`carry_over: false`) or unmarks the period "do not carry over";
+   * both idempotent. Returns the category's row of the next period, where
+   * the limit changes, or of the marked period when the next one has no
+   * limit of the type.
+   */
+  // eslint-disable-next-line max-params -- сигнатура задана планом HAN-25; `now` подменяют тесты
+  async setCarryOver(
+    householdId: string,
+    userId: string,
+    categoryId: string,
+    dto: SetCarryOverDto,
+    now: Date = new Date(),
+  ): Promise<LimitReportCategoryDto> {
+    const type = dto.period_type;
+    const periodStart = dto.period_start;
+    if (periodStart !== limitPeriodStart(type, periodStart)) {
+      throw new BadRequestException(
+        `period_start ${periodStart} is not the start of a ${type} period`,
+      );
+    }
+    if (periodStart > todayIsoDate(now)) {
+      throw new BadRequestException(
+        `period_start ${periodStart} is a future period`,
+      );
+    }
+
+    const key: CarryStopKey = {
+      householdId,
+      categoryId,
+      periodType: type,
+      periodStart,
+    };
+    await this.em.fork().transactional(async (tx) => {
+      await assertLimitAt(tx, key);
+      if (dto.carry_over) {
+        await deleteCarryStop(tx, key);
+      } else {
+        await insertCarryStop(tx, key, userId);
+      }
+    });
+
+    for (const day of [limitPeriodEnd(type, periodStart), periodStart]) {
+      const found = (
+        await this.report(householdId, type, day, now)
+      ).categories.find((c) => c.category_id === categoryId);
+      if (found) return found;
+    }
+    // The version checked above puts the category in its period's report.
+    throw new InternalServerErrorException(
+      `Category ${categoryId} is not in the report of ${periodStart}`,
+    );
+  }
+
+  /**
    * In one read transaction: foreign base limits converted, spending of the
    * whole chain range, and the unconverted bills of the report period.
    */
@@ -190,51 +212,6 @@ export class LimitReportService {
       return { converted, spent, unconverted };
     });
   }
-}
-
-/**
- * Versions of `type` starting before `end` with their category, the
- * "do not carry over" marks of `type` up to `start`, and the categories with
- * a version of any type overlapping `[start, end)`.
- */
-async function readLimits(
-  tx: EntityManager,
-  scope: { householdId: string; type: LimitPeriodType },
-  range: { start: string; end: string },
-): Promise<Limits> {
-  const { householdId, type } = scope;
-  const { start, end } = range;
-  const versions = await query<VersionRow>(
-    tx,
-    `SELECT cl.id, cl.category_id, cl.amount::text AS amount, cl.currency,
-            cl.effective_from::text AS effective_from,
-            cl.effective_to::text AS effective_to,
-            c.name, (c.deleted_at IS NOT NULL) AS archived
-     FROM   category_limits cl
-     JOIN   categories c ON c.id = cl.category_id
-     WHERE  cl.household_id = ? AND cl.period_type = ? AND cl.effective_from < ?`,
-    [householdId, type, end],
-  );
-  const stops = await query<CarryStop>(
-    tx,
-    `SELECT category_id, period_start::text AS period_start
-     FROM   category_limit_carry_stops
-     WHERE  household_id = ? AND period_type = ? AND period_start <= ?`,
-    [householdId, type, start],
-  );
-  const limited = await query<{ category_id: string }>(
-    tx,
-    `SELECT DISTINCT category_id
-     FROM   category_limits
-     WHERE  household_id = ? AND effective_from < ?
-       AND  (effective_to IS NULL OR effective_to > ?)`,
-    [householdId, end, start],
-  );
-  return {
-    versions,
-    stops,
-    limitedCategoryIds: new Set(limited.map((r) => r.category_id)),
-  };
 }
 
 const baseKey = (p: ChainPeriod): string => `${p.version.id}|${p.period_start}`;
@@ -285,62 +262,5 @@ function categoryInfo(versions: VersionRow[]): Map<string, ReportCategoryInfo> {
       v.category_id,
       { category_id: v.category_id, name: v.name, archived: v.archived },
     ]),
-  );
-}
-
-/** Each foreign base limit converted at the rate of its day, in one query. */
-async function convertBaseLimits(
-  tx: EntityManager,
-  scope: { source: string; householdId: string },
-  keys: BaseLimitKey[],
-): Promise<Map<string, string | null>> {
-  if (keys.length === 0) return new Map();
-  const rows = await query<{ key: string; value: string | null }>(
-    tx,
-    `SELECT k.key, ROUND(k.amount * f.factor, 2)::text AS value
-     FROM   unnest(?::text[], ?::numeric[], ?::currency_enum[], ?::date[])
-              AS k(key, amount, currency, day)
-     JOIN   households h ON h.id = ?
-     ${currencyFactorLateral('k.currency', 'h.currency', 'k.day', 'f')}`,
-    [
-      pgArray(keys.map((k) => k.key)),
-      pgArray(keys.map((k) => k.amount)),
-      pgArray(keys.map((k) => k.currency)),
-      pgArray(keys.map((k) => k.day)),
-      scope.householdId,
-      scope.source,
-      scope.source,
-    ],
-  );
-  return new Map(rows.map((r) => [r.key, r.value]));
-}
-
-/**
- * Converted spending per (category, sub-category, period of `type`) in
- * `[start, end)`, rounded per group as the spending breakdown does, with the
- * number of lines that had no rate.
- */
-function fetchSpent(
-  tx: EntityManager,
-  scope: { source: string; householdId: string; type: LimitPeriodType },
-  range: { start: string; end: string },
-): Promise<SpentRow[]> {
-  const bucket = BUCKET[scope.type];
-  return query<SpentRow>(
-    tx,
-    `SELECT l.category_id,
-            ${bucket}::text AS bucket,
-            COALESCE(ROUND(SUM(l.amount * fx.factor), 2), 0)::text AS total,
-            (COUNT(*) FILTER (WHERE fx.factor IS NULL))::int AS unconverted_lines
-     FROM   bills b
-     ${householdConversionJoin('b')}
-     JOIN   bill_sub_categories l ON l.bill_id = b.id
-     WHERE  b.household_id = ?
-       AND  b.status = 'confirmed'
-       AND  b.deleted_at IS NULL
-       AND  b.bill_date >= ?
-       AND  b.bill_date <  ?
-     GROUP  BY l.category_id, l.sub_category_id, ${bucket}`,
-    [scope.source, scope.source, scope.householdId, range.start, range.end],
   );
 }

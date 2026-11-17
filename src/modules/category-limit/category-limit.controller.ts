@@ -30,12 +30,18 @@ import {
   ListCategoryLimitsQueryDto,
   UpdateCategoryLimitDto,
 } from './dto/category-limit.dto';
-import { LimitReportDto, LimitReportQueryDto } from './dto/limit-report.dto';
+import {
+  LimitReportCategoryDto,
+  LimitReportDto,
+  LimitReportQueryDto,
+} from './dto/limit-report.dto';
+import { SetCarryOverDto } from './dto/carry-over.dto';
 import {
   ApiCreateCategoryLimitResponses,
   ApiDeleteCategoryLimitResponses,
   ApiLimitReportResponses,
   ApiListCategoryLimitsResponses,
+  ApiSetCarryOverResponses,
   ApiUpdateCategoryLimitResponses,
 } from './decorators/api-responses.decorator';
 
@@ -102,6 +108,23 @@ export class CategoryLimitController {
     @Body() dto: UpdateCategoryLimitDto,
   ): Promise<CategoryLimitDto> {
     return this.limits.update(ctx.householdId, user.id, categoryId, dto);
+  }
+
+  @Put(':categoryId/carry-over')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary:
+      'Mark or unmark a period: do not carry its limit balance to the next one',
+  })
+  @ApiParam(CATEGORY_ID_PARAM)
+  @ApiSetCarryOverResponses()
+  setCarryOver(
+    @CurrentHousehold() ctx: HouseholdContext,
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('categoryId', ParseUUIDPipe) categoryId: string,
+    @Body() dto: SetCarryOverDto,
+  ): Promise<LimitReportCategoryDto> {
+    return this.reports.setCarryOver(ctx.householdId, user.id, categoryId, dto);
   }
 
   @Delete(':categoryId')

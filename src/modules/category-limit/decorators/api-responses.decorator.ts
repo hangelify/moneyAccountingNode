@@ -1,7 +1,10 @@
 import { applyDecorators } from '@nestjs/common';
 import { ApiResponse } from '@nestjs/swagger';
 import { CategoryLimitDto } from '../dto/category-limit.dto';
-import { LimitReportDto } from '../dto/limit-report.dto';
+import {
+  LimitReportCategoryDto,
+  LimitReportDto,
+} from '../dto/limit-report.dto';
 
 type Decorator = MethodDecorator & ClassDecorator;
 
@@ -91,6 +94,24 @@ export const ApiLimitReportResponses = (): Decorator =>
     }),
     ApiBadRequestResponse(
       'Missing or unknown period_type, or date is not a YYYY-MM-DD calendar day',
+    ),
+    ApiUnauthorizedResponse(),
+    ApiForbiddenResponse(),
+  );
+
+export const ApiSetCarryOverResponses = (): Decorator =>
+  applyDecorators(
+    ApiResponse({
+      status: 200,
+      description:
+        "Mark set or removed (idempotent); returns the category's report row of the next period, or of the marked period when the next one has no limit of the type",
+      type: LimitReportCategoryDto,
+    }),
+    ApiBadRequestResponse(
+      'Invalid body or malformed id; period_start is not the start of a period of the type, or is a future period',
+    ),
+    ApiCategoryNotFoundResponse(
+      'Category not found in the household, or it has no limit of the type in that period',
     ),
     ApiUnauthorizedResponse(),
     ApiForbiddenResponse(),

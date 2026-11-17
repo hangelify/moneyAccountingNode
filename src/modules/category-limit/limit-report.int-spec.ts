@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { MikroORM } from '@mikro-orm/core';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { MikroOrmModule } from '@mikro-orm/nestjs';
 import { Test } from '@nestjs/testing';
 import { createMikroOrmConfig } from '../../mikro-orm.config';
@@ -725,5 +726,201 @@ describe('limits report (PostgreSQL)', () => {
     const r = await report(hid, MONTHLY);
 
     expect([r.start, r.end]).toEqual(['2026-11-01', '2026-12-01']);
+  });
+
+  describe('carry-over', () => {
+    /** `period`: the period type and its first day. */
+    const carry = (
+      hid: string,
+      categoryId: string,
+      [type, periodStart]: [LimitPeriodType, string],
+      carryOver: boolean,
+    ): Promise<LimitReportCategoryDto> =>
+      reports.setCarryOver(
+        hid,
+        userId,
+        categoryId,
+        { period_type: type, period_start: periodStart, carry_over: carryOver },
+        NOW,
+      );
+
+    const stopsOf = (categoryId: string): Promise<unknown[]> =>
+      sql<unknown[]>(
+        `select period_type, period_start::text as period_start, created_by_id
+         from category_limit_carry_stops where category_id = ? order by period_start`,
+        [categoryId],
+      );
+
+    it('marks and unmarks, both idempotent; response is the next period row with the new limit', async () => {
+      const hid = await household();
+      const cat = await category(hid);
+      await limit(cat, MONTHLY, 100, '2026-09-05');
+      await bill(hid, '2026-09-10', [[cat, 110]]);
+
+      for (let i = 0; i < 2; i++) {
+        expect(
+          await carry(hid, cat, [MONTHLY, '2026-09-01'], false),
+        ).toMatchObject({
+          category_id: cat,
+          carried_in: 0,
+          limit: 100,
+          carry_over: true,
+        });
+      }
+      expect(await stopsOf(cat)).toEqual([
+        {
+          period_type: MONTHLY,
+          period_start: '2026-09-01',
+          created_by_id: userId,
+        },
+      ]);
+      expect(
+        row(await report(hid, MONTHLY, '2026-09-10'), cat).carry_over,
+      ).toBe(false);
+
+      for (let i = 0; i < 2; i++) {
+        expect(
+          await carry(hid, cat, [MONTHLY, '2026-09-01'], true),
+        ).toMatchObject({ carried_in: -10, limit: 90 });
+      }
+      expect(await stopsOf(cat)).toEqual([]);
+    });
+
+    it('allows the current period', async () => {
+      const hid = await household();
+      const cat = await category(hid);
+      await limit(cat, MONTHLY, 100, '2026-11-05');
+      await bill(hid, '2026-11-10', [[cat, 30]]);
+
+      // The next period (December) is in the future; it still answers.
+      expect(
+        await carry(hid, cat, [MONTHLY, '2026-11-01'], false),
+      ).toMatchObject({ carried_in: 0, limit: 100 });
+      expect(
+        await carry(hid, cat, [MONTHLY, '2026-11-01'], true),
+      ).toMatchObject({
+        carried_in: 70,
+        limit: 170,
+      });
+    });
+
+    it('400 when period_start is not a period start', async () => {
+      const hid = await household();
+      const cat = await category(hid);
+      await limit(cat, QUARTERLY, 100, '2026-11-05');
+
+      await expect(
+        carry(hid, cat, [QUARTERLY, '2026-11-01'], false),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      await expect(
+        carry(hid, cat, [MONTHLY, '2026-11-15'], false),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it('400 for a future period', async () => {
+      const hid = await household();
+      const cat = await category(hid);
+      await limit(cat, MONTHLY, 100, '2026-11-05');
+
+      await expect(
+        carry(hid, cat, [MONTHLY, '2026-12-01'], false),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it('404 when the category has no version of the type then', async () => {
+      const hid = await household();
+      const cat = await category(hid);
+      await limit(cat, MONTHLY, 100, '2026-10-05');
+
+      await expect(
+        carry(hid, cat, [MONTHLY, '2026-09-01'], false),
+      ).rejects.toBeInstanceOf(NotFoundException);
+      await expect(
+        carry(hid, cat, [QUARTERLY, '2026-10-01'], false),
+      ).rejects.toBeInstanceOf(NotFoundException);
+      expect(await stopsOf(cat)).toEqual([]);
+    });
+
+    it('404 for a category of another household', async () => {
+      const a = await household();
+      const b = await household();
+      const catB = await category(b);
+      await limit(catB, MONTHLY, 100, '2026-10-05');
+
+      await expect(
+        carry(a, catB, [MONTHLY, '2026-10-01'], false),
+      ).rejects.toBeInstanceOf(NotFoundException);
+      await expect(
+        carry(a, randomUUID(), [MONTHLY, '2026-10-01'], false),
+      ).rejects.toBeInstanceOf(NotFoundException);
+      expect(await stopsOf(catB)).toEqual([]);
+    });
+
+    it('allows an archived category with a version then', async () => {
+      const hid = await household();
+      const cat = await category(hid, 'Archived');
+      await limit(cat, MONTHLY, 100, '2026-10-05');
+      await bill(hid, '2026-10-10', [[cat, 30]]);
+      await sql(`update categories set deleted_at = now() where id = ?`, [cat]);
+
+      expect(
+        await carry(hid, cat, [MONTHLY, '2026-10-01'], false),
+      ).toMatchObject({ category_archived: true, carried_in: 0, limit: 100 });
+    });
+
+    it('falls back to the marked period row when the next period has no limit', async () => {
+      const hid = await household();
+      const cat = await category(hid);
+      await limit(cat, MONTHLY, 100, '2026-09-05');
+      await bill(hid, '2026-09-10', [[cat, 110]]);
+      // Quarterly from 2026-10-01: the monthly chain ends with September.
+      await limits.update(
+        hid,
+        userId,
+        cat,
+        { period_type: QUARTERLY, amount: 300 },
+        NOW,
+      );
+
+      expect(
+        await carry(hid, cat, [MONTHLY, '2026-09-01'], false),
+      ).toMatchObject({
+        category_id: cat,
+        carry_over: false,
+        spent: 110,
+        remaining: -10,
+      });
+    });
+
+    it('DELETE marks the current period, so a limit recreated next period starts from zero', async () => {
+      const hid = await household();
+      const cat = await category(hid);
+      await limit(cat, MONTHLY, 100, '2026-11-05');
+      await bill(hid, '2026-11-10', [[cat, 130]]);
+      await limits.remove(hid, cat, NOW);
+
+      expect(await stopsOf(cat)).toEqual([
+        {
+          period_type: MONTHLY,
+          period_start: '2026-11-01',
+          created_by_id: null,
+        },
+      ]);
+
+      await limit(cat, MONTHLY, 100, '2026-12-05');
+      expect(row(await report(hid, MONTHLY, '2026-12-10'), cat)).toMatchObject({
+        carried_in: 0,
+        limit: 100,
+      });
+
+      // The user can still carry November's debt over.
+      expect(
+        await carry(hid, cat, [MONTHLY, '2026-11-01'], true),
+      ).toMatchObject({
+        carried_in: -30,
+        limit: 70,
+      });
+      expect(await stopsOf(cat)).toEqual([]);
+    });
   });
 });

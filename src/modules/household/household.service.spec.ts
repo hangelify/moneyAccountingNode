@@ -74,6 +74,7 @@ describe('HouseholdService', () => {
       );
       expect(result.name).toBe('Family');
       expect(result.member_count).toBe(1);
+      expect(result.role).toBe('owner');
     });
 
     it("without currency uses the creator's currency", async () => {
@@ -118,7 +119,9 @@ describe('HouseholdService', () => {
         deleted_at: null,
       };
       (em.findOne as jest.Mock).mockResolvedValue(household);
-      (memberRepo.find as jest.Mock).mockResolvedValue([]);
+      (memberRepo.find as jest.Mock).mockResolvedValue([
+        { user: { id: userId }, role: 'member', display_name: null },
+      ]);
 
       const result = await service.updateHousehold(hid, userId, {
         name: 'New',
@@ -127,6 +130,7 @@ describe('HouseholdService', () => {
       expect(household.name).toBe('New');
       expect(em.flush as jest.Mock).toHaveBeenCalled();
       expect(result.name).toBe('New');
+      expect(result.role).toBe('member');
     });
 
     it('changes only currency when name is absent', async () => {
@@ -139,7 +143,9 @@ describe('HouseholdService', () => {
         deleted_at: null,
       };
       (em.findOne as jest.Mock).mockResolvedValue(household);
-      (memberRepo.find as jest.Mock).mockResolvedValue([]);
+      (memberRepo.find as jest.Mock).mockResolvedValue([
+        { user: { id: userId }, role: 'member', display_name: null },
+      ]);
 
       const result = await service.updateHousehold(hid, userId, {
         currency: Currency.USD,
@@ -148,6 +154,22 @@ describe('HouseholdService', () => {
       expect(household.name).toBe('Old');
       expect(result.name).toBe('Old');
       expect(result.currency).toBe(Currency.USD);
+    });
+
+    it("refuses when the caller's membership is gone", async () => {
+      const { service, memberRepo, em } = makeService();
+      (em.findOne as jest.Mock).mockResolvedValue({
+        id: hid,
+        name: 'X',
+        created_at: new Date(),
+        deleted_at: null,
+      });
+      (memberRepo.find as jest.Mock).mockResolvedValue([
+        { user: { id: 'someone-else' }, role: 'owner', display_name: null },
+      ]);
+      await expect(
+        service.updateHousehold(hid, userId, { name: 'Y' }),
+      ).rejects.toBeInstanceOf(ForbiddenException);
     });
 
     it('rejects an empty update', async () => {

@@ -15,6 +15,7 @@ import {
   ApiTags,
   ApiBearerAuth,
   ApiConflictResponse,
+  ApiCreatedResponse,
   ApiOkResponse,
   ApiOperation,
   ApiParam,
@@ -52,6 +53,7 @@ export class HouseholdController {
     summary:
       'Create a new household with the default categories; caller becomes owner',
   })
+  @ApiCreatedResponse({ type: HouseholdResponseDto })
   @ApiConflictResponse({
     description:
       'reason household_limit: the caller already belongs to HOUSEHOLD_MAX_HOUSEHOLDS (default 5) live households',
@@ -77,6 +79,7 @@ export class HouseholdController {
   @Get(':hid')
   @UseGuards(HouseholdMemberGuard)
   @ApiOperation({ summary: 'Get household details and member list' })
+  @ApiOkResponse({ type: HouseholdDetailResponseDto })
   @ApiParam({ name: 'hid', description: 'Household ID' })
   async getHousehold(
     @CurrentUser() user: AuthenticatedUser,
@@ -91,6 +94,7 @@ export class HouseholdController {
   @ApiOperation({
     summary: 'Rename the household or change its currency (owner only)',
   })
+  @ApiOkResponse({ type: HouseholdResponseDto })
   @ApiParam({ name: 'hid', description: 'Household ID' })
   async updateHousehold(
     @CurrentUser() user: AuthenticatedUser,
@@ -109,6 +113,7 @@ export class HouseholdController {
     summary:
       'Set or clear (null) your own name for the household; any member. The original name is unchanged.',
   })
+  @ApiOkResponse({ type: HouseholdResponseDto })
   @ApiParam({ name: 'hid', description: 'Household ID' })
   async updateMyHousehold(
     @CurrentUser() user: AuthenticatedUser,

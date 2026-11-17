@@ -416,6 +416,87 @@ describe('Household lifecycle (e2e)', () => {
     });
   });
 
+  // HAN-146: every household response carries the caller's own role.
+  describe('caller role', () => {
+    type Role = HouseholdResponseDto['role'];
+    async function pair(): Promise<{ owner: TestUser; member: TestUser }> {
+      const owner = await registerUser(app, 'role-owner');
+      const member = await registerUser(app, 'role-member');
+      expect((await join(owner, owner.householdId, member)).status).toBe(204);
+      return { owner, member };
+    }
+    const roles = async (user: TestUser): Promise<Map<string, Role>> =>
+      new Map((await listHouseholds(user)).map((h) => [h.id, h.role]));
+    const cardRole = async (user: TestUser, hid: string): Promise<Role> =>
+      (
+        (
+          await http()
+            .get(`/households/${hid}`)
+            .set('Authorization', auth(user))
+            .expect(200)
+        ).body as HouseholdResponseDto
+      ).role;
+
+    it('lists the role per household', async () => {
+      const { owner, member } = await pair();
+
+      expect((await roles(owner)).get(owner.householdId)).toBe('owner');
+      const seen = await roles(member);
+      expect(seen.get(owner.householdId)).toBe('member');
+      expect(seen.get(member.householdId)).toBe('owner');
+    });
+
+    it('returns the caller role from create, card, PUT and PUT me', async () => {
+      const { owner, member } = await pair();
+      const hid = owner.householdId;
+
+      expect((await createHousehold(owner, { name: 'Trip' })).role).toBe(
+        'owner',
+      );
+      expect(await cardRole(owner, hid)).toBe('owner');
+      expect(await cardRole(member, hid)).toBe('member');
+
+      const renamed = await http()
+        .put(`/households/${hid}`)
+        .set('Authorization', auth(owner))
+        .send({ name: 'Renamed' })
+        .expect(200);
+      expect((renamed.body as HouseholdResponseDto).role).toBe('owner');
+
+      const mine = await http()
+        .put(`/households/${hid}/me`)
+        .set('Authorization', auth(member))
+        .send({ display_name: 'Дом' })
+        .expect(200);
+      expect((mine.body as HouseholdResponseDto).role).toBe('member');
+    });
+
+    it('is documented in Swagger', async () => {
+      const res = await http().get('/api-json').expect(200);
+      const schemas = (
+        res.body as {
+          components: {
+            schemas: Record<
+              string,
+              { properties?: Record<string, unknown>; required?: string[] }
+            >;
+          };
+        }
+      ).components.schemas;
+      for (const name of [
+        'HouseholdResponseDto',
+        'HouseholdListItemDto',
+        'HouseholdDetailResponseDto',
+      ]) {
+        expect(schemas[name]?.properties?.['role']).toMatchObject({
+          enum: ['owner', 'member'],
+          description: "The caller's role in this household",
+        });
+        expect(schemas[name]?.required).toContain('role');
+      }
+    });
+  });
+
   describe('review fixes', () => {
     it('lists created_at in the same format as the card', async () => {
       const user = await registerUser(app, 'fmt-created');

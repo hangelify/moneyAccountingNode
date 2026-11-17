@@ -67,7 +67,7 @@ export class HouseholdService {
       return this.insertHousehold(txEm, userId, dto.name, dto.currency);
     });
 
-    return this.toDto(household, 1);
+    return this.toDto(household, 1, 'owner');
   }
 
   /**
@@ -109,6 +109,7 @@ export class HouseholdService {
               coalesce(m.display_name, h.name) as name,
               h.name as original_name,
               h.currency,
+              m.role,
               h.created_at,
               (select count(*) from household_members m2
                 where m2.household_id = h.id)::int as member_count,
@@ -152,8 +153,9 @@ export class HouseholdService {
       }));
 
     const mine = household.members.getItems().find((m) => m.user.id === userId);
+    if (!mine) throw new ForbiddenException();
     return {
-      ...this.toDto(household, members.length, mine?.display_name),
+      ...this.toDto(household, members.length, mine.role, mine.display_name),
       members,
     };
   }
@@ -207,7 +209,10 @@ export class HouseholdService {
       household: { id: household.id },
     });
     const mine = members.find((m) => m.user.id === userId);
-    return this.toDto(household, members.length, mine?.display_name);
+    // The guard checked membership; it can be gone by now (removed
+    // concurrently). Refuse rather than guess the role.
+    if (!mine) throw new ForbiddenException();
+    return this.toDto(household, members.length, mine.role, mine.display_name);
   }
 
   /**
@@ -501,6 +506,7 @@ export class HouseholdService {
   private toDto(
     h: Household,
     memberCount: number,
+    role: 'owner' | 'member',
     displayName?: string | null,
   ): HouseholdResponseDto {
     return {
@@ -510,6 +516,7 @@ export class HouseholdService {
       currency: h.currency,
       created_at: h.created_at,
       member_count: memberCount,
+      role,
     };
   }
 }

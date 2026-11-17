@@ -46,6 +46,12 @@ export class HouseholdResponseDto {
 
   @ApiProperty({ example: 2 })
   member_count!: number;
+
+  @ApiProperty({
+    enum: ['owner', 'member'],
+    description: "The caller's role in this household",
+  })
+  role!: 'owner' | 'member';
 }
 
 export class HouseholdListItemDto extends HouseholdResponseDto {

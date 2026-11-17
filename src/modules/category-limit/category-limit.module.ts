@@ -4,6 +4,7 @@ import { Category } from '../../entities/category.entity';
 import { Household } from '../../entities/household.entity';
 import { HouseholdMember } from '../../entities/household-member.entity';
 import { CategoryLimit } from '../../entities/category-limit.entity';
+import { CategoryLimitCarryStop } from '../../entities/category-limit-carry-stop.entity';
 import { CategoryLimitController } from './category-limit.controller';
 import { CategoryLimitService } from './category-limit.service';
 
@@ -11,6 +12,7 @@ import { CategoryLimitService } from './category-limit.service';
   imports: [
     MikroOrmModule.forFeature([
       CategoryLimit,
+      CategoryLimitCarryStop,
       Category,
       Household,
       HouseholdMember,

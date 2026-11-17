@@ -7,6 +7,8 @@ import { CategoryLimit } from '../../entities/category-limit.entity';
 import { CategoryLimitCarryStop } from '../../entities/category-limit-carry-stop.entity';
 import { CategoryLimitController } from './category-limit.controller';
 import { CategoryLimitService } from './category-limit.service';
+import { LimitReportService } from './limit-report.service';
+import { ExchangeRateModule } from '../exchange-rate/exchange-rate.module';
 
 @Module({
   imports: [
@@ -17,9 +19,10 @@ import { CategoryLimitService } from './category-limit.service';
       Household,
       HouseholdMember,
     ]),
+    ExchangeRateModule,
   ],
   controllers: [CategoryLimitController],
-  providers: [CategoryLimitService],
+  providers: [CategoryLimitService, LimitReportService],
   exports: [CategoryLimitService],
 })
 export class CategoryLimitModule {}

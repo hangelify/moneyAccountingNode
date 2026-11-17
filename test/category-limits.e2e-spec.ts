@@ -2,7 +2,10 @@ import type { NestExpressApplication } from '@nestjs/platform-express';
 import request from 'supertest';
 import { MikroORM } from '@mikro-orm/core';
 import { createTestApp, registerUser, TestUser } from './utils/app';
-import type { CategoryLimitDto } from '../src/modules/category-limit';
+import type {
+  CategoryLimitDto,
+  LimitReportDto,
+} from '../src/modules/category-limit';
 import { todayIsoDate } from '../src/common/utils/calendar-date';
 import { limitPeriodEnd } from '../src/common/utils/period-range';
 import { LimitPeriodType } from '../src/types/limit-period-type.enum';
@@ -54,6 +57,17 @@ describe('Category limits (e2e)', () => {
       effective_to: null,
     });
     expect(body.effective_from).toMatch(/^\d{4}-\d{2}-01$/);
+
+    // `report` is matched before the `:categoryId` routes.
+    const report = await http()
+      .get(`${base()}/report?period_type=MONTHLY`)
+      .set('Authorization', auth(user))
+      .expect(200);
+    const reported = report.body as LimitReportDto;
+    expect(reported.start).toBe(body.effective_from);
+    expect(reported.categories).toMatchObject([
+      { category_id: categoryId, base_limit: 300, carried_in: 0, spent: 0 },
+    ]);
   });
 
   it('answers 409 when the category already has a limit', async () => {
@@ -128,6 +142,16 @@ describe('Category limits (e2e)', () => {
       .get(`${base()}?include_history=maybe`)
       .set('Authorization', auth(user))
       .expect(400);
+    for (const qs of [
+      '',
+      '?period_type=WEEKLY',
+      '?period_type=MONTHLY&date=2026-02-30',
+    ]) {
+      await http()
+        .get(`${base()}/report${qs}`)
+        .set('Authorization', auth(user))
+        .expect(400);
+    }
 
     const del = await http()
       .delete(`${base()}/${categoryId}`)
@@ -148,6 +172,12 @@ describe('Category limits (e2e)', () => {
     const other = await registerUser(app, 'stranger');
     await http()
       .get(`/households/${other.householdId}/category-limits`)
+      .set('Authorization', auth(user))
+      .expect(403);
+    await http()
+      .get(
+        `/households/${other.householdId}/category-limits/report?period_type=MONTHLY`,
+      )
       .set('Authorization', auth(user))
       .expect(403);
   });

@@ -23,15 +23,18 @@ import type { AuthenticatedUser } from '../auth';
 import { CurrentHousehold, HouseholdMemberGuard } from '../household';
 import type { HouseholdContext } from '../household';
 import { CategoryLimitService } from './category-limit.service';
+import { LimitReportService } from './limit-report.service';
 import {
   CategoryLimitDto,
   CreateCategoryLimitDto,
   ListCategoryLimitsQueryDto,
   UpdateCategoryLimitDto,
 } from './dto/category-limit.dto';
+import { LimitReportDto, LimitReportQueryDto } from './dto/limit-report.dto';
 import {
   ApiCreateCategoryLimitResponses,
   ApiDeleteCategoryLimitResponses,
+  ApiLimitReportResponses,
   ApiListCategoryLimitsResponses,
   ApiUpdateCategoryLimitResponses,
 } from './decorators/api-responses.decorator';
@@ -47,7 +50,10 @@ const CATEGORY_ID_PARAM = {
 @UseGuards(JwtAuthGuard, HouseholdMemberGuard)
 @ApiBearerAuth('JWT-auth')
 export class CategoryLimitController {
-  constructor(private readonly limits: CategoryLimitService) {}
+  constructor(
+    private readonly limits: CategoryLimitService,
+    private readonly reports: LimitReportService,
+  ) {}
 
   @Get()
   @ApiOperation({ summary: 'List category spending limits' })
@@ -57,6 +63,19 @@ export class CategoryLimitController {
     @Query() query: ListCategoryLimitsQueryDto,
   ): Promise<CategoryLimitDto[]> {
     return this.limits.list(ctx.householdId, query.include_history ?? false);
+  }
+
+  // Before the `:categoryId` routes, so `report` is never taken for an id.
+  @Get('report')
+  @ApiOperation({
+    summary: 'Spending against category limits of one period, with carry-over',
+  })
+  @ApiLimitReportResponses()
+  report(
+    @CurrentHousehold() ctx: HouseholdContext,
+    @Query() query: LimitReportQueryDto,
+  ): Promise<LimitReportDto> {
+    return this.reports.report(ctx.householdId, query.period_type, query.date);
   }
 
   @Post()

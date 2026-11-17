@@ -1,6 +1,7 @@
 import { applyDecorators } from '@nestjs/common';
 import { ApiResponse } from '@nestjs/swagger';
 import { CategoryLimitDto } from '../dto/category-limit.dto';
+import { LimitReportDto } from '../dto/limit-report.dto';
 
 type Decorator = MethodDecorator & ClassDecorator;
 
@@ -75,6 +76,21 @@ export const ApiDeleteCategoryLimitResponses = (): Decorator =>
     ApiBadRequestResponse('Malformed id'),
     ApiCategoryNotFoundResponse(
       'Category not found in the household, or it has no open limit',
+    ),
+    ApiUnauthorizedResponse(),
+    ApiForbiddenResponse(),
+  );
+
+export const ApiLimitReportResponses = (): Decorator =>
+  applyDecorators(
+    ApiResponse({
+      status: 200,
+      description:
+        'Categories with a limit in the period: limit with carry-over, spent, remaining; totals and spending outside the limits',
+      type: LimitReportDto,
+    }),
+    ApiBadRequestResponse(
+      'Missing or unknown period_type, or date is not a YYYY-MM-DD calendar day',
     ),
     ApiUnauthorizedResponse(),
     ApiForbiddenResponse(),

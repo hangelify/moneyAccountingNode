@@ -11,3 +11,4 @@ export {
   CreateCategoryLimitDto,
   UpdateCategoryLimitDto,
 } from './dto/category-limit.dto';
+export type { LimitReportDto } from './dto/limit-report.dto';

@@ -22,6 +22,7 @@ export { BillPhotoProcessor } from './batch/bill-photo.processor';
 export type { BillAiOrchestrator } from './bill-ai.orchestrator';
 export { BillCrudService } from './bill-crud.service';
 export { BillPhotoService } from './bill-photo.service';
+export { SpendingBreakdownService } from './spending-breakdown.service';
 export {
   currencyFactorLateral,
   fetchUnconverted,

@@ -96,6 +96,20 @@ export async function readLimits(
   };
 }
 
+/** The household currency, read in the transaction of `tx`. */
+export async function readCurrency(
+  tx: EntityManager,
+  householdId: string,
+): Promise<Currency> {
+  const [row] = await query<{ currency: Currency }>(
+    tx,
+    `SELECT currency FROM households WHERE id = ?`,
+    [householdId],
+  );
+  if (!row) throw new Error(`Household ${householdId} not found`);
+  return row.currency;
+}
+
 /** Each foreign base limit converted at the rate of its day, in one query. */
 export async function convertBaseLimits(
   tx: EntityManager,

@@ -44,7 +44,8 @@ export async function insertCarryStop(
 
 /**
  * 404 unless the category is in the household (archived or not) and has a
- * version of the type in force on the period start.
+ * version of the type in force on the period start. Locks the category row
+ * FOR UPDATE, so a mark serialises with the category's limit writes.
  */
 export async function assertLimitAt(
   tx: EntityManager,
@@ -52,14 +53,16 @@ export async function assertLimitAt(
 ): Promise<void> {
   const [category] = await rows(
     tx,
-    `SELECT id FROM categories WHERE id = ? AND household_id = ?`,
+    `SELECT id FROM categories WHERE id = ? AND household_id = ? FOR UPDATE`,
     [key.categoryId, key.householdId],
   );
   if (!category) {
     throw new NotFoundException(`Category with ID ${key.categoryId} not found`);
   }
-  // Versions start and end on period starts of their type, so the one in
-  // force on the first day is in force the whole period.
+  // A version starts on a period start of its type, so the one in force on
+  // the first day is the period's version. It may end mid-period (a
+  // quarterly one closed by a switch to monthly ends on a month start); the
+  // report still counts it for the whole period.
   const [version] = await rows(
     tx,
     `SELECT id FROM category_limits
@@ -82,8 +85,9 @@ export async function deleteCarryStop(
 ): Promise<void> {
   await tx.getConnection().execute(
     `DELETE FROM category_limit_carry_stops
-       WHERE  category_id = ? AND period_type = ? AND period_start = ?`,
-    [key.categoryId, key.periodType, key.periodStart],
+       WHERE  household_id = ? AND category_id = ? AND period_type = ?
+         AND  period_start = ?`,
+    [key.householdId, key.categoryId, key.periodType, key.periodStart],
     'run',
     tx.getTransactionContext(),
   );

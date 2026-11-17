@@ -428,7 +428,7 @@ describe('limits report (PostgreSQL)', () => {
     const cat = await category(hid);
     await limit(cat, MONTHLY, 100, '2026-10-05');
     await bill(hid, '2026-10-10', [[cat, 30]]);
-    await limits.remove(hid, cat, NOW);
+    await limits.remove(hid, userId, cat, NOW);
 
     expect(row(await report(hid, MONTHLY, '2026-11-20'), cat)).toMatchObject({
       carried_in: 70,
@@ -897,13 +897,13 @@ describe('limits report (PostgreSQL)', () => {
       const cat = await category(hid);
       await limit(cat, MONTHLY, 100, '2026-11-05');
       await bill(hid, '2026-11-10', [[cat, 130]]);
-      await limits.remove(hid, cat, NOW);
+      await limits.remove(hid, userId, cat, NOW);
 
       expect(await stopsOf(cat)).toEqual([
         {
           period_type: MONTHLY,
           period_start: '2026-11-01',
-          created_by_id: null,
+          created_by_id: userId,
         },
       ]);
 
@@ -921,6 +921,28 @@ describe('limits report (PostgreSQL)', () => {
         limit: 70,
       });
       expect(await stopsOf(cat)).toEqual([]);
+    });
+
+    it('DELETE then POST in the same period: the period carries on as usual', async () => {
+      const hid = await household();
+      const cat = await category(hid);
+      await limit(cat, MONTHLY, 100, '2026-10-05');
+      await bill(hid, '2026-10-10', [[cat, 130]]);
+      await limits.remove(hid, userId, cat, NOW);
+      await limit(cat, MONTHLY, 100, '2026-11-15');
+
+      expect(await stopsOf(cat)).toEqual([]);
+      const nov = row(await report(hid, MONTHLY, '2026-11-10'), cat);
+      expect(nov).toMatchObject({
+        carry_over: true,
+        carried_in: -30,
+        limit: 70,
+        remaining: 70,
+      });
+      expect(row(await report(hid, MONTHLY, '2026-12-10'), cat)).toMatchObject({
+        carried_in: nov.remaining,
+        limit: 170,
+      });
     });
   });
 });

@@ -24,9 +24,9 @@ export { BillCrudService } from './bill-crud.service';
 export { BillPhotoService } from './bill-photo.service';
 export { SpendingBreakdownService } from './spending-breakdown.service';
 export {
+  billRateDays,
   currencyFactorLateral,
   fetchUnconverted,
   householdConversionJoin,
-  loadRateDays,
 } from './household-conversion';
 export { UnconvertedDto } from './dto/household-conversion.dto';

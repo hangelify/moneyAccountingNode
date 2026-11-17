@@ -12,7 +12,7 @@ import {
   limitPeriodStart,
 } from '../../common/utils/period-range';
 import { ExchangeRateService } from '../exchange-rate';
-import { fetchUnconverted, loadRateDays, UnconvertedDto } from '../bill';
+import { billRateDays, fetchUnconverted, UnconvertedDto } from '../bill';
 import {
   buildLimitReport,
   ChainPeriod,
@@ -24,6 +24,7 @@ import {
   BaseLimitKey,
   convertBaseLimits,
   fetchSpent,
+  readCurrency,
   readLimits,
   VersionRow,
 } from './limit-report.queries';
@@ -41,7 +42,8 @@ import type { SetCarryOverDto } from './dto/carry-over.dto';
 
 /** What the report reads once the rates are loaded. */
 interface Facts {
-  converted: Map<string, string | null>;
+  currency: Currency;
+  baseLimits: Map<string, string | null>;
   spent: SpentRow[];
   unconverted: UnconvertedDto[];
 }
@@ -78,26 +80,24 @@ export class LimitReportService {
       start,
     );
 
-    // Rates first, so the queries below see the days just saved.
-    const currency = await loadRateDays(
-      this.em.getConnection(),
-      this.exchangeRates,
-      householdId,
-      chainStart,
+    // Rates first, so the queries below see the days just saved: the bill
+    // days and the foreign base-limit days, at most 10 fetches in all.
+    const need = await billRateDays(this.em.getConnection(), householdId, {
+      start: chainStart,
       end,
-    );
-    const foreign = foreignBaseLimits(chains, currency, today);
-    if (foreign.length > 0) {
-      await this.exchangeRates.ensureDays(
-        foreign.map((k) => k.day),
-        { max: 10 },
-      );
+    });
+    const days = [
+      ...need.dates,
+      ...foreignBaseLimits(chains, need.currency, today).map((k) => k.day),
+    ];
+    if (days.length > 0) {
+      await this.exchangeRates.ensureDays(days, { max: 10 });
     }
 
-    const { converted, spent, unconverted } = await this.readFacts(
-      { householdId, type },
+    const { currency, baseLimits, spent, unconverted } = await this.readFacts(
+      { householdId, type, today },
       { start, end, chainStart },
-      foreign,
+      chains,
     );
 
     return buildLimitReport({
@@ -107,7 +107,7 @@ export class LimitReportService {
       currency,
       chains,
       categories: categoryInfo(limits.versions),
-      baseLimits: baseLimits(chains, currency, converted),
+      baseLimits,
       spent,
       stops: limits.stops,
       limitedCategoryIds: limits.limitedCategoryIds,
@@ -170,15 +170,16 @@ export class LimitReportService {
   }
 
   /**
-   * In one read transaction: foreign base limits converted, spending of the
-   * whole chain range, and the unconverted bills of the report period.
+   * In one read transaction: the household currency, the base limits in it,
+   * spending of the whole chain range, and the unconverted bills of the
+   * report period.
    */
   private readFacts(
-    scope: { householdId: string; type: LimitPeriodType },
+    scope: { householdId: string; type: LimitPeriodType; today: string },
     range: { start: string; end: string; chainStart: string },
-    foreign: BaseLimitKey[],
+    chains: Map<string, ChainPeriod[]>,
   ): Promise<Facts> {
-    const { householdId, type } = scope;
+    const { householdId, type, today } = scope;
     const source = this.exchangeRates.source;
     return this.em.fork().transactional(async (tx) => {
       // A long chain hashes many (category, sub-category, period) groups.
@@ -190,10 +191,11 @@ export class LimitReportService {
           'run',
           tx.getTransactionContext(),
         );
+      const currency = await readCurrency(tx, householdId);
       const converted = await convertBaseLimits(
         tx,
         { source, householdId },
-        foreign,
+        foreignBaseLimits(chains, currency, today),
       );
       const spent = await fetchSpent(
         tx,
@@ -209,7 +211,12 @@ export class LimitReportService {
         undefined,
         tx.getTransactionContext(),
       );
-      return { converted, spent, unconverted };
+      return {
+        currency,
+        baseLimits: baseLimits(chains, currency, converted),
+        spent,
+        unconverted,
+      };
     });
   }
 }

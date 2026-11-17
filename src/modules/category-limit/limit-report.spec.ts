@@ -10,7 +10,7 @@ import {
   SpentRow,
 } from './limit-report';
 
-const { MONTHLY, QUARTERLY } = LimitPeriodType;
+const { MONTHLY, QUARTERLY, YEARLY } = LimitPeriodType;
 const START = '2026-10-01';
 const END = '2026-11-01';
 
@@ -122,6 +122,20 @@ describe('chainPeriods', () => {
         ),
       ),
     ).toEqual(['2025-07-01', '2026-01-01', '2026-07-01']);
+  });
+
+  it('runs a monthly chain across a year boundary', () => {
+    const v = version('v', 'food', '100', ['2025-11-01', null]);
+    expect(
+      starts(chainPeriods(MONTHLY, '2026-02-01', [v], []).get('food')),
+    ).toEqual(['2025-11-01', '2025-12-01', '2026-01-01', '2026-02-01']);
+  });
+
+  it('handles years', () => {
+    const y = version('y', 'food', '1200', ['2024-01-01', null]);
+    expect(
+      starts(chainPeriods(YEARLY, '2026-01-01', [y], []).get('food')),
+    ).toEqual(['2024-01-01', '2025-01-01', '2026-01-01']);
   });
 });
 
@@ -270,6 +284,45 @@ describe('buildLimitReport', () => {
       carried_in: 0,
       limit: 100,
       carry_incomplete: true,
+    });
+  });
+
+  it('carries again after a period with an unconvertible base limit', () => {
+    const base = input().baseLimits;
+    base.set('v-food|2026-08-01', null);
+    const row = food({ baseLimits: base, spent: [spent(9, '80')] });
+    expect(row).toMatchObject({
+      carried_in: 20,
+      limit: 120,
+      carry_incomplete: true,
+    });
+  });
+
+  it('folds a monthly chain across a year boundary', () => {
+    const v = version('v', 'food', '100', ['2025-11-01', null]);
+    const start = '2026-02-01';
+    const report = buildLimitReport({
+      ...input(),
+      start,
+      end: '2026-03-01',
+      chains: chainPeriods(MONTHLY, start, [v], []),
+      baseLimits: new Map(
+        ['2025-11-01', '2025-12-01', '2026-01-01', start].map((m) => [
+          `v|${m}`,
+          '100',
+        ]),
+      ),
+      // Nov 90 → Dec 110 - 120 = -10 → Jan 90 - 70 = 20 → Feb 120.
+      spent: [
+        { ...spent(1, '90'), bucket: '2025-11-01' },
+        { ...spent(1, '120'), bucket: '2025-12-01' },
+        spent(1, '70'),
+      ],
+    });
+    expect(report.categories[0]).toMatchObject({
+      carried_in: 20,
+      limit: 120,
+      carry_incomplete: false,
     });
   });
 

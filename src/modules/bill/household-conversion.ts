@@ -10,7 +10,8 @@ import {
 /**
  * SQL for the factor that turns an amount in currency `from` into currency
  * `to` on `date`, read from the saved rates. `from`, `to` and `date` are SQL
- * expressions, `alias` names the one-row result (`<alias>.factor`,
+ * expressions inlined as is: trusted SQL expressions only, never input.
+ * `alias` names the one-row result (`<alias>.factor`,
  * `<alias>.rate_date`). Placed after a FROM item; both `?` bind the rate
  * source, in order. Can be inserted several times with different aliases.
  *
@@ -34,8 +35,8 @@ export function currencyFactorLateral(
                   FROM   exchange_rates er
                   WHERE  er.source = ?
                     AND  er.currency = ${from}
-                    AND  er.rate_date <= ${date}
-                    AND  er.rate_date >= ${date} - 7
+                    AND  er.rate_date <= (${date})
+                    AND  er.rate_date >= (${date}) - 7
                     AND  ${from} <> 'MDL'
                     AND  ${from} <> ${to}
                   ORDER  BY er.rate_date DESC
@@ -46,8 +47,8 @@ export function currencyFactorLateral(
                   FROM   exchange_rates er
                   WHERE  er.source = ?
                     AND  er.currency = ${to}
-                    AND  er.rate_date <= ${date}
-                    AND  er.rate_date >= ${date} - 7
+                    AND  er.rate_date <= (${date})
+                    AND  er.rate_date >= (${date}) - 7
                     AND  ${to} <> 'MDL'
                     AND  ${from} <> ${to}
                   ORDER  BY er.rate_date DESC
@@ -141,6 +142,22 @@ export async function loadRateDays(
   end: string,
   currency?: Currency,
 ): Promise<Currency> {
+  const need = await billRateDays(conn, householdId, { start, end }, currency);
+  if (need.dates.length > 0) await rates.ensureDays(need.dates, { max: 10 });
+  return need.currency;
+}
+
+/**
+ * The household currency and the days of the confirmed bills in
+ * `[start, end)` that need a rate (as `loadRateDays`), without loading them.
+ */
+export async function billRateDays(
+  conn: Connection,
+  householdId: string,
+  range: { start: string; end: string },
+  currency?: Currency,
+): Promise<{ currency: Currency; dates: string[] }> {
+  const { start, end } = range;
   const params: unknown[] = [start, end];
   if (currency) params.push(currency);
   params.push(householdId);
@@ -163,11 +180,12 @@ export async function loadRateDays(
      WHERE  h.id = ?`,
     params,
   )) as { currency: Currency; bill_date: string | null }[];
-  const dates = rows.flatMap((r) => (r.bill_date ? [r.bill_date] : []));
-  if (dates.length > 0) await rates.ensureDays(dates, { max: 10 });
   const [first] = rows;
   if (!first) throw new Error(`Household ${householdId} not found`);
-  return first.currency;
+  return {
+    currency: first.currency,
+    dates: rows.flatMap((r) => (r.bill_date ? [r.bill_date] : [])),
+  };
 }
 
 /** A bill's total in its household currency and the rate behind it. */

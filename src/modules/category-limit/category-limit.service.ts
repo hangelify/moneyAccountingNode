@@ -92,6 +92,7 @@ export class CategoryLimitService {
   /** Closes the open limit at the end of its current period; returns it. */
   remove(
     householdId: string,
+    userId: string,
     categoryId: string,
     now: Date = new Date(),
   ): Promise<CategoryLimitDto> {
@@ -99,7 +100,7 @@ export class CategoryLimitService {
       householdId,
       categoryId,
       { kind: 'remove' },
-      { userId: null, today: todayIsoDate(now), requireOpen: true },
+      { userId, today: todayIsoDate(now), requireOpen: true },
     );
   }
 

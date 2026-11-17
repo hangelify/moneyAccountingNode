@@ -136,8 +136,9 @@ export class CategoryLimitController {
   @ApiDeleteCategoryLimitResponses()
   remove(
     @CurrentHousehold() ctx: HouseholdContext,
+    @CurrentUser() user: AuthenticatedUser,
     @Param('categoryId', ParseUUIDPipe) categoryId: string,
   ): Promise<CategoryLimitDto> {
-    return this.limits.remove(ctx.householdId, categoryId);
+    return this.limits.remove(ctx.householdId, user.id, categoryId);
   }
 }

@@ -196,8 +196,9 @@ function foldChain(
   for (const p of chain.slice(0, -1)) {
     const base = baseOf(ctx, p);
     const fact = ctx.facts.get(key(categoryId, p.period_start)) ?? NO_FACT;
-    const stopped = ctx.stopped.has(key(categoryId, p.period_start));
-    carry = base === null || stopped ? 0 : base + carry - fact.spent;
+    // No stop check: `chainPeriods` ends the chain right after a stopped
+    // period, so only the last period can be stopped.
+    carry = base === null ? 0 : base + carry - fact.spent;
     incomplete ||= base === null || fact.unconverted > 0;
   }
   const last = chain.at(-1);

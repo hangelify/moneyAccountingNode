@@ -93,6 +93,14 @@ describe('deleteCategory and the category limit (PostgreSQL)', () => {
     expect(await limitsOf(id)).toEqual([
       { effective_from: '2026-11-01', effective_to: '2026-12-01' },
     ]);
+    // November's balance is not carried to a limit recreated later (HAN-25).
+    expect(
+      await sql(
+        `select period_type, to_char(period_start, 'YYYY-MM-DD') as period_start
+         from category_limit_carry_stops where category_id = ?`,
+        [id],
+      ),
+    ).toEqual([{ period_type: 'MONTHLY', period_start: '2026-11-01' }]);
     const c = await orm.em.fork().findOneOrFail(Category, id);
     expect(c.deleted_at).toBeInstanceOf(Date);
   });

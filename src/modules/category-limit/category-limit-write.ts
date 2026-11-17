@@ -7,6 +7,7 @@ import { User } from '../../entities/user.entity';
 import { LimitPeriodType } from '../../types/limit-period-type.enum';
 import { decimalToNumber } from '../../common/utils/money.util';
 import { limitPeriodStart } from '../../common/utils/period-range';
+import { deleteCarryStop, insertCarryStop } from './carry-stops';
 import {
   LimitChange,
   LimitPlan,
@@ -129,7 +130,29 @@ async function applyPlan(
 }
 
 /**
- * Locks the category row (FOR UPDATE), plans and applies `change`. Must run
+ * Setting a limit means its current period goes on as usual: drops the
+ * "do not carry over" mark a `DELETE` earlier in the same period left there,
+ * so the next period inherits its balance (HAN-25). A manual mark on that
+ * period is cleared too; an accepted cost of this rare case.
+ */
+async function clearCarryStop(
+  tx: EntityManager,
+  scope: { householdId: string; categoryId: string },
+  change: CategoryLimitChange,
+  today: string,
+): Promise<void> {
+  if (change.kind !== 'set') return;
+  await deleteCarryStop(tx, {
+    ...scope,
+    periodType: change.period_type,
+    periodStart: limitPeriodStart(change.period_type, today),
+  });
+}
+
+/**
+ * Locks the category row (FOR UPDATE), plans and applies `change`; removing
+ * the open limit also marks its current period "do not carry over", setting
+ * one clears that mark from the new type's current period. Must run
  * inside `tx`'s transaction; it neither forks nor opens one, so a caller can
  * combine it with its own writes. Returns the version in force today after
  * the write, or null.
@@ -143,6 +166,7 @@ export async function writeCategoryLimit(
   opts: WriteCategoryLimitOptions,
 ): Promise<CategoryLimit | null> {
   const category = await lockCategory(tx, householdId, categoryId);
+  await clearCarryStop(tx, { householdId, categoryId }, change, opts.today);
   const rows = await loadVersions(tx, categoryId, opts.today);
 
   const open = rows.find((r) => r.effective_to === null);
@@ -166,5 +190,19 @@ export async function writeCategoryLimit(
       created_by: opts.userId ? tx.getReference(User, opts.userId) : null,
     }),
   );
+  // A removed limit's balance stops with its last period, so a limit
+  // recreated right after it starts from zero (HAN-25).
+  if (change.kind === 'remove' && open) {
+    await insertCarryStop(
+      tx,
+      {
+        householdId,
+        categoryId,
+        periodType: open.period_type,
+        periodStart: limitPeriodStart(open.period_type, opts.today),
+      },
+      opts.userId,
+    );
+  }
   return inForce(after, opts.today);
 }

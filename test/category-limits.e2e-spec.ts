@@ -2,7 +2,11 @@ import type { NestExpressApplication } from '@nestjs/platform-express';
 import request from 'supertest';
 import { MikroORM } from '@mikro-orm/core';
 import { createTestApp, registerUser, TestUser } from './utils/app';
-import type { CategoryLimitDto } from '../src/modules/category-limit';
+import type {
+  CategoryLimitDto,
+  LimitReportCategoryDto,
+  LimitReportDto,
+} from '../src/modules/category-limit';
 import { todayIsoDate } from '../src/common/utils/calendar-date';
 import { limitPeriodEnd } from '../src/common/utils/period-range';
 import { LimitPeriodType } from '../src/types/limit-period-type.enum';
@@ -54,6 +58,39 @@ describe('Category limits (e2e)', () => {
       effective_to: null,
     });
     expect(body.effective_from).toMatch(/^\d{4}-\d{2}-01$/);
+
+    // `report` is matched before the `:categoryId` routes.
+    const report = await http()
+      .get(`${base()}/report?period_type=MONTHLY`)
+      .set('Authorization', auth(user))
+      .expect(200);
+    const reported = report.body as LimitReportDto;
+    expect(reported.start).toBe(body.effective_from);
+    expect(reported.categories).toMatchObject([
+      { category_id: categoryId, base_limit: 300, carried_in: 0, spent: 0 },
+    ]);
+
+    // The current period can be marked; the answer is the next period's row.
+    const carry = (body: object): request.Test =>
+      http()
+        .put(`${base()}/${categoryId}/carry-over`)
+        .set('Authorization', auth(user))
+        .send({ period_type: 'MONTHLY', carry_over: false, ...body });
+    const marked = await carry({ period_start: body.effective_from }).expect(
+      200,
+    );
+    expect(marked.body as LimitReportCategoryDto).toMatchObject({
+      category_id: categoryId,
+      carried_in: 0,
+      limit: 300,
+    });
+    for (const bad of [
+      { period_start: body.effective_from.replace(/01$/, '02') },
+      { period_start: reported.end },
+      { period_start: body.effective_from, carry_over: 'no' },
+    ]) {
+      await carry(bad).expect(400);
+    }
   });
 
   it('answers 409 when the category already has a limit', async () => {
@@ -128,6 +165,16 @@ describe('Category limits (e2e)', () => {
       .get(`${base()}?include_history=maybe`)
       .set('Authorization', auth(user))
       .expect(400);
+    for (const qs of [
+      '',
+      '?period_type=WEEKLY',
+      '?period_type=MONTHLY&date=2026-02-30',
+    ]) {
+      await http()
+        .get(`${base()}/report${qs}`)
+        .set('Authorization', auth(user))
+        .expect(400);
+    }
 
     const del = await http()
       .delete(`${base()}/${categoryId}`)
@@ -149,6 +196,23 @@ describe('Category limits (e2e)', () => {
     await http()
       .get(`/households/${other.householdId}/category-limits`)
       .set('Authorization', auth(user))
+      .expect(403);
+    await http()
+      .get(
+        `/households/${other.householdId}/category-limits/report?period_type=MONTHLY`,
+      )
+      .set('Authorization', auth(user))
+      .expect(403);
+    await http()
+      .put(
+        `/households/${other.householdId}/category-limits/${categoryId}/carry-over`,
+      )
+      .set('Authorization', auth(user))
+      .send({
+        period_type: 'MONTHLY',
+        period_start: '2026-01-01',
+        carry_over: false,
+      })
       .expect(403);
   });
 });

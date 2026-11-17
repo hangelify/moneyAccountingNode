@@ -253,7 +253,7 @@ describe('category limits (PostgreSQL)', () => {
     const cat = await category();
     const created = await create(cat);
 
-    const removed = await service.remove(a, cat, at('2026-11-20'));
+    const removed = await service.remove(a, userId, cat, at('2026-11-20'));
 
     expect(removed).toMatchObject({
       id: created.id,
@@ -271,7 +271,7 @@ describe('category limits (PostgreSQL)', () => {
   it('create after remove in the same month → one open version from 2026-11-01', async () => {
     const cat = await category();
     await create(cat);
-    await service.remove(a, cat, NOW);
+    await service.remove(a, userId, cat, NOW);
 
     const dto = await create(cat, 500, at('2026-11-20'));
 
@@ -284,7 +284,7 @@ describe('category limits (PostgreSQL)', () => {
     await expect(
       service.update(a, userId, none, monthly(300), NOW),
     ).rejects.toBeInstanceOf(NotFoundException);
-    await expect(service.remove(a, none, NOW)).rejects.toBeInstanceOf(
+    await expect(service.remove(a, userId, none, NOW)).rejects.toBeInstanceOf(
       NotFoundException,
     );
     expect(await versionsOf(none)).toEqual([]);
@@ -292,14 +292,14 @@ describe('category limits (PostgreSQL)', () => {
     // A closing version is not open.
     const closing = await category();
     await create(closing);
-    await service.remove(a, closing, NOW);
+    await service.remove(a, userId, closing, NOW);
     const before = await versionsOf(closing);
     await expect(
       service.update(a, userId, closing, monthly(400), NOW),
     ).rejects.toBeInstanceOf(NotFoundException);
-    await expect(service.remove(a, closing, NOW)).rejects.toBeInstanceOf(
-      NotFoundException,
-    );
+    await expect(
+      service.remove(a, userId, closing, NOW),
+    ).rejects.toBeInstanceOf(NotFoundException);
     expect(await versionsOf(closing)).toEqual(before);
   });
 
@@ -312,7 +312,7 @@ describe('category limits (PostgreSQL)', () => {
       await expect(
         service.update(a, userId, cat, monthly(300), NOW),
       ).rejects.toBeInstanceOf(NotFoundException);
-      await expect(service.remove(a, cat, NOW)).rejects.toBeInstanceOf(
+      await expect(service.remove(a, userId, cat, NOW)).rejects.toBeInstanceOf(
         NotFoundException,
       );
       expect(await versionsOf(cat)).toEqual([]);

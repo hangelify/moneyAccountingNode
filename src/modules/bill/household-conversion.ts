@@ -8,54 +8,78 @@ import {
 } from './dto/household-conversion.dto';
 
 /**
+ * SQL for the factor that turns an amount in currency `from` into currency
+ * `to` on `date`, read from the saved rates. `from`, `to` and `date` are SQL
+ * expressions, `alias` names the one-row result (`<alias>.factor`,
+ * `<alias>.rate_date`). Placed after a FROM item; both `?` bind the rate
+ * source, in order. Can be inserted several times with different aliases.
+ *
+ * `factor` is NULL when `from` is NULL or a needed rate is not saved;
+ * `rate_date` is the day of the rates used, NULL when no rate was needed.
+ * A rate is the latest saved one on or before `date`, so weekends and unsaved
+ * days use the last published day, but at most 7 days back: an older rate is
+ * stale (e.g. provider down for weeks) and leaves the amount unconverted.
+ */
+export function currencyFactorLateral(
+  from: string,
+  to: string,
+  date: string,
+  alias: string,
+): string {
+  const rf = `${alias}_rf`;
+  const rt = `${alias}_rt`;
+  return `
+         LEFT   JOIN LATERAL (
+                  SELECT er.rate, er.rate_date
+                  FROM   exchange_rates er
+                  WHERE  er.source = ?
+                    AND  er.currency = ${from}
+                    AND  er.rate_date <= ${date}
+                    AND  er.rate_date >= ${date} - 7
+                    AND  ${from} <> 'MDL'
+                    AND  ${from} <> ${to}
+                  ORDER  BY er.rate_date DESC
+                  LIMIT  1
+                ) ${rf} ON true
+         LEFT   JOIN LATERAL (
+                  SELECT er.rate, er.rate_date
+                  FROM   exchange_rates er
+                  WHERE  er.source = ?
+                    AND  er.currency = ${to}
+                    AND  er.rate_date <= ${date}
+                    AND  er.rate_date >= ${date} - 7
+                    AND  ${to} <> 'MDL'
+                    AND  ${from} <> ${to}
+                  ORDER  BY er.rate_date DESC
+                  LIMIT  1
+                ) ${rt} ON true
+         CROSS  JOIN LATERAL (
+                  SELECT CASE
+                           WHEN ${from} IS NULL THEN NULL
+                           WHEN ${from} = ${to} THEN 1
+                           ELSE (CASE WHEN ${from} = 'MDL' THEN 1 ELSE ${rf}.rate END)
+                              / (CASE WHEN ${to} = 'MDL' THEN 1 ELSE ${rt}.rate END)
+                         END AS factor,
+                         COALESCE(${rf}.rate_date, ${rt}.rate_date) AS rate_date
+                ) ${alias}`;
+}
+
+/**
  * Joins each bill of alias `bill` to its household and the factor that turns
- * its amount into the household currency, read from the saved rates.
+ * its amount into the household currency (see `currencyFactorLateral`).
  * Placed right after `FROM bills <bill>`; both `?` bind the rate source.
  *
- * Exposes `h.currency` (selected `AS household_currency`), `fx.factor` (NULL
- * when the bill has no currency or a needed rate is not saved) and
- * `fx.rate_date` (day of the rates used, NULL when no rate was needed).
- * A rate is the latest saved one on or before `bill_date`, so weekends and
- * unsaved days use the last published day, but at most 7 days back: an
- * older rate is stale (e.g. provider down for weeks) and leaves the bill
- * unconverted.
+ * Exposes `h.currency` (selected `AS household_currency`), `fx.factor` and
+ * `fx.rate_date`.
  */
 export function householdConversionJoin(bill = 'b'): string {
   return `
-         JOIN   households h ON h.id = ${bill}.household_id
-         LEFT   JOIN LATERAL (
-                  SELECT er.rate, er.rate_date
-                  FROM   exchange_rates er
-                  WHERE  er.source = ?
-                    AND  er.currency = ${bill}.currency
-                    AND  er.rate_date <= ${bill}.bill_date
-                    AND  er.rate_date >= ${bill}.bill_date - 7
-                    AND  ${bill}.currency <> 'MDL'
-                    AND  ${bill}.currency <> h.currency
-                  ORDER  BY er.rate_date DESC
-                  LIMIT  1
-                ) rf ON true
-         LEFT   JOIN LATERAL (
-                  SELECT er.rate, er.rate_date
-                  FROM   exchange_rates er
-                  WHERE  er.source = ?
-                    AND  er.currency = h.currency
-                    AND  er.rate_date <= ${bill}.bill_date
-                    AND  er.rate_date >= ${bill}.bill_date - 7
-                    AND  h.currency <> 'MDL'
-                    AND  ${bill}.currency <> h.currency
-                  ORDER  BY er.rate_date DESC
-                  LIMIT  1
-                ) rt ON true
-         CROSS  JOIN LATERAL (
-                  SELECT CASE
-                           WHEN ${bill}.currency IS NULL THEN NULL
-                           WHEN ${bill}.currency = h.currency THEN 1
-                           ELSE (CASE WHEN ${bill}.currency = 'MDL' THEN 1 ELSE rf.rate END)
-                              / (CASE WHEN h.currency = 'MDL' THEN 1 ELSE rt.rate END)
-                         END AS factor,
-                         COALESCE(rf.rate_date, rt.rate_date) AS rate_date
-                ) fx`;
+         JOIN   households h ON h.id = ${bill}.household_id${currencyFactorLateral(
+           `${bill}.currency`,
+           'h.currency',
+           `${bill}.bill_date`,
+           'fx',
+         )}`;
 }
 
 /**

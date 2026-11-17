@@ -22,3 +22,10 @@ export { BillPhotoProcessor } from './batch/bill-photo.processor';
 export type { BillAiOrchestrator } from './bill-ai.orchestrator';
 export { BillCrudService } from './bill-crud.service';
 export { BillPhotoService } from './bill-photo.service';
+export {
+  currencyFactorLateral,
+  fetchUnconverted,
+  householdConversionJoin,
+  loadRateDays,
+} from './household-conversion';
+export { UnconvertedDto } from './dto/household-conversion.dto';

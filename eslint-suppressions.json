@@ -646,7 +646,7 @@
       "count": 6
     },
     "@typescript-eslint/no-non-null-assertion": {
-      "count": 4
+      "count": 3
     },
     "@typescript-eslint/no-unnecessary-condition": {
       "count": 6
@@ -655,7 +655,7 @@
       "count": 5
     },
     "@typescript-eslint/no-unsafe-enum-assignment": {
-      "count": 2
+      "count": 1
     },
     "@typescript-eslint/prefer-nullish-coalescing": {
       "count": 1
@@ -664,7 +664,7 @@
       "count": 1
     },
     "max-lines-per-function": {
-      "count": 2
+      "count": 1
     },
     "max-params": {
       "count": 1

@@ -30,6 +30,7 @@ import {
 import { BillDashboardResponseDto } from './bill-dashboard.dto';
 import { SpendingBreakdownResponseDto } from './spending-breakdown.dto';
 import { BillListResponseDto } from './bill-list-response.dto';
+import { BillsByCategoryResponseDto } from './bills-by-category-response.dto';
 import { DuplicateSuggestionsResponseDto } from './bill-duplicates.dto';
 import { BillBatchResponseDto } from '../batch/dto/bill-batch-response.dto';
 import {
@@ -218,6 +219,28 @@ export const ApiListBillsResponses = () =>
       description: 'Invalid filter parameters or date_from is after date_to',
     }),
     ApiResponse({ status: 401, description: 'Unauthorized' }),
+  );
+
+export const ApiBillsByCategoryResponses = (): ReturnType<
+  typeof applyDecorators
+> =>
+  applyDecorators(
+    ApiResponse({
+      status: 200,
+      type: BillsByCategoryResponseDto,
+      description:
+        "Paginated bills with a line in the category, each with the category's contribution, and the category total over every page",
+    }),
+    ApiResponse({
+      status: 400,
+      description:
+        'categoryId is not a UUID, invalid filter parameters, or date_from is after date_to',
+    }),
+    ApiResponse({ status: 401, description: 'Unauthorized' }),
+    ApiResponse({
+      status: 404,
+      description: 'The category is not in this household',
+    }),
   );
 
 export const ApiGetBillResponses = () =>

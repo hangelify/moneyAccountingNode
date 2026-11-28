@@ -29,6 +29,14 @@ import { BillSource } from '../../types/bill-source.enum';
 import { BillParseErrorCode } from '../../types/bill-parse-error.enum';
 import { Currency } from '../../types/currency.enum';
 import { ListBillsQueryDto } from './dto/list-bills-query.dto';
+import {
+  LIST_COLUMNS,
+  type ListRow,
+  listPage,
+  listWhere,
+  pageMeta,
+  toListItem,
+} from './bill-list-query';
 import { CreateBillDto, CreateBillItemDto } from './dto/create-bill.dto';
 import { UpdateBillDto } from './dto/update-bill.dto';
 import {
@@ -48,7 +56,7 @@ import {
   MAX_QUANTITY,
   MAX_WEIGHT_KG,
 } from './tasks/schemas/parsed-bill.schema';
-import { BillResponseDto, BillListItemDto } from './dto/bill-response.dto';
+import { BillResponseDto } from './dto/bill-response.dto';
 import {
   BILL_ITEM_TOLERANCE,
   DEFAULT_BILL_ITEM_TOLERANCE,
@@ -81,10 +89,15 @@ import {
   BillConversionService,
   householdConversionJoin,
 } from './household-conversion';
+import { BillListResponseDto } from './dto/bill-list-response.dto';
+import { BillsByCategoryResponseDto } from './dto/bills-by-category-response.dto';
 import {
-  BillListResponseDto,
-  PaginationMetaDto,
-} from './dto/bill-list-response.dto';
+  countBills,
+  inCategory,
+  readCategoryPage,
+  readCategoryRef,
+  readCategoryTotal,
+} from './bill-by-category.queries';
 
 // A draft is saved from the AI output after the call is paid for, so values
 // its columns cannot hold become empty instead of failing the INSERT.
@@ -219,62 +232,8 @@ export class BillCrudService {
     householdId: string,
     filters: ListBillsQueryDto,
   ): Promise<BillListResponseDto> {
-    if (
-      filters.date_from &&
-      filters.date_to &&
-      filters.date_from > filters.date_to
-    ) {
-      throw new BadRequestException('date_from must not be later than date_to');
-    }
-
-    const conditions: string[] = [
-      `b.household_id = ?`,
-      filters.include_duplicates
-        ? `b.status IN ('confirmed', 'duplicate')`
-        : `b.status     = 'confirmed'`,
-      `b.deleted_at IS NULL`,
-    ];
-    const params: unknown[] = [householdId];
-
-    if (filters.date_from) {
-      conditions.push(`b.bill_date >= ?`);
-      params.push(filters.date_from);
-    }
-    if (filters.date_to) {
-      conditions.push(`b.bill_date <= ?`);
-      params.push(filters.date_to);
-    }
-    if (filters.market_names?.length) {
-      conditions.push(`m.name = ANY(?)`);
-      params.push(filters.market_names);
-    }
-    if (filters.currency) {
-      conditions.push(`b.currency = ?`);
-      params.push(filters.currency);
-    }
-    if (filters.source?.length) {
-      // One placeholder per value: knex would expand an array bound to ANY(?).
-      conditions.push(
-        `b.source IN (${filters.source.map(() => '?').join(', ')})`,
-      );
-      params.push(...filters.source);
-    }
-    for (const bound of filters.amount_range ?? []) {
-      const match = /^(gt|lt)_(\d+(?:\.\d+)?)$/.exec(bound);
-      if (!match) continue;
-      const [, op, val] = match;
-      if (op === 'gt') {
-        conditions.push(`b.amount > ?`);
-      } else {
-        conditions.push(`b.amount < ?`);
-      }
-      params.push(Number(val));
-    }
-
-    const where = conditions.join(' AND ');
-    const page = filters.page ?? 1;
-    const limit = filters.limit ?? 20;
-    const offset = (page - 1) * limit;
+    const { where, params } = listWhere(householdId, filters);
+    const { page, limit, offset } = listPage(filters);
     const source = this.exchangeRates.source;
 
     const [countRows, dataRows] = await Promise.all([
@@ -286,12 +245,7 @@ export class BillCrudService {
         params,
       ) as Promise<{ count: string }[]>,
       this.em.getConnection().execute(
-        `SELECT b.id, b.bill_date::text, b.currency, b.amount::text, b.description,
-                b.status, b.source, b.duplicate_of_id, b.created_at::text,
-                m.id AS market_id, m.name AS market_name, m.city AS market_city,
-                abs(b.amount - i.total) > ? * i.count AS amount_mismatch,
-                h.currency AS household_currency,
-                ROUND(b.amount * fx.factor, 2)::text AS household_amount
+        `SELECT ${LIST_COLUMNS}
          FROM   bills b
          ${householdConversionJoin('b')}
          -- A deleted market still shows on its bills, as history.
@@ -305,60 +259,67 @@ export class BillCrudService {
          ORDER  BY b.bill_date DESC, b.created_at DESC, b.id DESC
          LIMIT  ? OFFSET ?`,
         [this.itemTolerance, source, source, ...params, limit, offset],
-      ) as Promise<
-        {
-          id: string;
-          bill_date: string;
-          currency: string | null;
-          amount: string;
-          description: string | null;
-          status: BillStatus;
-          source: BillSource;
-          duplicate_of_id: string | null;
-          market_id: string | null;
-          market_name: string | null;
-          market_city: string | null;
-          created_at: string;
-          amount_mismatch: boolean;
-          household_currency: Currency;
-          household_amount: string | null;
-        }[]
-      >,
+      ) as Promise<ListRow[]>,
     ]);
 
-    const total = Number(countRows[0]?.count ?? 0);
-    const meta: PaginationMetaDto = {
-      total,
-      page,
-      limit,
-      total_pages: Math.ceil(total / limit),
+    return {
+      data: dataRows.map(toListItem),
+      meta: pageMeta(Number(countRows[0]?.count ?? 0), page, limit),
     };
+  }
 
-    const data = dataRows.map(
-      (r): BillListItemDto => ({
-        id: r.id,
-        bill_date: r.bill_date,
-        currency: (r.currency ?? undefined) as Currency | undefined,
-        total_amount: Number(r.amount),
-        amount_mismatch: r.amount_mismatch,
-        description: r.description ?? undefined,
-        status: r.status,
-        source: r.source,
-        duplicate_of_id: r.duplicate_of_id,
-        market: r.market_id
-          ? {
-              id: r.market_id,
-              name: r.market_name!,
-              city: r.market_city ?? undefined,
-            }
-          : undefined,
-        created_at: new Date(r.created_at),
-        household_currency: r.household_currency,
-        household_amount: numberOrNull(r.household_amount),
-      }),
-    );
+  /**
+   * Confirmed bills with a line in the category, each with the category's
+   * contribution, and the category total over every page (HAN-149). The total
+   * rounds per (category, sub-category) as the limits report does, so for the
+   * same period it equals the report's spent. 404 when the category is not
+   * the household's; an archived one is listed.
+   */
+  async listBillsByCategory(
+    householdId: string,
+    categoryId: string,
+    filters: ListBillsQueryDto,
+  ): Promise<BillsByCategoryResponseDto> {
+    const base = listWhere(householdId, filters);
+    const conn = this.em.getConnection();
+    const category = await readCategoryRef(conn, householdId, categoryId);
+    if (!category) throw new NotFoundException('Category not found');
 
-    return { data, meta };
+    const w = inCategory(base, categoryId);
+    const { page, limit, offset } = listPage(filters);
+    const source = this.exchangeRates.source;
+    const [count, total, rows] = await Promise.all([
+      countBills(conn, w),
+      readCategoryTotal(conn, { source, categoryId }, w),
+      readCategoryPage(
+        conn,
+        {
+          source,
+          categoryId,
+          itemTolerance: this.itemTolerance,
+          limit,
+          offset,
+        },
+        w,
+      ),
+    ]);
+
+    return {
+      data: rows.map((r) =>
+        Object.assign(toListItem(r), {
+          category_amount: numberOrNull(r.category_amount),
+        }),
+      ),
+      meta: pageMeta(count, page, limit),
+      category: {
+        id: category.id,
+        name: category.name,
+        archived: category.archived,
+      },
+      category_total: total.total,
+      household_currency: category.household_currency,
+      unconverted_lines: total.unconverted_lines,
+    };
   }
 
   async getBill(

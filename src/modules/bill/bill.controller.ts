@@ -69,6 +69,7 @@ import {
 } from './dto/bill-duplicates.dto';
 import { Currency } from '../../types/currency.enum';
 import { BillListResponseDto } from './dto/bill-list-response.dto';
+import { BillsByCategoryResponseDto } from './dto/bills-by-category-response.dto';
 import {
   BillDashboardResponseDto,
   BillDashboardQueryDto,
@@ -83,6 +84,7 @@ import {
   ApiManualBatchResponses,
   ApiMoveBillsResponses,
   ApiListBillsResponses,
+  ApiBillsByCategoryResponses,
   ApiGetBillResponses,
   ApiUpdateBillResponses,
   ApiDeleteBillResponses,
@@ -344,6 +346,25 @@ export class BillController {
     @Query() query: ListBillsQueryDto,
   ): Promise<BillListResponseDto> {
     return this.billCrud.listBills(ctx.householdId, query);
+  }
+
+  @Get('by-category/:categoryId')
+  @ApiOperation({
+    summary:
+      "List confirmed bills with a line in the category, each with the category's contribution, and the category total for the filters (same filters as GET /bills).",
+  })
+  @ApiBillsByCategoryResponses()
+  async listBillsByCategory(
+    @CurrentUser() _user: AuthenticatedUser,
+    @CurrentHousehold() ctx: HouseholdContext,
+    @Param('categoryId', ParseUUIDPipe) categoryId: string,
+    @Query() query: ListBillsQueryDto,
+  ): Promise<BillsByCategoryResponseDto> {
+    return this.billCrud.listBillsByCategory(
+      ctx.householdId,
+      categoryId,
+      query,
+    );
   }
 
   @Get('drafts')

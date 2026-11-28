@@ -61,19 +61,20 @@ Linear: [HAN-149](https://linear.app/hangelify/issue/HAN-149) · эпик HAN-21
   возможно расхождение в копейках с отчётом. Строки без курса не входят в сумму и считаются в
   `unconverted_lines`.
 
-**Ответ** (`BillsByCategoryResponseDto`): формат списка (`items`, `total`, `page`, `limit` — как
+**Ответ** (`BillsByCategoryResponseDto`): формат списка (`data`, `meta` — как
 `BillListResponseDto`) плюс
 - `category: { id, name, archived }` — фронт берёт название для чипа отсюда;
-- `category_total: string` — итог в валюте бюджета; `household_currency`;
+- `category_total: number` — итог в валюте бюджета; `household_currency`;
 - `unconverted_lines: number`;
-- у каждого элемента `category_amount: string | null`.
+- у каждого элемента `category_amount: number | null` (суммы в API — числа, как `household_amount`).
 
 Swagger: описание эндпоинта и полей, пример.
 
 ## Дизайн — фронт
 
 - `ConfirmedBillsFilters.category_id: string | null`; `parseBillsSearchParams` читает `category_id`
-  (UUID, иначе `null`); `buildBillsQueryParams` **не** кладёт его в query — он идёт в путь.
+  (UUID, иначе `null`); `buildBillsQueryParams` кладёт его (он же строит URL страницы), а
+  `billsApi.listByCategory` убирает `category_id` из query — он идёт в путь.
 - `useConfirmedBills`: при `category_id` вызывает `bills.listByCategory(hid, id, filters, page, limit)`,
   иначе — как сейчас. Ключ запроса включает `category_id`.
 - Список: при категории — чип «Категория: <name> ✕» (снятие убирает `category_id` из URL, остальные

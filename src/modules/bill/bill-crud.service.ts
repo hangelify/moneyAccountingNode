@@ -90,6 +90,14 @@ import {
   householdConversionJoin,
 } from './household-conversion';
 import { BillListResponseDto } from './dto/bill-list-response.dto';
+import { BillsByCategoryResponseDto } from './dto/bills-by-category-response.dto';
+import {
+  countBills,
+  inCategory,
+  readCategoryPage,
+  readCategoryRef,
+  readCategoryTotal,
+} from './bill-by-category.queries';
 
 // A draft is saved from the AI output after the call is paid for, so values
 // its columns cannot hold become empty instead of failing the INSERT.
@@ -257,6 +265,60 @@ export class BillCrudService {
     return {
       data: dataRows.map(toListItem),
       meta: pageMeta(Number(countRows[0]?.count ?? 0), page, limit),
+    };
+  }
+
+  /**
+   * Confirmed bills with a line in the category, each with the category's
+   * contribution, and the category total over every page (HAN-149). The total
+   * rounds per (category, sub-category) as the limits report does, so for the
+   * same period it equals the report's spent. 404 when the category is not
+   * the household's; an archived one is listed.
+   */
+  async listBillsByCategory(
+    householdId: string,
+    categoryId: string,
+    filters: ListBillsQueryDto,
+  ): Promise<BillsByCategoryResponseDto> {
+    const base = listWhere(householdId, filters);
+    const conn = this.em.getConnection();
+    const category = await readCategoryRef(conn, householdId, categoryId);
+    if (!category) throw new NotFoundException('Category not found');
+
+    const w = inCategory(base, categoryId);
+    const { page, limit, offset } = listPage(filters);
+    const source = this.exchangeRates.source;
+    const [count, total, rows] = await Promise.all([
+      countBills(conn, w),
+      readCategoryTotal(conn, { source, categoryId }, w),
+      readCategoryPage(
+        conn,
+        {
+          source,
+          categoryId,
+          itemTolerance: this.itemTolerance,
+          limit,
+          offset,
+        },
+        w,
+      ),
+    ]);
+
+    return {
+      data: rows.map((r) =>
+        Object.assign(toListItem(r), {
+          category_amount: numberOrNull(r.category_amount),
+        }),
+      ),
+      meta: pageMeta(count, page, limit),
+      category: {
+        id: category.id,
+        name: category.name,
+        archived: category.archived,
+      },
+      category_total: total.total,
+      household_currency: category.household_currency,
+      unconverted_lines: total.unconverted_lines,
     };
   }
 
